@@ -487,6 +487,186 @@ export function filterCommands(
   )
 }
 
+/** One candidate spelling answering a completion query, with highlight spans. */
+export interface CompletionMatch {
+  /** The candidate spelling that matched — what acceptance inserts. */
+  token: string
+  /** 0 exact, 1 prefix, 2 prefix ignoring `-`/`_`, 3 subsequence. */
+  rank: number
+  /** Spans of {@link token} the query matched, in order and non-overlapping. */
+  segments: readonly { readonly start: number; readonly length: number }[]
+}
+
+/**
+ * Match one candidate spelling against the typed query, best tier first:
+ * an exact name, a prefix, a prefix ignoring `-`/`_` (`/toti` →
+ * `/to-tickets`), and finally a subsequence (`/tt` → `to-tickets`, `/cmp` →
+ * `compact`). Subsequences need two characters — a one-character query would
+ * list most of the catalog.
+ *
+ * Three offsets are tried: the whole name, its last space-delimited token
+ * (nested paths: `model deepseek-chat`) and its last `/` segment (model
+ * specs). The lowest rank wins, so a deeper PREFIX always beats a shallower
+ * subsequence — `de` in `model deepseek-chat` highlights the model id, not
+ * the `d`/`e` inside "model".
+ *
+ * @param fuzzy - Whether a subsequence may answer the query. Command names
+ *   want it (`/toti`), argument catalogs do not: a spec list is long and a
+ *   two-letter subsequence would drag `@scope/package@1.2.3` under `/pa`.
+ *   Prefix and separator-insensitive prefix still apply either way.
+ */
+export function matchCompletionName(
+  name: string,
+  query: string,
+  fuzzy = true,
+): CompletionMatch | undefined {
+  const trimmed = query.trim()
+  if (trimmed === '') return { token: name, rank: 1, segments: [] }
+  let best: CompletionMatch | undefined
+  for (const start of [0, name.lastIndexOf(' ') + 1, name.lastIndexOf('/') + 1]) {
+    const found = matchNameSegment(name, start, trimmed, fuzzy)
+    if (found === undefined) continue
+    if (best === undefined || found.rank < best.rank) best = found
+  }
+  return best
+}
+
+/** The best match across a candidate's name and its aliases. */
+export function matchCompletionToken(
+  names: readonly string[],
+  query: string,
+  fuzzy = true,
+): CompletionMatch | undefined {
+  let best: CompletionMatch | undefined
+  for (const name of names) {
+    const found = matchCompletionName(name, query, fuzzy)
+    if (found === undefined) continue
+    if (best === undefined || found.rank < best.rank) best = found
+  }
+  return best
+}
+
+function matchNameSegment(
+  name: string,
+  start: number,
+  query: string,
+  fuzzy: boolean,
+): CompletionMatch | undefined {
+  const segment = name.slice(start)
+  const lowerQuery = query.toLowerCase()
+  const lowerSegment = segment.toLowerCase()
+  if (lowerSegment === lowerQuery) {
+    return { token: name, rank: 0, segments: [{ start, length: segment.length }] }
+  }
+  if (lowerSegment.startsWith(lowerQuery)) {
+    return { token: name, rank: 1, segments: [{ start, length: query.length }] }
+  }
+  const compactQuery = lowerQuery.replace(/[-_]/gu, '')
+  if (compactQuery !== '' && lowerSegment.replace(/[-_]/gu, '').startsWith(compactQuery)) {
+    return { token: name, rank: 2, segments: [{ start, length: compactPrefixEnd(segment, compactQuery.length) }] }
+  }
+  if (!fuzzy || lowerQuery.length < 2) return undefined
+  const segments = subsequenceSegments(lowerSegment, lowerQuery)
+  if (segments === undefined) return undefined
+  return {
+    token: name,
+    rank: 3,
+    segments: segments.map(span => ({ start: start + span.start, length: span.length })),
+  }
+}
+
+/** Index just past the `count`-th non-separator character of `segment`. */
+function compactPrefixEnd(segment: string, count: number): number {
+  let seen = 0
+  for (let index = 0; index < segment.length; index += 1) {
+    if (segment[index] === '-' || segment[index] === '_') continue
+    seen += 1
+    if (seen === count) return index + 1
+  }
+  return segment.length
+}
+
+/**
+ * The spans of `text` that spell `query` in order, adjacent hits merged into
+ * one span so a contiguous run highlights as a single piece. Undefined when
+ * `text` does not contain the query.
+ */
+function subsequenceSegments(
+  text: string,
+  query: string,
+): readonly { start: number; length: number }[] | undefined {
+  const segments: { start: number; length: number }[] = []
+  let from = 0
+  for (const ch of query) {
+    const at = text.indexOf(ch, from)
+    if (at === -1) return undefined
+    const last = segments.at(-1)
+    if (last !== undefined && last.start + last.length === at) last.length += 1
+    else segments.push({ start: at, length: 1 })
+    from = at + 1
+  }
+  return segments
+}
+
+/** A `/…` command run in the composer, scoped to the caret. */
+export interface CommandCompletionSite {
+  /** Index of the `/` opening the run. */
+  start: number
+  /** End (exclusive) of the token under the caret — the span acceptance replaces. */
+  end: number
+  /** The command input from `start` up to the caret. */
+  input: string
+}
+
+/** Space/tab separate command tokens; a line break ends the run outright. */
+const isCommandGap = (ch: string | undefined): boolean => ch === ' ' || ch === '\t'
+
+/**
+ * Locate the slash-command run the caret is editing, so completion works
+ * wherever the `/` sits — `look at /toti` completes like `/toti` at the start
+ * of the draft. A run opens at a token that STARTS with `/` (a path segment
+ * like `foo/bar` never triggers), extends over the following argument tokens
+ * up to the caret, and stops at a line break. The prose before it and the
+ * text after the caret's token are not part of it: acceptance splices the
+ * completed command back into the surrounding text.
+ *
+ * @param value - The composer draft.
+ * @param cursor - Caret offset into `value`.
+ * @returns The run, or undefined when the caret is not inside one.
+ */
+export function commandCompletionAt(value: string, cursor: number): CommandCompletionSite | undefined {
+  if (cursor < 0 || cursor > value.length) return undefined
+  const lineStart = value.lastIndexOf('\n', Math.max(0, cursor - 1)) + 1
+  const lineBreak = value.indexOf('\n', cursor)
+  const lineEnd = lineBreak === -1 ? value.length : lineBreak
+  let start = cursor
+  while (start > lineStart && !isCommandGap(value[start - 1])) start -= 1
+  let end = cursor
+  while (end < lineEnd && !isCommandGap(value[end])) end += 1
+  let runStart = start
+  if (value[runStart] !== '/') {
+    // The caret is in an argument token: walk back over the argument run to
+    // the token that opens it. Prose is not skipped — an unresolvable token
+    // makes `completeCommands` answer nothing, which keeps the menu closed.
+    let probe = start
+    for (;;) {
+      let tokenEnd = probe
+      while (tokenEnd > lineStart && isCommandGap(value[tokenEnd - 1])) tokenEnd -= 1
+      if (tokenEnd === lineStart) return undefined
+      let tokenStart = tokenEnd
+      while (tokenStart > lineStart && !isCommandGap(value[tokenStart - 1])) tokenStart -= 1
+      if (value[tokenStart] === '/') {
+        runStart = tokenStart
+        break
+      }
+      probe = tokenStart
+    }
+  }
+  const input = value.slice(runStart, cursor)
+  if (!input.startsWith('/') || /[\r\n]/u.test(input)) return undefined
+  return { start: runStart, end, input }
+}
+
 /**
  * Complete an arbitrary slash-command path. Root commands come from the
  * ordinary DSH/TUI catalog; each resolved token asks the caller for its
@@ -520,31 +700,46 @@ export function completeCommands(
   }
 
   const normalizedPrefix = prefix.toLowerCase()
-  return candidates.flatMap(candidate => {
-    const completionToken = matchingCompletionToken(candidate, normalizedPrefix)
-    // Root candidates are command names (strict charset); everything deeper is
-    // an argument, where a scoped package name must survive.
-    const tokenOk = tokens.length === 0 ? isCommandCompletionToken : isArgumentCompletionToken
-    if (completionToken === undefined || !tokenOk(completionToken)) return []
-    const path = [...tokens, completionToken]
-    const commandLine = `/${path.join(' ')}`
-    // An example row accepts nothing of its own: Tab gets back the draft it was
-    // given, and Enter runs that same line. Empty argument ⇒ the line is the
-    // bare subcommand (its usage line); a typed spec ⇒ it is the spec itself,
-    // so `/plugin info /p` still inspects `/p` instead of losing it.
-    const example = candidate.example === true
-    return [{
-      name: path.join(' '),
-      description: candidate.description,
-      ...(candidate.descriptions === undefined ? {} : { descriptions: candidate.descriptions }),
-      ...(candidate.descriptionKey === undefined ? {} : { descriptionKey: candidate.descriptionKey }),
-      ...(candidate.tag === undefined && candidate.aliases?.length
-        ? { tag: `aliases: ${candidate.aliases.join(', ')}` }
-        : candidate.tag === undefined ? {} : { tag: candidate.tag }),
-      replacement: example ? input : `${commandLine} `,
-      commandLine: example ? input : commandLine,
-    }]
-  })
+  // Root candidates are command names (strict charset); everything deeper is
+  // an argument, where a scoped package name must survive.
+  const tokenOk = tokens.length === 0 ? isCommandCompletionToken : isArgumentCompletionToken
+  return candidates
+    .flatMap(candidate => {
+      // Subsequence matching is for the command surface only: argument
+      // catalogs (models, themes, plugin specs) stay prefix-matched.
+      const match = matchCompletionToken(
+        [candidate.name, ...(candidate.aliases ?? [])],
+        normalizedPrefix,
+        tokens.length === 0,
+      )
+      if (match === undefined || !tokenOk(match.token)) return []
+      const path = [...tokens, match.token]
+      const commandLine = `/${path.join(' ')}`
+      // An example row accepts nothing of its own: Tab gets back the draft it was
+      // given, and Enter runs that same line. Empty argument ⇒ the line is the
+      // bare subcommand (its usage line); a typed spec ⇒ it is the spec itself,
+      // so `/plugin info /p` still inspects `/p` instead of losing it.
+      const example = candidate.example === true
+      return [{
+        rank: match.rank,
+        completion: {
+          name: path.join(' '),
+          description: candidate.description,
+          ...(candidate.descriptions === undefined ? {} : { descriptions: candidate.descriptions }),
+          ...(candidate.descriptionKey === undefined ? {} : { descriptionKey: candidate.descriptionKey }),
+          ...(candidate.tag === undefined && candidate.aliases?.length
+            ? { tag: `aliases: ${candidate.aliases.join(', ')}` }
+            : candidate.tag === undefined ? {} : { tag: candidate.tag }),
+          replacement: example ? input : `${commandLine} `,
+          commandLine: example ? input : commandLine,
+        } satisfies CommandCompletion,
+      }]
+    })
+    // Exact and prefix matches keep the catalog's order ahead of the fuzzy
+    // tiers, so `/mo` still offers `/model` first and only then its
+    // subsequence neighbours (Array#sort is stable).
+    .sort((left, right) => left.rank - right.rank)
+    .map(entry => entry.completion)
 }
 
 function resolveCompletionNode(
@@ -555,9 +750,4 @@ function resolveCompletionNode(
   return candidates.find(candidate =>
     candidate.name.toLowerCase() === normalized
     || candidate.aliases?.some(alias => alias.toLowerCase() === normalized))
-}
-
-function matchingCompletionToken(candidate: CommandCompletionNode, prefix: string): string | undefined {
-  if (candidate.name.toLowerCase().startsWith(prefix)) return candidate.name
-  return candidate.aliases?.find(alias => alias.toLowerCase().startsWith(prefix))
 }

@@ -5,10 +5,41 @@ import { truncateToWidth } from '../ink/truncateToWidth.js'
 import type { Color } from '../ink/styles.js'
 import type { Theme } from '../theme.js'
 import type { LocalCommand } from '../commands.js'
-import { localizedDescription } from '../commands.js'
+import { localizedDescription, matchCompletionName } from '../commands.js'
 import { t } from '../i18n.js'
 import { POINTER } from '../terminal-utils/figures.js'
-import { SuggestionCard, cardContentWidth, splitQueryMatch } from './SuggestionCard.js'
+import { SuggestionCard, cardContentWidth } from './SuggestionCard.js'
+
+/**
+ * 名字列：命中查询的段用正常亮度，未命中的段 dim。本 fork 的 dimColor 是颜色
+ * 替换（嵌套 Text 会继承、`dim={false}` 盖不掉），所以这些段必须平铺成兄弟
+ * 节点，不能包在一个 dim 的 Text 里再把命中段提亮。
+ *
+ * 命中口径与 `completeCommands` 共用 {@link matchCompletionName} 的分级：
+ * 整名 / 末个空格 token / 末个 `/` 段的精确、前缀、忽略 `-`/`_` 的前缀与
+ * 子序列（`/toti` → `to-tickets` 提亮 `to-ti`；`/cmp` → `compact` 提亮
+ * `c`、`mp`）。
+ */
+function nameColumn(name: string, padAfter: number, query: string): React.ReactNode {
+  // 与 `completeCommands` 同一档位：子序列只属于命令名，参数目录不做模糊。
+  const match = matchCompletionName(name, query, !name.includes(' '))
+  if (match === undefined || match.segments.length === 0) {
+    return <Text dimColor>{`  ${name}${' '.repeat(padAfter)}`}</Text>
+  }
+  const pieces: React.ReactNode[] = [<Text key="lead" dimColor>{'  '}</Text>]
+  let cursor = 0
+  for (const segment of match.segments) {
+    if (segment.start > cursor) {
+      pieces.push(<Text key={`gap-${cursor}`} dimColor>{name.slice(cursor, segment.start)}</Text>)
+    }
+    pieces.push(
+      <Text key={`hit-${segment.start}`}>{name.slice(segment.start, segment.start + segment.length)}</Text>,
+    )
+    cursor = segment.start + segment.length
+  }
+  pieces.push(<Text key="tail" dimColor>{`${name.slice(cursor)}${' '.repeat(padAfter)}`}</Text>)
+  return <>{pieces}</>
+}
 
 /**
  * The slash-command suggestion overlay, using the shared rounded
@@ -21,9 +52,11 @@ import { SuggestionCard, cardContentWidth, splitQueryMatch } from './SuggestionC
  *   │ ↑2 · ↓3                                 │   ← 仅当列表被窗口裁剪
  *   ╰─────────────────────────────────────────╯
  *
- * 未选中行整体 dim，唯独名字里匹配当前查询 token 的前缀以正常亮度提亮
- * （bold 与 dim 在终端互斥，故提亮用非 dim 而非加粗）；选中行整行
- * suggestion 色、名字加粗、前置 ❯ 指针。
+ * 未选中行整体 dim，唯独名字里匹配当前查询 token 的段以正常亮度提亮
+ * （bold 与 dim 在终端互斥，故提亮用非 dim 而非加粗）；匹配按精确 / 前缀 /
+ * 忽略分隔符的前缀 / 子序列分级（`/toti` 命中 `to-tickets`，`/cmp` 命中
+ * `compact`），与 `completeCommands` 共用一套口径。选中行整行 suggestion 色、
+ * 名字加粗、前置 ❯ 指针。
  *
  * issue #1072：回合运行中（`holdFrom` 有值）命令按「对当前对话的影响」分区——
  * 不影响对话的留在上方用原样式，会被门禁拦下 / 会打断或替换对话 / 会 steer 的
@@ -44,7 +77,7 @@ export function CommandSuggestions({
   commands: readonly (LocalCommand & { descriptionKey?: string })[]
   selectedIndex: number
   columns: number
-  /** 原始 `/…` 输入；其最后一段 token 用于名字前缀高亮。 */
+  /** 光标所在 `/…` 命令 run（可嵌在消息中间）；其最后一段 token 参与命中匹配。 */
   query?: string
   accent?: keyof Theme | Color
   /** 索引 ≥ 该值的条目属于「影响当前对话」灰区；undefined = 全部正常区。 */
@@ -143,23 +176,12 @@ export function CommandSuggestions({
             </Text>
           )
         }
-        const parts = isHeld ? null : splitQueryMatch(command.name, queryToken)
         return (
           <Text key={command.name} wrap="truncate">
             {' '}
             {isSelected ? (
               <Text color="suggestion" bold>{`${POINTER} ${command.name}${' '.repeat(padAfter)}`}</Text>
-            ) : parts ? (
-              // 嵌套 Text 会继承父级 dim（本 fork 的 dimColor 是颜色替换，
-              // dim={false} 盖不掉），故高亮段必须与 dim 段平铺为兄弟。
-              <>
-                <Text dimColor>{`  ${parts.before}`}</Text>
-                <Text>{parts.match}</Text>
-                <Text dimColor>{`${parts.after}${' '.repeat(padAfter)}`}</Text>
-              </>
-            ) : (
-              <Text dimColor>{`  ${command.name}${' '.repeat(padAfter)}`}</Text>
-            )}
+            ) : nameColumn(command.name, padAfter, isHeld ? '' : queryToken)}
             {tagText ? <Text dimColor>{tagText}</Text> : null}
             <Text color={isSelected ? 'suggestion' : undefined} dimColor={!isSelected}>
               {description}

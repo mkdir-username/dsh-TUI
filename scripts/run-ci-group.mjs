@@ -855,6 +855,11 @@ const GROUPS = {
 // subtle 且不提亮查询命中，点击映射与命令索引一一对应，36 列不换行；浏览型
 // `/resume` 与门禁型 `/rewind` 同族不同区（只开界面的在上、会被拒的沉底）。
     ["verify-command-hold-overlay", ['node', '--import', 'tsx/esm', 'scripts/verify-command-hold-overlay.tsx']],
+// 命令补全的两处体验缺口：`/toti` 要命中 `to-tickets`（忽略 `-`/`_` 的前缀 +
+// 子序列，精确/前缀仍优先，提亮段与候选共用一套分级），且补全按**光标所在**
+// 的 `/…` run 触发——嵌在消息中间也弹菜单、Tab/Enter 只替换该 run、Esc 只收
+// 菜单不清草稿，行首 Enter 仍直接执行命令。
+    ["verify-command-completion", ['node', '--import', 'tsx/esm', 'scripts/verify-command-completion.tsx']],
   ],
   'channel-ui': [
 // L4 composition boundary plus report/metadata lifetime fences.

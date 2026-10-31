@@ -805,6 +805,9 @@ reason; see [Claude backend](claude-backend.en.md#approvals-and-questions).
 
 The command menu merges local commands with the DSH command registry. Type `/` to inspect the complete surface available in the current composition.
 
+- A command may sit **anywhere in the draft** (`look at /toti` opens the menu too): `Tab`/`Enter` replace only the command run under the caret and leave the surrounding text alone, while `Esc` closes the menu without clearing the draft. When the whole draft is one command line, `Enter` still runs it.
+- Matching is tiered: exact → prefix → prefix ignoring `-`/`_` → subsequence. `/toti` finds `/to-tickets`, `/cmp` finds `/compact`, `/tt` finds `/to-tickets`; prefix matches always precede fuzzy ones, so the catalog order is never scrambled.
+- Subsequence abbreviations apply to command names only. Argument catalogs (models, themes, plugin specs) stay prefix-matched, so a two-letter query cannot drag a long list out.
 - **While a turn is running**, the overlay groups commands by their impact on the current conversation: the harmless ones stay on top in their normal style, while gated, interrupting, replacing or steering commands sink to the bottom in the theme's grey (`subtle`, no header row) — and stay selectable there.
 - Command descriptions follow the UI language (`/lang`).
 - Built-in commands and mapped registry commands (`/plan`, `/goal`, `/feedback`) show Chinese translations in zh.

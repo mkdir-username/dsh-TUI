@@ -37,7 +37,8 @@ import type {
 } from '../dsh-adapter/channel.js'
 import type { TranscriptImage } from '../dsh-adapter/transcript-images.js'
 import type { AttachedContext } from '../adapter/ports/channel-view.js'
-import { isBootSafeCommand, isHiddenCommandName, isLocalCommandName, isUnavailableLocalCommand, parseCommandName, workingHoldOf } from '../commands.js'
+import { commandCompletionAt, isBootSafeCommand, isHiddenCommandName, isLocalCommandName, isUnavailableLocalCommand, parseCommandName, workingHoldOf } from '../commands.js'
+import type { CommandCompletion } from '../commands.js'
 import { appendHistory, HISTORY_LIMIT, historyProjectKey, loadHistoryOldestFirst } from '../history.js'
 import { mentionAtCaret } from '../utils/mentions.js'
 import { preserveSelection, type FileCandidate } from '../utils/fileSuggestions.js'
@@ -1267,8 +1268,16 @@ export function PromptInput({
   // index space: `suggestions` stays the only list selection, Enter dispatch and
   // clicks read, and the default selection stays the first normal-region row.
   // The region is marked by colour only — it costs no display row.
+  //
+  // The trigger is the `/…` run the CARET is in, not the draft's first
+  // character: `look at /toti` completes exactly like `/toti` (see
+  // `commandCompletionAt`). `completionInput` stays the draft those rows were
+  // computed for, so a stdin batch that already edited the text never accepts
+  // a stale row.
+  const commandSite = commandCompletionAt(value, cursor)
+  const completionQuery = commandSite === undefined ? '' : commandSite.input
   const completionInput = value
-  const completions = value.startsWith('/') ? channel.commandCompletions(value) : []
+  const completions = commandSite === undefined ? [] : channel.commandCompletions(completionQuery)
   const holdOf = (commandLine: string): boolean =>
     workingHoldOf(commandLine, channel.commandList.find(
       command => command.name === commandLine.replace(/^\//, '').split(/[\t ]/u)[0],
@@ -1283,12 +1292,21 @@ export function PromptInput({
   const suggestions = suggestionsHoldFrom === undefined
     ? completions
     : [...normalCompletions, ...completions.filter(completion => holdOf(completion.commandLine))]
+  // Esc closes the command menu for the run being edited without touching the
+  // draft (an edit sequence keys the dismissal, so the next keystroke reopens
+  // it). Only a draft that IS one command line still clears outright.
+  const commandEscRef = React.useRef<{ edit: number; start: number } | null>(null)
+  const [, refreshCommandMenu] = React.useState(0)
+  const commandMenuDismissed = commandSite !== undefined
+    && commandEscRef.current?.edit === inputEditSequenceRef.current
+    && commandEscRef.current.start === commandSite.start
   const overlayOpen =
     suggestions.length > 0 &&
+    commandSite !== undefined &&
+    !commandMenuDismissed &&
     !expanded &&
     !helpOpen &&
-    !selectionActive &&
-    !value.includes('\n')
+    !selectionActive
 
   // `@` file completion (issue #15): the trigger is the mention token at the
   // CARET, so `@` works mid-message (`看看 @src/a.ts 这个`), not only when it
@@ -1546,6 +1564,33 @@ export function PromptInput({
   const clearSelection = () => {
     selectionRef.current = null
     setSelection(null)
+  }
+
+  /**
+   * Accept a command completion by splicing it over the `/…` run the caret is
+   * in: the prose before the run and the text after its token survive. The
+   * replacement's trailing space lands the caret in argument position, and a
+   * separator already following the run is swallowed so acceptance never
+   * doubles it. A row that cannot change the draft (a syntax example) is
+   * handed back untouched.
+   * @returns Whether the draft changed.
+   */
+  const acceptCommand = (command: CommandCompletion): boolean => {
+    const current = valueRef.current
+    const site = commandCompletionAt(current, cursorRef.current)
+    // The rows belong to the render-time run: a caret that moved into a
+    // different run within one stdin batch must not accept them.
+    if (site === undefined || site.start !== commandSite?.start) return false
+    const tail = current.slice(site.end)
+    const swallowsSeparator = /[\t ]$/u.test(command.replacement) && /^[\t ]/u.test(tail)
+    const next = current.slice(0, site.start) + command.replacement + (swallowsSeparator ? tail.slice(1) : tail)
+    if (next === current) return false
+    // A whole-draft command line owns the fold context; a splice into prose
+    // must leave the chip alone (`setInput` shifts it past the caret).
+    if (site.start === 0) updateFoldBlock(null)
+    setInput(next, site.start + command.replacement.length, 'step')
+    setSelectedCommand(0)
+    return true
   }
 
   /**
@@ -2188,8 +2233,13 @@ export function PromptInput({
     if (overlayOpen && value === completionInput) {
       const command = suggestions[selectedCommand]
       if (command !== undefined) {
-        dispatchCompletion(command.commandLine)
-        return
+        // A command line that owns the draft runs on Enter; one embedded in a
+        // message only completes — Enter must never dispatch prose.
+        if (commandSite !== undefined && commandSite.start === 0) {
+          dispatchCompletion(command.commandLine)
+          return
+        }
+        if (acceptCommand(command)) return
       }
     }
     // File-completion overlay open → Enter accepts the selection (same
@@ -2273,8 +2323,16 @@ export function PromptInput({
     // same stdin batch before React has rendered the command menu (#1310).
     const current = valueRef.current
     if (!expandedRef.current && !selectionActive) {
-      if (current.startsWith('/') && !current.includes('\n') && channel.commandCompletions(current).length > 0) {
-        clearDraftUndoably()
+      const site = commandCompletionAt(current, cursorRef.current)
+      if (site !== undefined && channel.commandCompletions(site.input).length > 0) {
+        // A draft that IS the command line clears undoably (as before); a
+        // command embedded in a message only closes its own menu.
+        if (site.start === 0 && site.end === current.length) {
+          clearDraftUndoably()
+          return true
+        }
+        commandEscRef.current = { edit: inputEditSequenceRef.current, start: site.start }
+        refreshCommandMenu(tick => tick + 1)
         return true
       }
       const currentMention = mentionAtCaret(current, cursorRef.current)
@@ -2925,10 +2983,7 @@ export function PromptInput({
     }
     if (key.tab && overlayOpen) {
       const command = suggestions[selectedCommand]
-      if (command && value === completionInput) {
-        updateFoldBlock(null)
-        setInput(command.replacement, command.replacement.length, 'step')
-      }
+      if (command) acceptCommand(command)
       return
     }
     // Tab while the model is working = queue for AFTER the turn (followup),
@@ -4577,10 +4632,11 @@ export function PromptInput({
             commands={suggestions}
             selectedIndex={selectedCommand}
             columns={columns}
-            query={value}
+            query={completionQuery}
             accent={promptAccent}
             holdFrom={suggestionsHoldFrom}
-            // 点击行 = 运行该命令（选中行与 Enter 共用派遣）
+            // 点击行 = 运行该命令（与 Enter 同路径）；嵌在消息里的命令只补全，
+            // 绝不把整段草稿当命令行派发。
             onPick={(index) => {
               const command = suggestions[index]
               if (command === undefined) return
@@ -4589,6 +4645,10 @@ export function PromptInput({
               // send the half-typed draft to the model.
               if (valueRef.current !== completionInput) {
                 tryRunCommand(valueRef.current)
+                return
+              }
+              if (commandSite !== undefined && commandSite.start > 0) {
+                acceptCommand(command)
                 return
               }
               dispatchCompletion(command.commandLine)
