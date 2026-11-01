@@ -1275,6 +1275,11 @@ export function PromptInput({
   // computed for, so a stdin batch that already edited the text never accepts
   // a stale row.
   const commandSite = commandCompletionAt(value, cursor)
+  // Only a draft that IS the command line dispatches it: a `/…` run inside
+  // prose completes, and the prose on either side of the run survives.
+  const commandOwnsDraft = commandSite !== undefined
+    && commandSite.start === 0
+    && commandSite.end === value.length
   const completionQuery = commandSite === undefined ? '' : commandSite.input
   const completionInput = value
   const completions = commandSite === undefined ? [] : channel.commandCompletions(completionQuery)
@@ -1577,9 +1582,11 @@ export function PromptInput({
    */
   const acceptCommand = (command: CommandCompletion): boolean => {
     const current = valueRef.current
+    // The rows belong to the draft they were computed from: a stdin batch that
+    // edited the text before this Tab must not accept a stale row.
+    if (current !== completionInput) return false
     const site = commandCompletionAt(current, cursorRef.current)
-    // The rows belong to the render-time run: a caret that moved into a
-    // different run within one stdin batch must not accept them.
+    // …and the caret must still sit in the run those rows came from.
     if (site === undefined || site.start !== commandSite?.start) return false
     const tail = current.slice(site.end)
     const swallowsSeparator = /[\t ]$/u.test(command.replacement) && /^[\t ]/u.test(tail)
@@ -1587,7 +1594,7 @@ export function PromptInput({
     if (next === current) return false
     // A whole-draft command line owns the fold context; a splice into prose
     // must leave the chip alone (`setInput` shifts it past the caret).
-    if (site.start === 0) updateFoldBlock(null)
+    if (site.start === 0 && site.end === current.length) updateFoldBlock(null)
     setInput(next, site.start + command.replacement.length, 'step')
     setSelectedCommand(0)
     return true
@@ -2235,7 +2242,7 @@ export function PromptInput({
       if (command !== undefined) {
         // A command line that owns the draft runs on Enter; one embedded in a
         // message only completes — Enter must never dispatch prose.
-        if (commandSite !== undefined && commandSite.start === 0) {
+        if (commandOwnsDraft) {
           dispatchCompletion(command.commandLine)
           return
         }
@@ -4647,7 +4654,7 @@ export function PromptInput({
                 tryRunCommand(valueRef.current)
                 return
               }
-              if (commandSite !== undefined && commandSite.start > 0) {
+              if (!commandOwnsDraft) {
                 acceptCommand(command)
                 return
               }

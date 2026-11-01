@@ -624,11 +624,17 @@ const isCommandGap = (ch: string | undefined): boolean => ch === ' ' || ch === '
 /**
  * Locate the slash-command run the caret is editing, so completion works
  * wherever the `/` sits — `look at /toti` completes like `/toti` at the start
- * of the draft. A run opens at a token that STARTS with `/` (a path segment
- * like `foo/bar` never triggers), extends over the following argument tokens
- * up to the caret, and stops at a line break. The prose before it and the
- * text after the caret's token are not part of it: acceptance splices the
- * completed command back into the surrounding text.
+ * of the draft. The run is anchored at the FIRST token on the line that starts
+ * with `/`, not at the token under the caret: in `/plugin info /p` the `/p` is
+ * an argument of `info`, not a new command, and anchoring early lets
+ * `completeCommands` resolve the path. Prose before the anchor is skipped by
+ * the scan, so `look at /toti` still yields the `/toti` run.
+ *
+ * A draft that spans lines is prose: it never opens the menu, matching the
+ * upstream rule that a multi-line draft is sent rather than completed.
+ *
+ * The text after the caret's token is not part of the run: acceptance splices
+ * the completed command back into the surrounding text.
  *
  * @param value - The composer draft.
  * @param cursor - Caret offset into `value`.
@@ -636,35 +642,20 @@ const isCommandGap = (ch: string | undefined): boolean => ch === ' ' || ch === '
  */
 export function commandCompletionAt(value: string, cursor: number): CommandCompletionSite | undefined {
   if (cursor < 0 || cursor > value.length) return undefined
-  const lineStart = value.lastIndexOf('\n', Math.max(0, cursor - 1)) + 1
-  const lineBreak = value.indexOf('\n', cursor)
-  const lineEnd = lineBreak === -1 ? value.length : lineBreak
+  if (value.includes('\n')) return undefined
   let start = cursor
-  while (start > lineStart && !isCommandGap(value[start - 1])) start -= 1
+  while (start > 0 && !isCommandGap(value[start - 1])) start -= 1
   let end = cursor
-  while (end < lineEnd && !isCommandGap(value[end])) end += 1
-  let runStart = start
-  if (value[runStart] !== '/') {
-    // The caret is in an argument token: walk back over the argument run to
-    // the token that opens it. Prose is not skipped — an unresolvable token
-    // makes `completeCommands` answer nothing, which keeps the menu closed.
-    let probe = start
-    for (;;) {
-      let tokenEnd = probe
-      while (tokenEnd > lineStart && isCommandGap(value[tokenEnd - 1])) tokenEnd -= 1
-      if (tokenEnd === lineStart) return undefined
-      let tokenStart = tokenEnd
-      while (tokenStart > lineStart && !isCommandGap(value[tokenStart - 1])) tokenStart -= 1
-      if (value[tokenStart] === '/') {
-        runStart = tokenStart
-        break
-      }
-      probe = tokenStart
-    }
+  while (end < value.length && !isCommandGap(value[end])) end += 1
+  let runStart = 0
+  for (;;) {
+    while (runStart < start && isCommandGap(value[runStart])) runStart += 1
+    if (runStart >= start) break
+    if (value[runStart] === '/') break
+    while (runStart < start && !isCommandGap(value[runStart])) runStart += 1
   }
-  const input = value.slice(runStart, cursor)
-  if (!input.startsWith('/') || /[\r\n]/u.test(input)) return undefined
-  return { start: runStart, end, input }
+  if (value[runStart] !== '/') return undefined
+  return { start: runStart, end, input: value.slice(runStart, cursor) }
 }
 
 /**
@@ -703,15 +694,26 @@ export function completeCommands(
   // Root candidates are command names (strict charset); everything deeper is
   // an argument, where a scoped package name must survive.
   const tokenOk = tokens.length === 0 ? isCommandCompletionToken : isArgumentCompletionToken
+  const namesOf = (candidate: CommandCompletionNode): string[] =>
+    [candidate.name, ...(candidate.aliases ?? [])]
+  // Arguments keep the upstream rule: the WHOLE candidate starts with what was
+  // typed. No separator folding and no last-`/` segment — `/model pa` must not
+  // drag `@scope/package@1.2.3` into the model catalog.
+  const matchArgument = (candidate: CommandCompletionNode): CompletionMatch | undefined => {
+    for (const name of namesOf(candidate)) {
+      if (name.toLowerCase().startsWith(normalizedPrefix)) {
+        return { token: name, rank: name.length === normalizedPrefix.length ? 0 : 1, segments: [] }
+      }
+    }
+    return undefined
+  }
   return candidates
     .flatMap(candidate => {
-      // Subsequence matching is for the command surface only: argument
-      // catalogs (models, themes, plugin specs) stay prefix-matched.
-      const match = matchCompletionToken(
-        [candidate.name, ...(candidate.aliases ?? [])],
-        normalizedPrefix,
-        tokens.length === 0,
-      )
+      // Fuzzy tiers are for the command surface only; argument catalogs
+      // (models, themes, plugin specs) stay strict prefix matches.
+      const match = tokens.length === 0
+        ? matchCompletionToken(namesOf(candidate), normalizedPrefix, true)
+        : matchArgument(candidate)
       if (match === undefined || !tokenOk(match.token)) return []
       const path = [...tokens, match.token]
       const commandLine = `/${path.join(' ')}`

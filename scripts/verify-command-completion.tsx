@@ -72,9 +72,11 @@ check('参数位候选不受影响（/model dee）',
     .map(command => command.name).join() === 'model deepseek-chat')
 check('参数目录不做子序列模糊（/model dsk 不出候选，spec 列表不被拖进来）',
   completeCommands('/model dsk', COMMANDS, () => [{ name: 'deepseek-chat', description: 'm' }]).length === 0)
-check('参数位仍认忽略分隔符的前缀（/model deepseekchat → deepseek-chat）',
-  completeCommands('/model deepseekchat', COMMANDS, () => [{ name: 'deepseek-chat', description: 'm' }])
-    .map(command => command.name).join() === 'model deepseek-chat')
+check('参数目录不做分隔符折叠（/model deepseekchat 不出候选）',
+  completeCommands('/model deepseekchat', COMMANDS, () => [{ name: 'deepseek-chat', description: 'm' }]).length === 0)
+check('参数目录按候选开头匹配，末段 `/` 不生效（/model pa 不匹配 @scope/package）',
+  completeCommands('/model pa', COMMANDS, () => [{ name: '@scope/package@1.2.3', description: 'p' }]).length === 0,
+  JSON.stringify(completeCommands('/model pa', COMMANDS, () => [{ name: '@scope/package@1.2.3', description: 'p' }])))
 check('单字符查询不做子序列匹配（不把整张目录倒出来）',
   names('/z').length === 0, JSON.stringify(names('/z')))
 
@@ -98,8 +100,8 @@ check('消息中间的 /toti 有补全位置',
 check('光标在参数里时 run 从 `/` 开始',
   JSON.stringify(at('see /model de', 13)) === JSON.stringify({ start: 4, end: 13, input: '/model de' }),
   JSON.stringify(at('see /model de', 13)))
-check('多行草稿按光标所在行取 run',
-  JSON.stringify(at('line one\nrun /toti', 18)) === JSON.stringify({ start: 13, end: 18, input: '/toti' }),
+check('多行草稿按正文处理，不弹命令菜单',
+  at('line one\nrun /toti', 18) === undefined,
   JSON.stringify(at('line one\nrun /toti', 18)))
 check('token 中间的 `/` 不触发（foo/bar）', at('see foo/bar', 10) === undefined)
 check('光标在 `/` 之前的散文里不触发', at('please /toti', 3) === undefined)
@@ -109,6 +111,16 @@ check('run 之后的散文不产生候选',
 const pathSite = commandCompletionAt('see /usr/bin', 12)
 check('路径形状的 token 没有命令候选',
   pathSite !== undefined && completeCommands(pathSite.input, COMMANDS).length === 0)
+check('参数里的 `/` 不另起命令 run（/plugin info /p）',
+  JSON.stringify(at('/plugin info /p', 15)) === JSON.stringify({ start: 0, end: 15, input: '/plugin info /p' }),
+  JSON.stringify(at('/plugin info /p', 15)))
+const pluginRoots = [{ name: 'plugin', description: 'p' }]
+const pluginChildren = (path: readonly string[]) =>
+  path.length === 1 && path[0] === 'plugin' ? [{ name: 'info' }, { name: 'install' }] : []
+const specSite = commandCompletionAt('/plugin info /p', 15)!
+check('参数里的 `/p` 不会被当成根命令补全',
+  completeCommands(specSite.input, pluginRoots, pluginChildren).length === 0,
+  JSON.stringify(completeCommands(specSite.input, pluginRoots, pluginChildren)))
 
 // ── 3. 真实 composer：菜单、Tab 拼接、Esc、Enter ─────────────────────────
 function makeChannel() {
@@ -120,7 +132,8 @@ function makeChannel() {
     modeIndex: 0,
     cycleMode() {},
     commandList: COMMANDS,
-    commandCompletions: (input: string) => completeCommands(input, COMMANDS),
+    commandCompletions: (input: string) => completeCommands(input, COMMANDS, path =>
+      path[0] === 'model' ? [{ name: 'deepseek-chat', description: 'm' }] : []),
     notifications: [],
     pending: [],
     contextWindow: undefined,
@@ -250,6 +263,31 @@ async function run(): Promise<void> {
     await settled(() => enter.channel.submitted.includes('send this /to-tickets')),
     JSON.stringify(enter.channel.submitted))
   enter.instance.unmount()
+
+  // 命令片段没覆盖整份草稿时，Enter 只补全，不执行、也不丢尾文。
+  const tail = await boot(100)
+  tail.stdin.write('/model de keep this')
+  await settled(() => draftHas(tail.lines(), 'keep this'))
+  // 光标移到 `de` 之后（10 个左键），让菜单停在命令 run 上。
+  tail.stdin.write('\x1b[D'.repeat(10))
+  await settled(() => rowOf(tail.lines(), 'deepseek-chat') >= 0)
+  tail.stdin.write('\r')
+  check('命令后面还有正文时，Enter 只补全不执行',
+    await settled(() => tail.channel.runs.length === 0
+      && draftHas(tail.lines(), 'keep this')
+      && draftHas(tail.lines(), 'deepseek-chat')),
+    JSON.stringify({ runs: tail.channel.runs, submitted: tail.channel.submitted }))
+  tail.instance.unmount()
+
+  // 同一批 stdin 里先改了草稿，Tab 不得接受上一帧的候选。
+  const stale = await boot(100)
+  stale.stdin.write('/mo')
+  await settled(() => rowOf(stale.lines(), 'model') >= 0)
+  stale.stdin.write('x\t')
+  check('编辑后 Tab 不接受过期候选',
+    await settled(() => draftHas(stale.lines(), '/mox')),
+    JSON.stringify(stale.lines().filter(line => line.includes('mo'))))
+  stale.instance.unmount()
 
   console.log(failed === 0 ? 'verify-command-completion OK' : `verify-command-completion: ${failed} 项失败`)
   process.exit(failed === 0 ? 0 : 1)
