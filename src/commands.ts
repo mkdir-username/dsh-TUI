@@ -618,8 +618,14 @@ export interface CommandCompletionSite {
   input: string
 }
 
-/** Space/tab separate command tokens; a line break ends the run outright. */
-const isCommandGap = (ch: string | undefined): boolean => ch === ' ' || ch === '\t'
+/**
+ * A command or argument token may use these characters. Anything else ends the
+ * token: spaces, tabs, CJK prose and full-width punctuation all separate runs,
+ * so `请看看/toti` completes like `请看看 /toti`, while `foo/bar` and
+ * `https://…` stay one token and never trigger.
+ */
+const isCommandBoundary = (ch: string | undefined): boolean =>
+  ch === undefined || (!isCommandCompletionToken(ch) && !isArgumentCompletionToken(ch))
 
 /** Whether the tokens of a `/a b` path name a real command step by step. */
 export type CommandPathResolver = (input: string) => boolean
@@ -676,14 +682,14 @@ export function commandCompletionAt(
   const lineBreak = value.indexOf('\n', cursor)
   const lineEnd = lineBreak === -1 ? value.length : lineBreak
   let end = cursor
-  while (end < lineEnd && !isCommandGap(value[end])) end += 1
+  while (end < lineEnd && !isCommandBoundary(value[end])) end += 1
   let tokenStart = lineStart
   while (tokenStart < lineEnd) {
-    while (tokenStart < lineEnd && isCommandGap(value[tokenStart])) tokenStart += 1
+    while (tokenStart < lineEnd && isCommandBoundary(value[tokenStart])) tokenStart += 1
     // The caret must sit after the opening `/` to be editing the run.
     if (tokenStart >= cursor) break
     const anchor = tokenStart
-    while (tokenStart < lineEnd && !isCommandGap(value[tokenStart])) tokenStart += 1
+    while (tokenStart < lineEnd && !isCommandBoundary(value[tokenStart])) tokenStart += 1
     if (value[anchor] !== '/') continue
     const input = value.slice(anchor, cursor)
     if (resolvesPath === undefined) return { start: anchor, end, input }

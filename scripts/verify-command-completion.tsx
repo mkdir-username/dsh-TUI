@@ -117,6 +117,20 @@ check('散文里的前一个 `/` 不挡后一个命令（/help then /model）',
 check('路径形状的 token 不挡后面的命令（/usr/bin … /toti）',
   JSON.stringify(at('see /usr/bin and /toti', 22)) === JSON.stringify({ start: 17, end: 22, input: '/toti' }),
   JSON.stringify(at('see /usr/bin and /toti', 22)))
+check('中文紧贴的 /toti 也触发（无空格）',
+  JSON.stringify(at('请看看/toti', 8)) === JSON.stringify({ start: 3, end: 8, input: '/toti' }),
+  JSON.stringify(at('请看看/toti', 8)))
+check('中文标点后的 /toti 也触发',
+  JSON.stringify(at('请看看，/toti', 9)) === JSON.stringify({ start: 4, end: 9, input: '/toti' }),
+  JSON.stringify(at('请看看，/toti', 9)))
+check('全角空格也当分隔符',
+  JSON.stringify(at('请看看　/toti', 9)) === JSON.stringify({ start: 4, end: 9, input: '/toti' }),
+  JSON.stringify(at('请看看　/toti', 9)))
+check('中文紧跟命令时 run 只到命令末尾',
+  JSON.stringify(at('请看看/toti这个', 8)) === JSON.stringify({ start: 3, end: 8, input: '/toti' }),
+  JSON.stringify(at('请看看/toti这个', 8)))
+check('URL 里的 `/` 不触发',
+  at('https://example.com/toti', 'https://example.com/toti'.length) === undefined)
 check('token 中间的 `/` 不触发（foo/bar）', at('see foo/bar', 10) === undefined)
 check('光标在 `/` 之前的散文里不触发', at('please /toti', 3) === undefined)
 const proseSite = commandCompletionAt('see /model de now', 17)
@@ -240,6 +254,32 @@ async function run(): Promise<void> {
   check('接受后浮窗关闭',
     await settled(() => rowOf(mid.lines(), 'to-tickets') < 0))
   mid.instance.unmount()
+
+  // 中文段落里没有空格时，`/` 也要像有空格一样弹菜单。
+  const cjk = await boot(100)
+  cjk.stdin.write('请看看/toti')
+  check('中文段落无空格时 /toti 也弹出命令菜单',
+    await settled(() => rowOf(cjk.lines(), 'to-tickets') >= 0),
+    JSON.stringify(cjk.lines().filter(line => line.includes('to-tickets'))))
+  cjk.stdin.write('\t')
+  check('中文紧贴时 Tab 只替换命令段，正文保留',
+    await settled(() => draftHas(cjk.lines(), '请看看/to-tickets')),
+    JSON.stringify(cjk.lines().filter(line => line.includes('请看看'))))
+  cjk.instance.unmount()
+
+  // 命令后面紧跟中文时，补全段不能吞掉后面的字。
+  const cjkTail = await boot(100)
+  cjkTail.stdin.write('请看看/toti这个命令')
+  cjkTail.stdin.write('\x1b[D'.repeat(4))
+  check('命令后紧跟中文时，菜单只覆盖命令段',
+    await settled(() => rowOf(cjkTail.lines(), 'to-tickets') >= 0),
+    JSON.stringify(cjkTail.lines().filter(line => line.includes('to-tickets'))))
+  cjkTail.stdin.write('\t')
+  check('Tab 保留命令后的中文',
+    await settled(() => draftHas(cjkTail.lines(), '请看看/to-tickets')
+      && draftHas(cjkTail.lines(), '这个命令')),
+    JSON.stringify(cjkTail.lines().filter(line => line.includes('请看看'))))
+  cjkTail.instance.unmount()
 
   // 多行草稿：光标所在行的命令也弹菜单；Tab 只替换那一段，Enter 发送正文。
   const multiline = await boot(100)
