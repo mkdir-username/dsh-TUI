@@ -3395,7 +3395,7 @@ export function Chat({
         // of looking usable and failing on use (channel/capabilities.ts).
         const compact = channel.capabilities().compact
         if (compact.route === 'local') {
-          channel.compact()
+          channel.compact(rawInput)
           return true
         }
         if (compact.route === 'registry') return runExternalCommand('compact', rawInput, images)

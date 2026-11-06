@@ -604,8 +604,9 @@ export interface PromptInputProps {
  * queues the message for after the turn (followup). Both appear in a
  * pending preview above the input until delivered. Alt+Up pulls the last
  * pending message back for editing; Esc (with pending messages while
- * working) interrupts the turn and delivers them right away; Ctrl+Enter
- * aborts the turn and sends the current input immediately.
+ * working) interrupts the turn and delivers them right away. Ctrl+Enter is
+ * the same send without the abort: a plain line steers, a known command stays
+ * a command, and only an EMPTY draft interrupts.
  */
 export function PromptInput({
   channel,
@@ -1892,6 +1893,7 @@ export function PromptInput({
       return
     }
     if (sent > 0) channel.notify(t('input-dock-sent', { n: sent }), { timeoutMs: 2500 })
+    else if (channel.pending.some(item => item.heldCompact === true)) channel.notify('/compact: очередь уйдёт после сжатия', { timeoutMs: 2500 })
     setDockSelected(null)
   }
 
@@ -2834,12 +2836,16 @@ export function PromptInput({
     if (key.return && isMod(key)) {
       // Ctrl+Enter / Cmd+Enter: in the EXPANDED editor this is the explicit
       // send (Enter inserts newlines there, so sending needs its own key);
-      // inline it interrupts the running turn and processes this message
-      // immediately (Windows Terminal sends CSI 13;5u / 13;1;5u).
+      // inline a non-empty draft takes the Enter main path — a plain line
+      // steers the running turn at its next step, a known command stays a
+      // command — while only an EMPTY draft keeps the interrupt role
+      // (Windows Terminal sends CSI 13;5u / 13;1;5u).
       if (expandedRef.current) {
         submitFromEditor()
-      } else {
+      } else if (valueRef.current.trim() === '') {
         interruptSend()
+      } else {
+        handleEnter()
       }
       return
     }
@@ -4475,7 +4481,7 @@ export function PromptInput({
             )}
             {dockCount > 0 && (
               <Box flexDirection="column">
-                <Text dimColor>⏸ {t(dockedPending.every(item => item.orphaned === true) ? 'input-pending-orphan-label' : 'input-pending-dock-label')}</Text>
+                <Text dimColor>⏸ {dockedPending.every(item => item.heldCompact === true) ? 'Queue:' : t(dockedPending.every(item => item.orphaned === true) ? 'input-pending-orphan-label' : 'input-pending-dock-label')}</Text>
                 {dockedPending.slice(dockStart, dockEnd).map((item, index) => {
                   // The window maps to absolute dock indices: the click and
                   // the highlight name the same row the user sees.
@@ -4496,7 +4502,7 @@ export function PromptInput({
                   // 点击提示行 = 全部发送（与空输入 ⏎ 同路径）
                   onClick={() => { sendDocked() }}
                 >
-                  <Text dimColor>{' '}{t(channel.status === 'disposed' ? 'input-pending-dock-hint-disposed' : channel.working ? 'input-pending-dock-hint-working' : 'input-pending-dock-hint')}</Text>
+                  <Text dimColor>{' '}{dockedPending.every(item => item.heldCompact === true) ? '↑ Edit' : t(channel.status === 'disposed' ? 'input-pending-dock-hint-disposed' : channel.working ? 'input-pending-dock-hint-working' : 'input-pending-dock-hint')}</Text>
                 </Box>
               </Box>
             )}

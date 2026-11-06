@@ -145,7 +145,9 @@ export function createChannelActionMethods(
     recapRecent: options => getReadyActions().recapRecent(options),
     deleteSession: sessionId => getReadyActions().deleteSession(sessionId),
     renameSessionTo: (sessionId, title) => getReadyActions().renameSessionTo(sessionId, title),
-    compact: () => getReadyActions().compact(),
+    // The raw argument must reach the handler: without it `/compact --pure`
+    // lost its flag here and ran the restruct-plan fork instead.
+    compact: (rawInput?: string) => getReadyActions().compact(rawInput),
     cancelCompact: () => getReadyActions().cancelCompact(),
     runExternalCommand: (name, rawInput) => getReadyActions().runExternalCommand(name, rawInput),
     runExternalCommandOutcome: (name, rawInput, images) => getReadyActions().runExternalCommandOutcome(name, rawInput, images),
@@ -270,7 +272,7 @@ export function createUnavailableActionDelegates(
     },
     deleteSession: () => refuseAsync('resume', false),
     renameSessionTo: () => refuseAsync('rename', false),
-    compact: () => { unavailable('compact') },
+    compact: (_rawInput?: string) => { unavailable('compact') },
     // Contract: a no-op when this process runs no compaction it may abort.
     cancelCompact: () => undefined,
     // Contract: `undefined` = no such registry command, so the caller sends

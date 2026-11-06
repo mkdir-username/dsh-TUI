@@ -85,8 +85,8 @@ export const TIPS: readonly Tip[] = [
   {
     id: 'keys-ctrl-enter',
     group: 'keys',
-    zh: 'Ctrl+Enter 打断当前回合并立即发送',
-    en: 'Ctrl+Enter interrupts the turn and sends immediately',
+    zh: 'Ctrl+Enter 加塞当前回合（不打断）；空输入框时打断',
+    en: 'Ctrl+Enter steers into the running turn (no abort); an empty draft interrupts',
   },
   {
     id: 'keys-shift-enter',
@@ -449,8 +449,8 @@ export const TIPS: readonly Tip[] = [
   {
     id: 'flow-steer',
     group: 'workflow',
-    zh: '模型工作时：Enter 加塞、Tab 排队、Ctrl+Enter 打断；/ 命令照常执行',
-    en: 'While working: Enter steers, Tab queues, Ctrl+Enter interrupts; / commands still run',
+    zh: '模型工作时：Enter / Ctrl+Enter 加塞、Tab 排队、Esc 打断；/ 命令照常执行',
+    en: 'While working: Enter or Ctrl+Enter steers, Tab queues, Esc interrupts; / commands still run',
   },
   {
     id: 'flow-alt-up',

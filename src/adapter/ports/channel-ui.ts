@@ -758,8 +758,11 @@ export interface ChannelUi {
    *  `session/title` event to its log (live sessions go through the normal
    *  rename path). False when the log is absent or undecodable. */
   renameSessionTo(sessionId: string, title: string): Promise<boolean>
-  /** Manually compact the session history (`/compact`); no-op notify when the leaf lacks a compaction service. */
-  compact(): void
+  /** Manually compact the session history (`/compact`); no-op notify when the
+   *  leaf lacks a compaction service. `rawInput` carries the command argument:
+   *  `/compact --pure` asks for the plain compaction without the restruct-plan
+   *  fork, any other argument is refused with the usage line. */
+  compact(rawInput?: string): void
   /** Abort an in-flight manual compaction (`Esc` while it runs). No-op when
    *  none is running or the running one belongs to another process/host: only
    *  this channel's own request carries an abort signal it may fire. */

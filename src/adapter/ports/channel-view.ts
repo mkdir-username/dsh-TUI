@@ -689,6 +689,9 @@ export interface PendingMessage {
    *  the only remaining copy, and nothing delivers it until the user sends
    *  the dock (⏎ / deliverDocked) or retracts it (Alt+↑ / the ↑ editor). */
   docked?: boolean
+  /** Parked by the manual /compact cycle (local patch): the row waits in the
+   *  composer until the cycle finishes and `queueUserMessages` delivers it. */
+  heldCompact?: boolean
   /** Docked because its session ended or its backend dropped it on its own:
    *  no backend holds a copy, so it outlives the switch to the next session. */
   orphaned?: boolean

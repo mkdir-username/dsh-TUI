@@ -14,8 +14,26 @@ interface ManualCompaction {
   row: ChannelState['compaction']
 }
 
-type CompactionState = Pick<ChannelState, 'agentId' | 'cwd' | 'working' | 'compaction' | 'emit' | 'emitStream'>
+type CompactionState = Pick<ChannelState, 'agentId' | 'agentBindingGeneration' | 'cwd' | 'working' | 'compaction' | 'emit' | 'emitStream'>
 type Notify = ChannelState['notify']
+
+/** The activation result shape the verdict reads (structural: the subagents
+ *  service is a host service, not a package dependency). */
+interface RestructPlanResult {
+  readonly stopReason?: string
+  readonly diagnostic?: string
+  readonly output?: ReadonlyArray<{ readonly type?: string; readonly text?: string }>
+}
+interface SubagentsService {
+  getProvider(name: string): unknown
+  startActivation(request: {
+    readonly provider: string
+    readonly label: string
+    readonly request: { readonly prompt: ReadonlyArray<{ readonly type: 'text'; readonly text: string }>; readonly parent: Agent }
+    readonly signal: AbortSignal
+    readonly delivery: 'caller'
+  }): Promise<{ readonly result: Promise<RestructPlanResult> }>
+}
 
 /** One manual compaction transaction per live agent, including agents parked
  * by `/bg`. `settle` aborts the transaction of the FOREGROUND binding — the
@@ -29,6 +47,12 @@ export function createManualCompaction(
     agent(): Agent
     withDecisionPending<T>(name: string, pending: Promise<T>): Promise<T>
     notify: Notify
+    /** Park every model-bound line while the cycle runs (the shared hold). */
+    holdCompact?(scope: { readonly agentId: string; readonly generation: number }): number
+    /** Cycle finished: hand the parked lines over in order. */
+    releaseCompact?(): void
+    /** Session replaced: keep the rows, deliver nothing. */
+    abandonCompact?(): void
   },
 ) {
   const active = new Map<Agent, ManualCompaction>()
@@ -46,6 +70,10 @@ export function createManualCompaction(
 
   const settle = async (): Promise<void> => {
     const agent = deps.agent()
+    preparing.delete(agent)
+    // Session switch: the hold queue is not delivered, its rows stay in the
+    // composer of the next session.
+    deps.abandonCompact?.()
     const transaction = active.get(agent)
     if (transaction === undefined) return
     active.delete(agent)
@@ -63,20 +91,135 @@ export function createManualCompaction(
     }
   }
 
-  const compact = (): void => {
+  /** Grammar: /compact runs restruct-plan first, /compact --pure is the plain
+   *  compaction. */
+  function parseCompactInput(rawInput: string | undefined): { kind: 'pure' } | { kind: 'error'; text: string } | { kind: 'restruct' } {
+    const args = String(rawInput ?? '').trim()
+    if (args === '--pure' || args === '+pure' || args === 'pure') return { kind: 'pure' }
+    if (args !== '') return { kind: 'error', text: 'Usage: /compact [--pure]' }
+    return { kind: 'restruct' }
+  }
+  /** The fork must end on a restruct-plan verdict marker; anything else means
+   *  the knowledge was not written down, and the compaction is blocked. */
+  function restructPlanVerdict(result: RestructPlanResult): { ok: true; notice: string } | { ok: false; reason: string } {
+    const text = (result.output ?? [])
+      .filter(block => block.type === 'text')
+      .map(block => block.text ?? '')
+      .join('\n')
+      .trim()
+    const last = text.split('\n').filter(line => line.trim() !== '').pop() ?? ''
+    if (result.stopReason === 'completed' && /^RP_(DONE|SKIP)\s/.test(last)) return { ok: true, notice: `compact-rp: ${last}` }
+    const detail = result.diagnostic !== undefined ? `: ${result.diagnostic}` : ''
+    return {
+      ok: false,
+      reason: `compact-rp: restruct-plan не завершился (${result.stopReason ?? 'unknown'})${detail}. Сжатие остановлено, знание не потеряно. Без restruct-plan: /compact --pure`,
+    }
+  }
+  const RP_PROMPT = 'Пользователь набрал /compact: это его явная команда выполнить restruct-plan сейчас, до сжатия контекста. Ты — форк этой сессии, запущенный TUI, история диалога тебе видна. Вызови Skill restruct-plan для плана .dev/<slug>/, над которым шла работа, и запиши на диск всё, что знает только диалог: прогресс, грабли, тупики, проверенные факты. Перед записью в .dev/ прочитай каталог плана — его сторожит гейт dev-docs. Вопросов не задавай, ответить некому. Ничего не коммить и не пушить. Последней строкой ответа выведи ровно RP_DONE <slug> или RP_SKIP <причина>.'
+  const RP_TIMEOUT_MS = 15 * 60 * 1000
+  const preparing = new WeakSet<Agent>()
+  async function runRestructPlan(ctx: Context, agent: Agent): Promise<{ ok: true; notice: string } | { ok: false; reason: string }> {
+    const subagents = (ctx.get('subagents') ?? (agent.ctx as Context).get('subagents')) as SubagentsService | undefined
+    if (subagents === undefined) return { ok: false, reason: 'compact-rp: сервис subagents не смонтирован. Без restruct-plan: /compact --pure' }
+    if (subagents.getProvider('fork') === undefined) return { ok: false, reason: 'compact-rp: провайдер «fork» не смонтирован. Без restruct-plan: /compact --pure' }
+    const signal = AbortSignal.any([deps.owner.signal, AbortSignal.timeout(RP_TIMEOUT_MS)])
+    deps.notify('compact-rp: restruct-plan в форке сессии — знание пишется в .dev/ до сжатия…', { timeoutMs: 6000 })
+    try {
+      const activation = await subagents.startActivation({
+        provider: 'fork',
+        label: 'restruct-plan',
+        request: { prompt: [{ type: 'text', text: RP_PROMPT }], parent: agent },
+        signal,
+        delivery: 'caller',
+      })
+      return restructPlanVerdict(await activation.result)
+    } catch (error: unknown) {
+      return {
+        ok: false,
+        reason: `compact-rp: restruct-plan не запустился (${error instanceof Error ? error.message : String(error)}). Сжатие остановлено. Без restruct-plan: /compact --pure`,
+      }
+    }
+  }
+  /** A turn may start while the fork runs: the compaction waits for idle
+   *  instead of being thrown away. */
+  const IDLE_WAIT_MS = 5 * 60 * 1000
+  const IDLE_POLL_MS = 250
+  const waitUntilIdle = (originAgent: Agent): Promise<boolean> => new Promise((resolve) => {
+    const deadline = Date.now() + IDLE_WAIT_MS
+    const tick = (): void => {
+      if (deps.agent() !== originAgent || !deps.owner.current() || deps.owner.signal.aborted) return resolve(false)
+      if (!state.working) return resolve(true)
+      if (Date.now() >= deadline) return resolve(false)
+      setTimeout(tick, IDLE_POLL_MS).unref?.()
+    }
+    tick()
+  })
+  const compact = (rawInput = ''): void => {
+    const input = parseCompactInput(rawInput)
+    if (input.kind === 'error') {
+      deps.notify(input.text, { color: 'warning', timeoutMs: 8000 })
+      return
+    }
     if (!deps.owner.current() || deps.owner.signal.aborted) return
     const originAgent = deps.agent()
-    if (active.has(originAgent)) return
+    if (state.working) {
+      deps.notify(t(WORKING_GATE_NOTICES.compact), { color: 'warning' })
+      return
+    }
+    if (preparing.has(originAgent)) {
+      deps.notify('compact-rp: /compact уже выполняется', { color: 'warning', timeoutMs: 4000 })
+      return
+    }
+    preparing.add(originAgent)
+    // Everything bound for the model waits in the hold until the whole cycle
+    // (restruct-plan + compaction) has finished.
+    deps.holdCompact?.({ agentId: state.agentId, generation: state.agentBindingGeneration })
+    const finish = (): void => {
+      preparing.delete(originAgent)
+      // The cycle's tail must not fail on a notice: an unhandled rejection
+      // would take the TUI process down.
+      try { deps.releaseCompact?.() } catch {}
+    }
+    if (input.kind === 'pure') {
+      Promise.resolve(compactNow()).then(finish, finish)
+      return
+    }
+    runRestructPlan(ctx, originAgent).then(async (verdict) => {
+      if (!verdict.ok) {
+        deps.notify(verdict.reason, { color: 'error', timeoutMs: 12000 })
+        return
+      }
+      deps.notify(verdict.notice)
+      if (state.working) deps.notify('compact-rp: идёт ход — сожму, как только он закончится', { color: 'warning', timeoutMs: 6000 })
+      if (!await waitUntilIdle(originAgent)) {
+        if (deps.agent() !== originAgent) {
+          deps.notify('compact-rp: сессия сменилась, сжатие отменено', { color: 'warning', timeoutMs: 6000 })
+          return
+        }
+        deps.notify(`compact-rp: ход не освободился за ${IDLE_WAIT_MS / 60000} минут — сжатие отменено. Повтори /compact`, { color: 'warning', timeoutMs: 12000 })
+        return
+      }
+      await compactNow()
+    }, (error: unknown) => {
+      deps.notify(`compact-rp: ${error instanceof Error ? error.message : String(error)}`, { color: 'error', timeoutMs: 12000 })
+    }).catch((error: unknown) => {
+      deps.notify(`compact-rp: ${error instanceof Error ? error.message : String(error)}`, { color: 'error', timeoutMs: 12000 })
+    }).finally(finish)
+  }
+  const compactNow = (): Promise<void> => {
+    if (!deps.owner.current() || deps.owner.signal.aborted) return Promise.resolve()
+    const originAgent = deps.agent()
+    if (active.has(originAgent)) return Promise.resolve()
     const compactService = serviceForAgent<{
       compactNow(agent: unknown, signal: AbortSignal): Promise<unknown>
     }>(ctx, originAgent, 'compaction')
     if (!compactService) {
       deps.notify(t('compact-unavailable'), { color: 'warning' })
-      return
+      return Promise.resolve()
     }
     if (state.working) {
       deps.notify(t(WORKING_GATE_NOTICES.compact), { color: 'warning' })
-      return
+      return Promise.resolve()
     }
     const controller = new AbortController()
     const transaction: ManualCompaction = { controller, settled: Promise.resolve(), row: undefined }
@@ -208,6 +351,9 @@ export function createManualCompaction(
     // A synchronous embedder failure is already handled by the IIFE above.
     transaction.settled = settled
     if (!finished) active.set(originAgent, transaction)
+    // The /compact chain waits for the END of the compaction, not for the
+    // moment its transaction was installed.
+    return transaction.settled
   }
 
   /** Abort the in-flight manual compaction the user asked to stop. */

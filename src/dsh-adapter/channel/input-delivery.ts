@@ -17,6 +17,7 @@ import type { ChannelHost } from './channel-host.js'
 import type { LocalImageStore } from './core/local-images.js'
 import type { ChannelOwner } from './owner.js'
 import { sessionWorkingDirectory } from '../../channel/working-directory.js'
+import { createCompactHold } from './compact-hold.js'
 import type { AttachedContext, ChannelSelection, SelectionAttachment } from '../../adapter/ports/channel-view.js'
 import type {
   ChannelImageBlock,
@@ -58,7 +59,7 @@ export interface UserTextOrigin {
 /** Input FIFO, staged attachments and decision notice timers share one lifetime. */
 export function createInputDelivery(
  ctx: ChannelHost, owner: ChannelOwner, binding: { readonly session: AgentSession },
- state: () => Pick<ChannelState, 'cwd' | 'workingDirectory' | 'agentId' | 'agentBindingGeneration'>,
+ state: () => Pick<ChannelState, 'cwd' | 'workingDirectory' | 'agentId' | 'agentBindingGeneration' | 'pending' | 'emit'>,
  notify: ChannelState['notify'],
  trackPending: (message: PendingTrackInput, placement: PendingMessage['placement']) => void,
  untrackPending: (id: string, hold?: boolean) => void,
@@ -413,6 +414,25 @@ export function createInputDelivery(
       notify(t('send-failed', { err: message }), { color: 'error' })
     }
   }
+  /** One decided delivery, in submission order (the FIFO itself). */
+  function enqueueUserText(
+    text: string,
+    placement: PendingMessage['placement'],
+    images: readonly ComposerImageRef[],
+    origin: UserTextOrigin,
+    attach?: UserMessage,
+  ): void {
+    dispatched += 1
+    inFlight.push(text)
+    inputChain = inputChain.then(() => runUserTextDecision(text, placement, images, origin, attach)).catch((error: unknown) => {
+      // The chain must survive a failed decision: log, then continue with
+      // the next queued submission.
+      ctx.logger.warn('dsh-tui: tui/input dispatch failed: %o', error)
+    }).finally(() => {
+      settled += 1
+      inFlight.shift()
+    })
+  }
   const dispatchUserText = (
     text: string,
     placement: PendingMessage['placement'],
@@ -429,16 +449,14 @@ export function createInputDelivery(
       ? captured
       : { ...captured, attachedContexts: mergeAttachedContexts(contexts, captured.attachedContexts) }
     const capturedImages = composer.captureDraftImages(text, images)
-    dispatched += 1
-    inFlight.push(text)
-    inputChain = inputChain.then(() => runUserTextDecision(text, placement, capturedImages, origin, attach)).catch((error: unknown) => {
-      // The chain must survive a failed decision: log, then continue with
-      // the next queued submission.
-      ctx.logger.warn('dsh-tui: tui/input dispatch failed: %o', error)
-    }).finally(() => {
-      settled += 1
-      inFlight.shift()
-    })
+    // A manual /compact cycle owns this channel: every model-bound line waits
+    // in the hold and is delivered in order by queueUserMessages() once
+    // (restruct-plan fork + compaction) has finished.
+    if (compactHold.owns(origin.agentId, origin.generation)) {
+      compactHold.park({ text, placement, images: capturedImages, origin, attach })
+      return
+    }
+    enqueueUserText(text, placement, capturedImages, origin, attach)
   }
   /** Public companion for callers that own a line but not a draft (skill
    *  registrations): same decision pass and FIFO as a typed submit. The
@@ -459,6 +477,14 @@ export function createInputDelivery(
     for (const cleanup of [...pendingDecisionCleanups]) cleanup()
   }
 
+  /** Hold slot of the manual /compact cycle. */
+  const compactHold = createCompactHold({
+    state,
+    notify,
+    current,
+    enqueue: enqueueUserText,
+  })
+
   return {
     dispatchUserText,
     /** Inputs dispatched so far, and whether any is still in the FIFO (a
@@ -475,6 +501,11 @@ export function createInputDelivery(
     clearStagedImages,
     stageImage: (input: StagedImageInput): Promise<string> => composer.stageImage(input),
     stagedImages: (): ReadonlyMap<string, ChannelImageBlock['attachment']> => composer.snapshot(),
+    /** Install / flush / drop the /compact hold. */
+    holdCompactInputs: (scope: { readonly agentId: string; readonly generation: number }): number => compactHold.install(scope),
+    compactHoldActive: (): boolean => compactHold.active(),
+    queueUserMessages: (): number => compactHold.queueUserMessages(),
+    abandonCompactInputs: (): number => compactHold.abandon(),
     composer,
   }
 }

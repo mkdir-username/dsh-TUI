@@ -750,6 +750,10 @@ export function attachDshExtensions(
     agent: () => binding.agent,
     withDecisionPending: core.input.withDecisionPending,
     notify,
+    // Input queue of the manual /compact cycle.
+    holdCompact: scope => core.input.holdCompactInputs(scope),
+    releaseCompact: () => core.input.queueUserMessages(),
+    abandonCompact: () => core.input.abandonCompactInputs(),
   })
   settleManualCompaction = manualCompaction.settle
   backgroundCurrentAction = createBackgroundCurrentAction(ctx, state, {

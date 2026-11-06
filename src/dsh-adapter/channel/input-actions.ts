@@ -268,8 +268,16 @@ export function createInputActions(
       owner.assertActive()
       const state = getState()
       const held = (id: string): boolean => input.provisionalDockIds?.includes(id) === true
-      const docked = state.pending.filter(item => item.docked === true)
-      if (docked.length === 0) return 0
+      const heldForCompact = state.pending.filter(item => item.docked === true && item.heldCompact === true)
+      const docked = state.pending.filter(item => item.docked === true && item.heldCompact !== true)
+      if (docked.length === 0) {
+        // The /compact queue is not released by hand: queueUserMessages()
+        // hands it over at the end of the cycle.
+        if (heldForCompact.length > 0) {
+          state.notify(`/compact: ${heldForCompact.length} сообщ. уйдут после сжатия`, { color: 'warning', timeoutMs: 4000 })
+        }
+        return 0
+      }
       // The session ended: nothing would run them, and a refused send would
       // lose them. They stay docked for the next session.
       if (state.status === 'disposed') {
@@ -283,7 +291,7 @@ export function createInputActions(
         state.notify(t('input-dock-confirming', { n: docked.length - ready.length }), { color: 'warning', timeoutMs: 4000 })
       }
       if (ready.length === 0) return 0
-      state.pending = state.pending.filter(item => item.docked !== true || held(item.id))
+      state.pending = state.pending.filter(item => item.docked !== true || held(item.id) || item.heldCompact === true)
       state.emit()
       for (const entry of ready) {
         touch(state.agentId)
@@ -403,9 +411,9 @@ export function createInputActions(
         // Rows still awaiting their receipt stay parked for the verdict:
         // their backend copies may still run.
         const heldHere = (id: string): boolean => input.provisionalDockIds?.includes(id) === true
-        const docked = state.pending.filter(item => item.docked === true && !heldHere(item.id))
+        const docked = state.pending.filter(item => item.docked === true && !heldHere(item.id) && item.heldCompact !== true)
         if (docked.length > 0) {
-          state.pending = state.pending.filter(item => item.docked !== true || heldHere(item.id))
+          state.pending = state.pending.filter(item => item.docked !== true || heldHere(item.id) || item.heldCompact === true)
           state.emit()
         }
         for (const entry of [...docked, ...queued]) {
