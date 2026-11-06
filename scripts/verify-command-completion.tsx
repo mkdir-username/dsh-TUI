@@ -27,7 +27,7 @@ const [
   { Terminal: XTerm },
   { render, AlternateScreen, Box },
   { PromptInput },
-  { completeCommands, commandCompletionAt, matchCompletionName },
+  { completeCommands, commandCompletionAt, commandPathResolver, matchCompletionName },
   { settled, sleep, viewportLines },
   instances,
 ] = await Promise.all([
@@ -93,16 +93,30 @@ check('嵌套路径按末段命中，不误亮 model 里的 d/e',
 check('前缀命中仍从头提亮', JSON.stringify(spans('to-tickets', 'to-ti')) === JSON.stringify([{ start: 0, length: 5 }]))
 
 // ── 2. 光标处的命令 run ───────────────────────────────────────────────────
-const at = (value: string, cursor: number) => commandCompletionAt(value, cursor)
+const resolverFor = (
+  roots: typeof COMMANDS,
+  children: (path: readonly string[]) => readonly { name: string; description?: string }[] = () => [],
+) => commandPathResolver(input => completeCommands(input, roots, children))
+const at = (value: string, cursor: number, resolves = resolverFor(COMMANDS)) =>
+  commandCompletionAt(value, cursor, resolves)
 check('消息中间的 /toti 有补全位置',
   JSON.stringify(at('please /toti', 12)) === JSON.stringify({ start: 7, end: 12, input: '/toti' }),
   JSON.stringify(at('please /toti', 12)))
 check('光标在参数里时 run 从 `/` 开始',
   JSON.stringify(at('see /model de', 13)) === JSON.stringify({ start: 4, end: 13, input: '/model de' }),
   JSON.stringify(at('see /model de', 13)))
-check('多行草稿按正文处理，不弹命令菜单',
-  at('line one\nrun /toti', 18) === undefined,
+check('多行草稿里光标所在行的命令也有补全位置',
+  JSON.stringify(at('line one\nrun /toti', 18)) === JSON.stringify({ start: 13, end: 18, input: '/toti' }),
   JSON.stringify(at('line one\nrun /toti', 18)))
+check('多行草稿只取光标所在行，不跨行拼接',
+  JSON.stringify(at('/model\nrest /toti', 17)) === JSON.stringify({ start: 12, end: 17, input: '/toti' }),
+  JSON.stringify(at('/model\nrest /toti', 17)))
+check('散文里的前一个 `/` 不挡后一个命令（/help then /model）',
+  JSON.stringify(at('first /help then /model', 23)) === JSON.stringify({ start: 17, end: 23, input: '/model' }),
+  JSON.stringify(at('first /help then /model', 23)))
+check('路径形状的 token 不挡后面的命令（/usr/bin … /toti）',
+  JSON.stringify(at('see /usr/bin and /toti', 22)) === JSON.stringify({ start: 17, end: 22, input: '/toti' }),
+  JSON.stringify(at('see /usr/bin and /toti', 22)))
 check('token 中间的 `/` 不触发（foo/bar）', at('see foo/bar', 10) === undefined)
 check('光标在 `/` 之前的散文里不触发', at('please /toti', 3) === undefined)
 const proseSite = commandCompletionAt('see /model de now', 17)
@@ -111,13 +125,14 @@ check('run 之后的散文不产生候选',
 const pathSite = commandCompletionAt('see /usr/bin', 12)
 check('路径形状的 token 没有命令候选',
   pathSite !== undefined && completeCommands(pathSite.input, COMMANDS).length === 0)
-check('参数里的 `/` 不另起命令 run（/plugin info /p）',
-  JSON.stringify(at('/plugin info /p', 15)) === JSON.stringify({ start: 0, end: 15, input: '/plugin info /p' }),
-  JSON.stringify(at('/plugin info /p', 15)))
 const pluginRoots = [{ name: 'plugin', description: 'p' }]
 const pluginChildren = (path: readonly string[]) =>
   path.length === 1 && path[0] === 'plugin' ? [{ name: 'info' }, { name: 'install' }] : []
-const specSite = commandCompletionAt('/plugin info /p', 15)!
+const pluginResolve = resolverFor(pluginRoots, pluginChildren)
+const specSite = commandCompletionAt('/plugin info /p', 15, pluginResolve)!
+check('参数里的 `/` 不另起命令 run（/plugin info /p）',
+  JSON.stringify(specSite) === JSON.stringify({ start: 0, end: 15, input: '/plugin info /p' }),
+  JSON.stringify(specSite))
 check('参数里的 `/p` 不会被当成根命令补全',
   completeCommands(specSite.input, pluginRoots, pluginChildren).length === 0,
   JSON.stringify(completeCommands(specSite.input, pluginRoots, pluginChildren)))
@@ -225,6 +240,38 @@ async function run(): Promise<void> {
   check('接受后浮窗关闭',
     await settled(() => rowOf(mid.lines(), 'to-tickets') < 0))
   mid.instance.unmount()
+
+  // 多行草稿：光标所在行的命令也弹菜单；Tab 只替换那一段，Enter 发送正文。
+  const multiline = await boot(100)
+  multiline.stdin.write('line one\x1b[13;2u')
+  multiline.stdin.write('run /toti')
+  check('多行草稿中光标行的 /toti 也弹出命令菜单',
+    await settled(() => rowOf(multiline.lines(), 'to-tickets') >= 0),
+    JSON.stringify(multiline.lines().filter(line => line.includes('to-tickets'))))
+  multiline.stdin.write('\t')
+  check('多行草稿 Tab 只替换命令 run，前后正文保留',
+    await settled(() => draftHas(multiline.lines(), 'line one')
+      && draftHas(multiline.lines(), 'run /to-tickets')),
+    JSON.stringify(multiline.lines().filter(line => line.includes('line') || line.includes('run'))))
+  multiline.stdin.write('\r')
+  check('多行草稿补全后的 Enter 发送正文，不派发命令',
+    await settled(() => multiline.channel.runs.length === 0
+      && multiline.channel.submitted.length === 1
+      && multiline.channel.submitted[0]?.includes('run /to-tickets')),
+    JSON.stringify({ runs: multiline.channel.runs, submitted: multiline.channel.submitted }))
+  multiline.instance.unmount()
+
+  // 同一行先有一个命令/路径时，后一个 `/` 仍按光标所在 run 补全。
+  const second = await boot(100)
+  second.stdin.write('first /help then /model')
+  check('散文里的前一个命令不挡后一个命令的菜单',
+    await settled(() => rowOf(second.lines(), 'model') >= 0),
+    JSON.stringify(second.lines().filter(line => line.includes('model'))))
+  second.stdin.write('\t')
+  check('Tab 只替换后一个命令，前文原样保留',
+    await settled(() => draftHas(second.lines(), 'first /help then /model')),
+    JSON.stringify(second.lines().filter(line => line.includes('first'))))
+  second.instance.unmount()
 
   // Esc 只收菜单，草稿不动。
   const esc = await boot(100)

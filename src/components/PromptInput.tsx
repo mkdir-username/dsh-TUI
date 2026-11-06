@@ -37,7 +37,7 @@ import type {
 } from '../dsh-adapter/channel.js'
 import type { TranscriptImage } from '../dsh-adapter/transcript-images.js'
 import type { AttachedContext } from '../adapter/ports/channel-view.js'
-import { commandCompletionAt, isBootSafeCommand, isHiddenCommandName, isLocalCommandName, isUnavailableLocalCommand, parseCommandName, workingHoldOf } from '../commands.js'
+import { commandCompletionAt, commandPathResolver, isBootSafeCommand, isHiddenCommandName, isLocalCommandName, isUnavailableLocalCommand, parseCommandName, workingHoldOf } from '../commands.js'
 import type { CommandCompletion } from '../commands.js'
 import { appendHistory, HISTORY_LIMIT, historyProjectKey, loadHistoryOldestFirst } from '../history.js'
 import { mentionAtCaret } from '../utils/mentions.js'
@@ -1274,7 +1274,8 @@ export function PromptInput({
   // `commandCompletionAt`). `completionInput` stays the draft those rows were
   // computed for, so a stdin batch that already edited the text never accepts
   // a stale row.
-  const commandSite = commandCompletionAt(value, cursor)
+  const resolveCommandPath = commandPathResolver(input => channel.commandCompletions(input))
+  const commandSite = commandCompletionAt(value, cursor, resolveCommandPath)
   // Only a draft that IS the command line dispatches it: a `/…` run inside
   // prose completes, and the prose on either side of the run survives.
   const commandOwnsDraft = commandSite !== undefined
@@ -1585,7 +1586,7 @@ export function PromptInput({
     // The rows belong to the draft they were computed from: a stdin batch that
     // edited the text before this Tab must not accept a stale row.
     if (current !== completionInput) return false
-    const site = commandCompletionAt(current, cursorRef.current)
+    const site = commandCompletionAt(current, cursorRef.current, resolveCommandPath)
     // …and the caret must still sit in the run those rows came from.
     if (site === undefined || site.start !== commandSite?.start) return false
     const tail = current.slice(site.end)
@@ -2330,7 +2331,7 @@ export function PromptInput({
     // same stdin batch before React has rendered the command menu (#1310).
     const current = valueRef.current
     if (!expandedRef.current && !selectionActive) {
-      const site = commandCompletionAt(current, cursorRef.current)
+      const site = commandCompletionAt(current, cursorRef.current, resolveCommandPath)
       if (site !== undefined && channel.commandCompletions(site.input).length > 0) {
         // A draft that IS the command line clears undoably (as before); a
         // command embedded in a message only closes its own menu.

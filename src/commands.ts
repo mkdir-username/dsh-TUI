@@ -621,41 +621,86 @@ export interface CommandCompletionSite {
 /** Space/tab separate command tokens; a line break ends the run outright. */
 const isCommandGap = (ch: string | undefined): boolean => ch === ' ' || ch === '\t'
 
+/** Whether the tokens of a `/a b` path name a real command step by step. */
+export type CommandPathResolver = (input: string) => boolean
+
+/**
+ * Build a {@link CommandPathResolver} from the completion catalog the menu
+ * already uses: a path resolves when asking for it returns an exact row. The
+ * probe keeps `/plugin info /p` on the path opened by `/plugin` (the `/p` is a
+ * spec argument) while prose-separated runs (`/help then /model`) fail at the
+ * prose and let the later `/` open a fresh run.
+ */
+export function commandPathResolver(
+  complete: (input: string) => readonly CommandCompletion[],
+): CommandPathResolver {
+  return input => {
+    if (!input.startsWith('/') || /[\r\n]/u.test(input)) return false
+    const wanted = input.slice(1).toLowerCase()
+    return complete(input).some(row => row.name.toLowerCase() === wanted)
+  }
+}
+
 /**
  * Locate the slash-command run the caret is editing, so completion works
  * wherever the `/` sits — `look at /toti` completes like `/toti` at the start
- * of the draft. The run is anchored at the FIRST token on the line that starts
- * with `/`, not at the token under the caret: in `/plugin info /p` the `/p` is
- * an argument of `info`, not a new command, and anchoring early lets
- * `completeCommands` resolve the path. Prose before the anchor is skipped by
- * the scan, so `look at /toti` still yields the `/toti` run.
+ * of the draft, on any line of a multi-line draft.
  *
- * A draft that spans lines is prose: it never opens the menu, matching the
- * upstream rule that a multi-line draft is sent rather than completed.
+ * Each `/` token on the caret's line is a candidate, left to right. The first
+ * candidate whose tokens before the caret form a real command path wins: in
+ * `/plugin info /p` that is the whole line (the `/p` is an argument of
+ * `info`), while in `/help then /model` the path breaks at the prose and the
+ * later `/model` opens. Without a resolver the leftmost candidate wins, which
+ * keeps the lexical contract available to catalog-free callers.
+ *
+ * The run stops at the line break: a multi-line draft completes on the caret's
+ * line but never runs as one command (callers require the run to own the whole
+ * draft before Enter dispatches it).
  *
  * The text after the caret's token is not part of the run: acceptance splices
  * the completed command back into the surrounding text.
  *
  * @param value - The composer draft.
  * @param cursor - Caret offset into `value`.
+ * @param resolvesPath - Catalog probe for candidate paths; see
+ *   {@link commandPathResolver}.
  * @returns The run, or undefined when the caret is not inside one.
  */
-export function commandCompletionAt(value: string, cursor: number): CommandCompletionSite | undefined {
+export function commandCompletionAt(
+  value: string,
+  cursor: number,
+  resolvesPath?: CommandPathResolver,
+): CommandCompletionSite | undefined {
   if (cursor < 0 || cursor > value.length) return undefined
-  if (value.includes('\n')) return undefined
-  let start = cursor
-  while (start > 0 && !isCommandGap(value[start - 1])) start -= 1
+  const lineStart = value.lastIndexOf('\n', Math.max(0, cursor - 1)) + 1
+  const lineBreak = value.indexOf('\n', cursor)
+  const lineEnd = lineBreak === -1 ? value.length : lineBreak
   let end = cursor
-  while (end < value.length && !isCommandGap(value[end])) end += 1
-  let runStart = 0
-  for (;;) {
-    while (runStart < start && isCommandGap(value[runStart])) runStart += 1
-    if (runStart >= start) break
-    if (value[runStart] === '/') break
-    while (runStart < start && !isCommandGap(value[runStart])) runStart += 1
+  while (end < lineEnd && !isCommandGap(value[end])) end += 1
+  let tokenStart = lineStart
+  while (tokenStart < lineEnd) {
+    while (tokenStart < lineEnd && isCommandGap(value[tokenStart])) tokenStart += 1
+    // The caret must sit after the opening `/` to be editing the run.
+    if (tokenStart >= cursor) break
+    const anchor = tokenStart
+    while (tokenStart < lineEnd && !isCommandGap(value[tokenStart])) tokenStart += 1
+    if (value[anchor] !== '/') continue
+    const input = value.slice(anchor, cursor)
+    if (resolvesPath === undefined) return { start: anchor, end, input }
+    // The token under the caret is being typed; every complete token before
+    // it must name its step of the path exactly.
+    let path = ''
+    let resolved = true
+    for (const token of input.slice(1).split(/[\t ]+/u).slice(0, -1)) {
+      path = path === '' ? `/${token}` : `${path} ${token}`
+      if (!resolvesPath(path)) {
+        resolved = false
+        break
+      }
+    }
+    if (resolved) return { start: anchor, end, input }
   }
-  if (value[runStart] !== '/') return undefined
-  return { start: runStart, end, input: value.slice(runStart, cursor) }
+  return undefined
 }
 
 /**
