@@ -105,7 +105,7 @@ const catalog = (input: Omit<Parameters<typeof buildKernelCatalog>[0], 'entries'
   buildKernelCatalog({ ...input, entries: KERNEL_ENTRIES })
 
 /** 夹具的默认状态：有上次会话 + 条件位全不成立（动作表 = Continue·会话与工作区·设置·内核·帮助）。 */
-const DEFAULT_ACTIONS = resolveLaunchpadActions({ lastSessionTitle: '修个登录页', jobsRunning: false, updateAvailable: false, starDue: false })
+const DEFAULT_ACTIONS = resolveLaunchpadActions({ lastSessionTitle: '修个登录页', jobsRunning: false, updateAvailable: false })
 /** 默认五个入口的屏上标签（zh）；缺省 backendId 使用短标签。 */
 const CONTINUE_LABEL = '继续「修个登录页」'
 const SESSIONS_WORKSPACE_LABEL = '会话与工作区'
@@ -114,7 +114,6 @@ const BACKEND_LABEL = '内核'
 const HELP_LABEL = '帮助'
 const JOBS_LABEL = '后台任务'
 const UPDATE_LABEL = '有新版本'
-const STAR_LABEL = '投喂一颗 Star'
 
 let failures = 0
 let checks = 0
@@ -1016,11 +1015,11 @@ for (const columns of [120, 48]) {
   // 入口使用纯文字标签；theme 和 lang 不属于动作表；
   // settings 由第三格承担（用户拍板），doctor 已移除。
   const all = [
-    resolveLaunchpadActions({ lastSessionTitle: 'x', jobsRunning: false, updateAvailable: false, starDue: false }),
-    resolveLaunchpadActions({ jobsRunning: true, updateAvailable: false, starDue: false }),
-    resolveLaunchpadActions({ jobsRunning: false, updateAvailable: true, starDue: false }),
-    resolveLaunchpadActions({ jobsRunning: false, updateAvailable: false, starDue: true }),
-    resolveLaunchpadActions({ jobsRunning: true, updateAvailable: true, starDue: true }),
+    resolveLaunchpadActions({ lastSessionTitle: 'x', jobsRunning: false, updateAvailable: false }),
+    resolveLaunchpadActions({ jobsRunning: true, updateAvailable: false }),
+    resolveLaunchpadActions({ jobsRunning: false, updateAvailable: true }),
+    resolveLaunchpadActions({ jobsRunning: false, updateAvailable: false }),
+    resolveLaunchpadActions({ jobsRunning: true, updateAvailable: true }),
   ].flat()
   const commands = new Set(all.map(a => a.command))
   check('C12 theme/lang/doctor 永不在动作表（全状态枚举；settings 在第三格是第七版契约）',
@@ -1210,18 +1209,14 @@ for (const columns of [120, 48]) {
 {
   // 表驱动回归：每种条件组合都核对入口行与优先级——
   // 单独成立、多个同时成立、全不成立三类都要钉（详见 launchpadActions.ts）。
-  const BASE = { lastSessionTitle: '修个登录页', jobsRunning: false, updateAvailable: false, starDue: false }
+  const BASE = { lastSessionTitle: '修个登录页', jobsRunning: false, updateAvailable: false }
   const rows: readonly { name: string; state: Record<string, unknown>; ids: readonly string[]; commands: readonly string[]; firstLabelKey?: string }[] = [
     { name: '常态（条件位全不成立 → 帮助兜底）', state: BASE, ids: ['continue', 'sessions-workspace', 'settings', 'backend', 'help'], commands: ['continue', 'home', 'settings', 'kernel', 'help'] },
     { name: '条件位①单独成立（jobs）', state: { ...BASE, jobsRunning: true }, ids: ['continue', 'sessions-workspace', 'settings', 'backend', 'jobs'], commands: ['continue', 'home', 'settings', 'kernel', 'jobs'] },
     { name: '条件位②单独成立（update）', state: { ...BASE, updateAvailable: true }, ids: ['continue', 'sessions-workspace', 'settings', 'backend', 'update'], commands: ['continue', 'home', 'settings', 'kernel', 'update'] },
-    { name: '条件位③单独成立（star）', state: { ...BASE, starDue: true }, ids: ['continue', 'sessions-workspace', 'settings', 'backend', 'star'], commands: ['continue', 'home', 'settings', 'kernel', 'star'] },
     { name: '①+②同时成立：①胜（jobs > update）', state: { ...BASE, jobsRunning: true, updateAvailable: true }, ids: ['continue', 'sessions-workspace', 'settings', 'backend', 'jobs'], commands: ['continue', 'home', 'settings', 'kernel', 'jobs'] },
-    { name: '②+③同时成立：②胜（update > star）', state: { ...BASE, updateAvailable: true, starDue: true }, ids: ['continue', 'sessions-workspace', 'settings', 'backend', 'update'], commands: ['continue', 'home', 'settings', 'kernel', 'update'] },
-    { name: '①+③同时成立：①胜（jobs > star）', state: { ...BASE, jobsRunning: true, starDue: true }, ids: ['continue', 'sessions-workspace', 'settings', 'backend', 'jobs'], commands: ['continue', 'home', 'settings', 'kernel', 'jobs'] },
-    { name: '①②③全成立：①胜', state: { ...BASE, jobsRunning: true, updateAvailable: true, starDue: true }, ids: ['continue', 'sessions-workspace', 'settings', 'backend', 'jobs'], commands: ['continue', 'home', 'settings', 'kernel', 'jobs'] },
-    { name: '无上次会话（Continue 整格缺席，条件位照常）', state: { jobsRunning: false, updateAvailable: false, starDue: false }, ids: ['sessions-workspace', 'settings', 'backend', 'help'], commands: ['home', 'settings', 'kernel', 'help'] },
-    { name: '无上次会话 × 条件位①', state: { jobsRunning: true, updateAvailable: false, starDue: false }, ids: ['sessions-workspace', 'settings', 'backend', 'jobs'], commands: ['home', 'settings', 'kernel', 'jobs'] },
+    { name: '无上次会话（Continue 整格缺席，条件位照常）', state: { jobsRunning: false, updateAvailable: false }, ids: ['sessions-workspace', 'settings', 'backend', 'help'], commands: ['home', 'settings', 'kernel', 'help'] },
+    { name: '无上次会话 × 条件位①', state: { jobsRunning: true, updateAvailable: false }, ids: ['sessions-workspace', 'settings', 'backend', 'jobs'], commands: ['home', 'settings', 'kernel', 'jobs'] },
   ]
   for (const row of rows) {
     const actions = resolveLaunchpadActions(row.state as never)
@@ -1234,17 +1229,17 @@ for (const columns of [120, 48]) {
     }
   }
   // 纯函数：不改入参（深冻结夹具，若函数原地写会抛 TypeError）。
-  const frozen = Object.freeze({ lastSessionTitle: '冻结标题', jobsRunning: false, updateAvailable: false, starDue: false })
+  const frozen = Object.freeze({ lastSessionTitle: '冻结标题', jobsRunning: false, updateAvailable: false })
   const fromFrozen = resolveLaunchpadActions(frozen)
   check('E2 纯函数：不改入参（冻结状态对象直解）',
     fromFrozen.length === 5 && frozen.lastSessionTitle === '冻结标题',
     JSON.stringify(fromFrozen.map(a => a.id)))
   // Continue 带标题：标签键 + 插值；标题超宽截断（含省略号、显示宽度封顶）。
-  const titled = resolveLaunchpadActions({ lastSessionTitle: '修个登录页', jobsRunning: false, updateAvailable: false, starDue: false })
+  const titled = resolveLaunchpadActions({ lastSessionTitle: '修个登录页', jobsRunning: false, updateAvailable: false })
   check('E3 有上次会话时 Continue 带标题（labelKey = continue-titled，values.title）',
     titled[0]?.labelKey === 'launchpad-action-continue-titled' && titled[0]?.values?.title === '修个登录页',
     JSON.stringify(titled[0]))
-  const long = resolveLaunchpadActions({ lastSessionTitle: '这是一个特别特别特别特别特别长的会话标题', jobsRunning: false, updateAvailable: false, starDue: false })
+  const long = resolveLaunchpadActions({ lastSessionTitle: '这是一个特别特别特别特别特别长的会话标题', jobsRunning: false, updateAvailable: false })
   check('E4 超宽标题截断到省略号（宽度 ≤ 上限、尾部是 …）',
     (long[0]?.values?.title ?? '').endsWith('…') && stringWidth(long[0]?.values?.title ?? '') <= LAUNCHPAD_CONTINUE_TITLE_MAX,
     JSON.stringify(long[0]?.values?.title))
@@ -1254,25 +1249,25 @@ for (const columns of [120, 48]) {
     JSON.stringify([truncateContinueTitle(''), truncateContinueTitle('短标题'), truncateContinueTitle('a\nb')]))
   // 空标题 = 无历史：落到常态档（没有点了没反应的 Continue）。
   check('E6 lastSessionTitle 为空白 = 无历史（不造 Continue，落常态档）',
-    resolveLaunchpadActions({ lastSessionTitle: '   ', jobsRunning: false, updateAvailable: false, starDue: false })[0]?.id === 'sessions-workspace',
-    resolveLaunchpadActions({ lastSessionTitle: '   ', jobsRunning: false, updateAvailable: false, starDue: false }).map(a => a.id).join(','))
+    resolveLaunchpadActions({ lastSessionTitle: '   ', jobsRunning: false, updateAvailable: false })[0]?.id === 'sessions-workspace',
+    resolveLaunchpadActions({ lastSessionTitle: '   ', jobsRunning: false, updateAvailable: false }).map(a => a.id).join(','))
   // 内核入口：backendId 缺省时使用短标签，提供了 backendLabel（manifest 的
   // shortLabel，由 Launchpad/Chat 从选择器目录取）时带名——chip 上屏
   // 「内核 · Claude」/「Kernel · DSH」。
-  const namedBackend = resolveLaunchpadActions({ lastSessionTitle: '修个登录页', jobsRunning: false, updateAvailable: false, starDue: false, backendId: 'claude', backendLabel: 'Claude' })
+  const namedBackend = resolveLaunchpadActions({ lastSessionTitle: '修个登录页', jobsRunning: false, updateAvailable: false, backendId: 'claude', backendLabel: 'Claude' })
   check('E6b backendId=claude + backendLabel：内核入口带名（labelKey = backend-named，values.name = Claude）',
     namedBackend.find(a => a.id === 'backend')?.labelKey === 'launchpad-action-backend-named' && namedBackend.find(a => a.id === 'backend')?.values?.name === 'Claude',
     JSON.stringify(namedBackend.find(a => a.id === 'backend')))
   // 短名缺席（目录里没有这一行，例如宿主未接线）时**退回原样 id**——绝不自己按
   // id 查表编品牌名（P0 D2：名字只有一个来源，就是 manifest）。
   check('E6b2 backendLabel 缺席：内核入口退回原样 id（不猜品牌名）',
-    resolveLaunchpadActions({ lastSessionTitle: '修个登录页', jobsRunning: false, updateAvailable: false, starDue: false, backendId: 'claude' })
+    resolveLaunchpadActions({ lastSessionTitle: '修个登录页', jobsRunning: false, updateAvailable: false, backendId: 'claude' })
       .find(a => a.id === 'backend')?.values?.name === 'claude')
   check("E6c backendId 缺省：内核入口用短标签（无插值，阶段B接线前的回退）",
-    resolveLaunchpadActions({ lastSessionTitle: '修个登录页', jobsRunning: false, updateAvailable: false, starDue: false }).find(a => a.id === 'backend')?.labelKey === 'launchpad-action-backend'
-      && resolveLaunchpadActions({ lastSessionTitle: '修个登录页', jobsRunning: false, updateAvailable: false, starDue: false }).find(a => a.id === 'backend')?.values === undefined)
+    resolveLaunchpadActions({ lastSessionTitle: '修个登录页', jobsRunning: false, updateAvailable: false }).find(a => a.id === 'backend')?.labelKey === 'launchpad-action-backend'
+      && resolveLaunchpadActions({ lastSessionTitle: '修个登录页', jobsRunning: false, updateAvailable: false }).find(a => a.id === 'backend')?.values === undefined)
   check('E6d backendId=dsh + backendLabel：带名 DSH',
-    resolveLaunchpadActions({ jobsRunning: false, updateAvailable: false, starDue: false, backendId: 'dsh', backendLabel: 'DSH' }).find(a => a.id === 'backend')?.values?.name === 'DSH')
+    resolveLaunchpadActions({ jobsRunning: false, updateAvailable: false, backendId: 'dsh', backendLabel: 'DSH' }).find(a => a.id === 'backend')?.values?.name === 'DSH')
 }
 {
   const labels = DEFAULT_ACTIONS.map(a => t(a.labelKey as never, a.values as never))
@@ -2141,13 +2136,12 @@ for (const cols of [120, 100, 72, 60, 48]) {
   s.close()
 }
 {
-  // 条件动作不得破坏入口行的对齐和行高——jobs/update/star/help
+  // 条件动作不得破坏入口行的对齐和行高——jobs/update/help
   // 四种条件位各挂一次，入口行仍然恒 1 行、右对齐输入框右缘、四格齐整。
   const variants: [string, string, Record<string, unknown>][] = [
-    ['jobs', JOBS_LABEL, { jobsRunning: true, updateAvailable: false, starDue: false }],
-    ['update', UPDATE_LABEL, { jobsRunning: false, updateAvailable: true, starDue: false }],
-    ['star', STAR_LABEL, { jobsRunning: false, updateAvailable: false, starDue: true }],
-    ['help', HELP_LABEL, { jobsRunning: false, updateAvailable: false, starDue: false }],
+    ['jobs', JOBS_LABEL, { jobsRunning: true, updateAvailable: false }],
+    ['update', UPDATE_LABEL, { jobsRunning: false, updateAvailable: true }],
+    ['help', HELP_LABEL, { jobsRunning: false, updateAvailable: false }],
   ]
   for (const [kind, label, state] of variants) {
     const s = await openLaunchpad([], { actions: resolveLaunchpadActions({ lastSessionTitle: '修个登录页', ...(state as never) }) })
@@ -2922,7 +2916,7 @@ await checkPaletteCardGeometry(60, '窄终端（cardWidth = columns - 4）')
     JSON.stringify(ev.slice(before)))
   s.close()
   const ev2: Ev[] = []
-  const s2 = await openLaunchpad(ev2, { actions: resolveLaunchpadActions({ jobsRunning: false, updateAvailable: false, starDue: false }) })
+  const s2 = await openLaunchpad(ev2, { actions: resolveLaunchpadActions({ jobsRunning: false, updateAvailable: false }) })
   await settled(() => s2.screen().includes(SESSIONS_WORKSPACE_LABEL))
   const before2 = ev2.length
   await s2.send('\u001br')

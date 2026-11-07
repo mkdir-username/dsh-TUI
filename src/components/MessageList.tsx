@@ -28,7 +28,6 @@ import { MessageMetadata } from './messages/MessageMetadata.js'
 import { stripNarration } from '../utils/narration.js'
 import { foldLongLines } from '../utils/fold-long-lines.js'
 import { stringWidth } from '../ink/stringWidth.js'
-import { truncateToWidth } from '../ink/truncateToWidth.js'
 import { clipPreview, type TimelineSnapshot, type TimelineTurn } from '../ink/timeline-rail.js'
 import type { ToolBackground } from '../tuiDisplayPrefs.js'
 import { getRevealVersion, revealLengthOf, revealTextOf, scopeRevealKey } from './smoothReveal.js'
@@ -2078,28 +2077,23 @@ function TranscriptRow({
         </Box>
       )
     case 'compact':
-      // The post-compaction summary defaults to a folded one-liner with a
-      // text preview; Ctrl+O (global), message-selection Enter, or a click
-      // reveals the full summary.
+      // The post-compaction checkpoint keeps ONE visible line: the header
+      // divider. The summary body hangs under it only when expanded — a click
+      // on the header, message-selection Enter, or Ctrl+O (global) toggles it.
       return (
-        <Box
-          marginTop={marginTopOnTurn ? 1 : 0}
-          paddingLeft={2}
-          backgroundColor={background}
-          ref={ref}
-          onClick={foldOnClick}
-          onMouseEnter={() => setCompactHovered(true)}
-          onMouseLeave={() => setCompactHovered(false)}
-        >
+        <Box flexDirection="column" marginTop={marginTopOnTurn ? 1 : 0} ref={ref}>
+          <Box
+            onClick={foldOnClick}
+            onMouseEnter={() => setCompactHovered(true)}
+            onMouseLeave={() => setCompactHovered(false)}
+          >
+            <Divider title={` ${t('compact-done')} `} />
+          </Box>
           {expanded || isExpanded ? (
-            <Text dimColor>{text}</Text>
-          ) : (
-            <Text dimColor italic color={compactHovered ? 'text' : undefined}>
-              <Text color={compactHovered ? 'text' : undefined}>∴</Text>
-              {' '}{t('compact-summary-folded')} · {compactPreview(displayText)}{' '}
-              {t('hint-expand-ctrl-o', { key: primaryComboString('transcript') })}
-            </Text>
-          )}
+            <Box paddingLeft={2} backgroundColor={background}>
+              <Text dimColor>{text}</Text>
+            </Box>
+          ) : null}
         </Box>
       )
     case 'subagent':
@@ -2149,14 +2143,6 @@ function TranscriptRow({
   }
 }
 
-/** Folded compact-summary preview: whitespace flattened, capped with an
- *  ellipsis so the fold line never wraps. `limit` is terminal cells, so
- *  CJK wide chars count double and never split mid-glyph. */
-function compactPreview(text: string, limit = 60): string {
-  const flat = text.replace(/\s+/g, ' ').trim()
-  return stringWidth(flat) <= limit ? flat : `${truncateToWidth(flat, limit - 1)}…`
-}
-
 const MemoRow = React.memo(TranscriptRow)
 
 /**
@@ -2174,8 +2160,6 @@ export function LogoHeader({
   whaleIdle = true,
   whaleGirl = false,
   brand,
-  starred = false,
-  onStarClick,
   working = false,
   skipIntro = false,
 }: {
@@ -2192,10 +2176,6 @@ export function LogoHeader({
   whaleGirl?: boolean
   /** 品牌档（当前后端 → `resolveBrand`；见 `branding.ts`）。 */
   brand?: Brand
-  /** 求 star 标语行被点击（一键 star；host 不传则不可点）。 */
-  onStarClick?: () => void
-  /** 本次会话已 star（彩蛋换「捡到星星」版）。 */
-  starred?: boolean
   working?: boolean
   /** Jump straight to the settled header (long-session resume: the ~3.4s
    *  opening animation competes with transcript mount batches). */
@@ -2206,7 +2186,7 @@ export function LogoHeader({
   if (isMinimalUiMode()) return null
   return (
     <Box flexDirection="column" marginBottom={1}>
-      <LogoV2 model={model} effort={effort} cwd={cwd} fontId={fontId} whale={whale} whaleIdle={whaleIdle} whaleGirl={whaleGirl} brand={brand} starred={starred} onStarClick={onStarClick} working={working} skipIntro={skipIntro} />
+      <LogoV2 model={model} effort={effort} cwd={cwd} fontId={fontId} whale={whale} whaleIdle={whaleIdle} whaleGirl={whaleGirl} brand={brand} working={working} skipIntro={skipIntro} />
     </Box>
   )
 }

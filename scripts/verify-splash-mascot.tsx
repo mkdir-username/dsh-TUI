@@ -152,7 +152,7 @@ function clickAt(s: Scene, col: number, row: number): void {
   s.stdin.write(sgr(0, col, row, true))
 }
 
-const BASE_PROPS = { model: 'splash-mascot-probe', cwd: '/splash/cwd', skipIntro: true, fontId: 'bold', starChance: 0 }
+const BASE_PROPS = { model: 'splash-mascot-probe', cwd: '/splash/cwd', skipIntro: true, fontId: 'bold' }
 
 try {
   // ── S1/S2 稳态：deepy 与鲸娘（无协议→字母格）首帧同步可画、语义恒 idle ──
@@ -196,27 +196,6 @@ try {
       await sleep(400) // 固定窗:探针 断言鲸鱼档不触碰吉祥物渲染
       check('whale skin never invokes the mascot skin render', spy.samples.length === before)
       spy.restore()
-    } finally {
-      if (s !== undefined) { await s.app.unmount(); s.term.dispose() }
-    }
-  }
-
-  // ── S4 求星彩蛋在美术下方（掷骰强开档） ─────────────────────────────────
-  {
-    applyCompanionSkin('deepy')
-    let s: Scene | undefined
-    try {
-      s = await scene(120, 34, { ...BASE_PROPS, starChance: 1, starReveal: 'instant' })
-      await settled(() => s!.lines().some(line => line.includes('小星星')), { timeoutMs: 4000 })
-      const rowsNow = s.lines()
-      const titleRow = rowsNow.findIndex(line => line.includes('小星星'))
-      // headless 终端报不支持 OSC 8 → ask 行整行不画（splash-eggs 已锁该
-      // 契约）；这里锁吉祥物形态下 title + stats 落在美术下方原位。
-      check('star easter egg renders below the art (title + stats)',
-        titleRow >= 0 && rowsNow.some(line => line.includes('已陪你')),
-        (rowsNow[titleRow] ?? '').trim())
-      check('star block sits below the mascot art (original position)',
-        titleRow > 0 && artRows(rowsNow).every(row => row < titleRow), 'titleRow=' + titleRow)
     } finally {
       if (s !== undefined) { await s.app.unmount(); s.term.dispose() }
     }

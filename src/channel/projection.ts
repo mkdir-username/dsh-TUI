@@ -742,16 +742,16 @@ export function createChannelProjection(state: ProjectionState, deps: ChannelPro
   }
 
   const applyUserMessage = (event: AgentEventOf<'user.message'>): void => {
-    // A compaction checkpoint renders as a folded summary rather than
-    // disappearing with the other injected context.
+    // A compaction checkpoint is ONE row: the row view draws the header divider
+    // and hangs the summary under it only when expanded (click / Ctrl+O).
     if (event.source === 'compaction') {
       const summary = event.text
-      appendRow({ id: deps.rowIds.value, kind: 'notice', text: t('compact-done') })
-      deps.rowIds.value += 1
       if (summary) {
         appendRow({ id: deps.rowIds.value, kind: 'compact', text: summary })
-        deps.rowIds.value += 1
+      } else {
+        appendRow({ id: deps.rowIds.value, kind: 'notice', text: t('compact-done') })
       }
+      deps.rowIds.value += 1
       // The checkpoint replaces the whole pre-compact surface. Occupancy
       // needs no chars/4 rewrite here: a DSH host's token meter folds this
       // same event and reprices the surface by its logged shadow price (the

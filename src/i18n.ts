@@ -998,18 +998,8 @@ const dict = {
 
   // ── components/LogoV2.tsx ───────────────────────────────────────────
   'logo-tagline': { zh: '探索未至之境！', en: 'Explore the uncharted!' },
-  // Star easter egg (bottom welcome line on ~1/20 of mounts, see
-  // components/splashEggs.ts): the sentence is split around the repo
-  // hyperlink — lead + link + tail — so both halves are translatable and
-  // the rendered width can be measured for centering. English stays short
-  // on purpose: without OSC 8 support the link degrades to the 38-column
-  // URL, and lead+URL+tail has to fit an 80-column terminal without wrapping.
-  // 开屏求 star 彩蛋（splashEggs.ts + LogoV2）：平时是 logo-tagline，跨里程碑
-  // 时换成"标题 + 数字 + 求星"三行，标题先出、其余两行每秒跟一行。
-  'logo-star-title': { zh: '鲸鱼娘好像在等一颗小星星…… ☆', en: 'The whale girl seems to be waiting for a little star… ☆' },
-  'logo-star-caught': { zh: '鲸鱼娘捡到一颗小星星啦 ✨', en: 'The whale girl caught a little star ✨' },
-  'logo-star-stats': { zh: '已陪你 {{hours}} 小时 · 第 {{launches}} 次打开', en: '{{hours}}h together · launch #{{launches}}' },
-  'logo-star-ask': { zh: '喜欢 dshTUI 的话，顺手点亮一颗 {{star}}？（点这一行或 {{key}} 一键支持）', en: 'If you like dsh-TUI, would you light a {{star}}? (click this line or {{key}})' },
+  // 开屏求 star 彩蛋已从本 fork 删除（splashEggs.ts 只剩节日换词）；
+  // `/star` 与 Alt+S 仍可用，成功后的文案见下面 `star-*`。
   'cmd-desc-star': { zh: '给这个项目点个 star（用 gh 一键）' },
   'star-ok': { zh: '已 star，谢谢！', en: 'Starred — thank you!' },
   'star-no-gh': {
@@ -1384,9 +1374,9 @@ const dict = {
   'hint-ext-dialog-input': { zh: '**Enter** 确认 · Esc 取消', en: '**Enter** to confirm · Esc to cancel' },
   'hint-adjust-done': { zh: '**←/→** 调整 · Enter/Esc 完成', en: '**←/→** to adjust · Enter/Esc to done' },
   'hint-history-search': { zh: '↑/↓ 选择 · **Enter** 确认 · Esc 取消', en: '↑/↓ to navigate · **Enter** to select · Esc to cancel' },
-  'hint-expand-ctrl-o': { zh: '（{{key}} 展开）', en: '({{key}} to expand)' },
   // 转录里的超长单行（utils/fold-long-lines.ts）：行尾内联标记。鼠标点整行
   // （工具卡点卡面）即可展开/收起，键盘走 transcript 键（默认 ctrl+o）—— 两种都写进文案。
+  'hint-expand-ctrl-o': { zh: '（{{key}} 展开）', en: '({{key}} to expand)' },
   'long-line-folded': { zh: '… 已折叠 {{n}} 字符（点击或 {{key}} 展开）', en: '… {{n}} chars folded (click or {{key}} to expand)' },
 
   // ── components/FileActionsPanel.tsx（点击文件路径弹出的操作菜单）──
@@ -1879,7 +1869,6 @@ const dict = {
 
   'rename-current': { zh: '当前名称  {{title}}', en: 'Current title  {{title}}' },
   'rename-done': { zh: '已重命名为「{{title}}」', en: 'Renamed to "{{title}}"' },
-  'compact-summary-folded': { zh: '摘要已折叠', en: 'Summary folded' },
   'new-message': { zh: '↓ {{n}} 条新消息', en: '↓ 1 new message' },
   'new-messages': { zh: '↓ {{n}} 条新消息', en: '↓ {{n}} new messages' },
   'back-to-bottom': { zh: '↓ 回到底部（Enter/End）', en: '↓ back to bottom (Enter/End)' },
@@ -2687,10 +2676,9 @@ const dict = {
   'launchpad-action-backend': { zh: '内核', en: 'Kernel' },
   'launchpad-action-backend-named': { zh: '内核 · {{name}}', en: 'Kernel · {{name}}' },
   'launchpad-action-help': { zh: '帮助', en: 'Help' },
-  // 条件位（优先级 jobs > update > star > help，见 launchpadActions.ts）。
+  // 条件位（优先级 jobs > update > help，见 launchpadActions.ts）。
   'launchpad-action-jobs': { zh: '后台任务', en: 'Background jobs' },
   'launchpad-action-update': { zh: '有新版本', en: 'Update available' },
-  'launchpad-action-star': { zh: '投喂一颗 Star', en: 'Feed us a star' },
   // 内核选择器：行标签、不可选原因、切换重启提示。
   // 这三个 label 键只给**随包内置**的后端（manifest 的 `inTree: true` /
   // `label.kind: 'key'`）。插件后端的名字是外部字面量：原样渲染、不进本字典、

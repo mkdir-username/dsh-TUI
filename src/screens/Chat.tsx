@@ -73,7 +73,7 @@ import { LogoHeader, MessageList } from '../components/MessageList.js'
 import { splashFontIdOf } from '../components/splashFonts.js'
 import { StarPrompt, WhaleCouponPrompt, type StarAttempt } from '../components/StarPrompt.js'
 import type { WhaleCouponStore } from '../dsh-adapter/oauth/bonus.js'
-import { dueStarModal, markStarAsked, pendingStarMilestone, readUsage, STAR_MILESTONES } from '../usageStats.js'
+import { STAR_MILESTONES } from '../usageStats.js'
 import { TimelineRail } from '../components/TimelineRail.js'
 import { ScrollbarGutter } from '../components/ScrollbarGutter.js'
 import type { TimelineSnapshot } from '../ink/timeline-rail.js'
@@ -1253,13 +1253,6 @@ export function Chat({
     channel, host, questionStore, dispatchOverlay, onRestartFreshSession, runOAuthLogin,
   })
   /**
-   * 落地页条件位③（投喂一颗 Star）：与开屏求 star 弹窗**同一口径**——
-   * `usageStats`（~/.dsh-tui/usage.json）里有未报过的已达档里程碑
-   * （`pendingStarMilestone`，首档 24h）且本进程尚未 star 成功。star 成功
-   * 后（`starred` 翻真）按钮立即消失；记账过的档不再纠缠。
-   */
-
-  /**
    * The first-run guide. Renders above the launchpad (see the prop docs): a
    * launch that needs setup has not answered the launchpad's question yet.
    */
@@ -1345,62 +1338,9 @@ export function Chat({
     if (held.onboarding) setOnboardingOpen(true)
     if (held.home) setSupervisorOpen(true)
   }, [channelReady, channelStartupFailed, settingsOpen, treeOpen])
-  /** 99h / 999 次的"求 star"开屏弹窗（`usageStats` 记账，一档只弹一次）：
-   * 只在启动时判定一次——回合进行中、或已有整屏界面在开（如开机首页），
-   * 这一轮不弹也**不记账**，留给下一次启动。`starPrompt` 是测试缝：传
-   * `null` 显式关闭，传 actions 覆写两个按钮（不跑真 gh、不开真浏览器）。 */
-  /** 本次会话是否已经 star 成功（开屏彩蛋标题切「捡到小星星啦」）。 */
-  const [starred, setStarred] = React.useState(false)
-  /**
-   * 落地页条件位③（投喂一颗 Star）：与开屏求 star 弹窗**同一口径**——
-   * `usageStats`（~/.dsh-tui/usage.json）里有未报过的已达档里程碑
-   * （`pendingStarMilestone`，首档 24h）且本进程尚未 star 成功。star 成功
-   * 后（`starred` 翻真）按钮立即消失；记账过的档不再纠缠。readUsage 是
-   * 文件读，只在 starred 翻真或测试缝变化时重算，不逐帧读盘。
-   */
-  const launchpadStarDue = React.useMemo(
-    () => !starred && pendingStarMilestone(readUsage(starPrompt?.dir)) !== null,
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- dir 经测试缝注入
-    [starred, starPrompt],
-  )
-  const [starModal, setStarModal] = React.useState<{ index: number; phase: 'ask' | 'done' } | null>(null)
-  // 单发闩：只在第一个"安静的开屏视口"上武装定时器。700ms 窗口内整屏
-  // 界面打开 → cleanup 掐掉定时器且**不再重臂**（记账只发生在回调里，
-  // 所以这一档完好留给下一次启动）；整屏界面随后关闭也不追到聊天视图
-  // 上补弹——开屏求星不追人。
-  const starModalArmedRef = React.useRef(false)
-  /** 预览缝（`DSH_TUI_STAR_MODAL=1`）：启动即弹一次 99h 档的弹窗，**既不
-   * 读账本也不记账**——给作者看效果、给回归夹具用；生产不设这个变量。 */
-  const starModalPreview = process.env.DSH_TUI_STAR_MODAL === '1'
-  React.useEffect(() => {
-    if (starModalArmedRef.current) return
-    if (starPrompt === null) return
-    if (supervisorOpen || treeOpen || settingsOpen || launchpadShown || onboardingOpen || channel.working) return
-    starModalArmedRef.current = true
-    // 让开屏先画半秒：弹窗压在介绍动画之上，而不是同抢第一帧。
-    const timer = setTimeout(() => {
-      // 到点时回合已经开始的仍不弹（channel 是活对象，读到的是当前值）。
-      // /restart、/kernel 的旧进程不卸这棵树，channel 生命周期结束后读它会抛：读不到就不弹。
-      let working: boolean
-      try {
-        working = channel.working
-      } catch {
-        return
-      }
-      if (working) return
-      if (starModalPreview) {
-        const preview = STAR_MILESTONES.findIndex(milestone => milestone.hours === 99)
-        if (preview >= 0) setStarModal({ index: preview, phase: 'ask' })
-        return
-      }
-      const index = dueStarModal(starPrompt?.dir)
-      if (index === null) return
-      markStarAsked(index, starPrompt?.dir)
-      setStarModal({ index, phase: 'ask' })
-    }, 700)
-    return () => { clearTimeout(timer) }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- 只在整屏界面开合时重判；闩保证只武装一次
-  }, [supervisorOpen, treeOpen, settingsOpen, launchpadShown, onboardingOpen])
+  /** `/star` / `Alt+S` 成功后的庆祝弹窗。开屏标语和里程碑求 star 都已删除：
+   * 只有用户自己按下动作时才可能看到它，启动时不再有任何弹窗。 */
+  const [starModal, setStarModal] = React.useState<{ index: number; phase: 'done' } | null>(null)
   /** `/star` 命令、开屏标语的点击/`Alt+S` 共用的一键动作：异步跑 gh，界面
    * 全程不阻塞，结果回来按四类各报一句（成功 / 没装 gh / 没登录 / 失败）。
    * `starPrompt.onStar` 存在时走同一条测试缝（夹具因此不会真的去 star）。 */
@@ -1425,10 +1365,9 @@ export function Chat({
         return { kind: 'failed' as const, detail: outcome.detail, url }
       })).then(attempt => {
       if (attempt.kind === 'starred') {
-        setStarred(true)
-        // 成功就演一段庆祝（女仆娘接住星星）——`/star`、`Alt+S`、标语点击
-        // 都是这一条路。整屏界面开着或回合进行中时弹窗放不下，退回一句
-        // 通知，用户至少知道 star 点上了。
+        // 成功就演一段庆祝（女仆娘接住星星）——`/star`、`Alt+S` 都是这一条路。
+        // 整屏界面开着或回合进行中时弹窗放不下，退回一句通知，用户至少
+        // 知道 star 点上了。
         const blocked = channel.working || supervisorOpen || treeOpen || settingsOpen
         const index = STAR_MILESTONES.findIndex(milestone => milestone.hours === 99)
         if (!blocked && index >= 0) {
@@ -1458,13 +1397,12 @@ export function Chat({
     // 结局**回传**给它；`/star` 命令那条路仍走 runStarAction 的 notify。
     onStar: (): StarAttempt | Promise<StarAttempt> => {
       const seam = starPrompt?.onStar
-      // 成功把开屏彩蛋切成「捡到星星」版；gh 缺失/未登录**自动**打开仓库页
-      // （与一键路径同一套兜底）。注意**不要**给返回值再包一层 `.then()`——
-      // 多一个微任务会让弹窗"庆祝那一帧"被紧随其后的 Enter 关窗批掉
-      //（夹具 C8/C9 实测）。这里只挂副作用、原样返回。
+      // gh 缺失/未登录**自动**打开仓库页（与一键路径同一套兜底）。注意
+      // **不要**给返回值再包一层 `.then()`——多一个微任务会让弹窗"庆祝那一帧"
+      // 被紧随其后的 Enter 关窗批掉（夹具 C8/C9 实测）。这里只挂副作用、
+      // 原样返回。
       const afterAttempt = (attempt: StarAttempt): StarAttempt => {
-        if (attempt.kind === 'starred') setStarred(true)
-        else if (attempt.kind === 'no-gh' || attempt.kind === 'not-authed') openStarPage()
+        if (attempt.kind === 'no-gh' || attempt.kind === 'not-authed') openStarPage()
         return attempt
       }
       if (seam !== undefined) {
@@ -6893,8 +6831,7 @@ export function Chat({
     // 第七版动作表：状态快照全部来自既有数据源（详见 launchpadActions.ts）——
     //   - lastSessionTitle = agentViewRows（含持久化名册）里最近一条非当前会话
     //     的标题——listing 是异步的，落地前没有 Continue、落地后自动长出来；
-    //   - jobsRunning / updateAvailable / starDue = 条件位三连（后台任务面 /
-    //     checkForTuiUpdate / usageStats 里程碑口径）。
+    //   - jobsRunning / updateAvailable = 条件位（后台任务面 / checkForTuiUpdate）。
     const resumableRows = agentViewRows
       .filter(row => !row.current && row.id !== channel.agentId && row.title.trim() !== '')
     const latestRow = resumableRows.reduce<typeof resumableRows[number] | undefined>(
@@ -6907,7 +6844,6 @@ export function Chat({
         job => job.status === 'running' || job.status === 'stopping',
       ),
       updateAvailable: launchpadUpdateAvailable,
-      starDue: launchpadStarDue,
       // 内核入口带名（「内核 · Claude」）：backendId 是内核身份的唯一来源，
       // 名字取同一份选择器目录里的短品牌名（manifest 的 shortLabel）。
       backendId: kernelCurrentId,
@@ -6933,8 +6869,6 @@ export function Chat({
         whaleGirl={channel.whaleGirl}
         fontId={splashFontIdOf(channel.splashFont)}
         brand={brand}
-        starred={starred}
-        onStarClick={runStarAction}
         firstRun={onboardingPending}
         actions={launchpadActions}
         // 落地页没有 toast 区：最近一条 channel 通知借 Tips 行显示。
@@ -7174,8 +7108,6 @@ export function Chat({
           whaleIdle={channel.whaleIdle && whaleArtVisible}
           whaleGirl={channel.whaleGirl}
           brand={brand}
-          starred={starred}
-          onStarClick={runStarAction}
           working={channel.working}
           // Resuming a long session skips the ~3.4s opening animation: it
           // keeps firing low-frequency React commits that compete with the

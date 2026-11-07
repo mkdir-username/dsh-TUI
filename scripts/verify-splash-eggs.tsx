@@ -8,9 +8,6 @@
  *    带字距的解不存在时才允许零字距（8 列 `wide` × 9 字 `HAPPINESS` 就是这一档）。
  *    例外：声明了 `uniformKerning` 的字体（shadow）不进求解器——钉两行同字距；
  * ③ 日期表：三个彩蛋日命中（词对正确）、前后一天不命中、同一天内跨时刻恒定；
- * ④ 求 star 标语：强制命中时那一行含成对的 OSC 8 序列且 URL 正确、缩进按该行
- *    **实际显示宽度**重算（挂真实 LogoV2 读屏，不是重算公式自证）、终端不支持
- *    超链接时退化成纯文本 URL。
  * Run: node --import tsx/esm scripts/verify-splash-eggs.tsx
  */
 // 终端能力必须在 supports-hyperlinks 之前钉死——它在模块初始化时读一次 env。
@@ -20,8 +17,7 @@ const [
   React,
   { renderBigText, bigTextWidth, paintedWidth },
   { SPLASH_FONTS, splashFontById, withTagline },
-  { pickSplashEgg, splashStarLine, SPLASH_STAR_URL },
-  { OSC8_START, OSC8_END },
+  { pickSplashEgg },
   { stringWidth },
   { renderToScreen },
   { cellAt },
@@ -34,7 +30,6 @@ const [
   import('../src/components/bigfont.js'),
   import('../src/components/splashFonts.js'),
   import('../src/components/splashEggs.js'),
-  import('../src/terminal-utils/hyperlink.js'),
   import('../src/ink/stringWidth.js'),
   import('../src/ink/render-to-screen.js'),
   import('../src/ink/screen.js'),
@@ -61,8 +56,6 @@ const PAIRS: readonly (readonly [string, string])[] = [
 const KERNING_CAP = 12
 /** 鲸鱼 art 包围盒的中心列（`LogoV2.tsx` 的 `WHALE_CENTER`）。 */
 const WHALE_CENTER = 18.5
-/** 仓库地址：写死在这里——常量被改错（哪怕只是大小写）也要红。 */
-const REPO_URL = 'https://github.com/ccch1mneyyy/dsh-TUI'
 
 let failed = 0
 const check = (name: string, ok: boolean, detail = ''): void => {
@@ -210,42 +203,6 @@ check(
   SPLASH_FONTS.every(font => [...'DEEPSEEK' + 'HARNESS'].every(letter => (font.glyphs[letter] ?? []).length === 5)),
 )
 
-// ── ④ 求 star 彩蛋（**触发条件**在 `verify-usage-stats` 里，这里只管三行怎么拼）──
-const SAMPLE_USAGE = { launches: 103, totalMs: 26 * 3_600_000, celebrated: 0 }
-const sample = splashStarLine({ usage: SAMPLE_USAGE })
-check(
-  '标题是"等一颗小星星"、数字行换成本机实测值',
-  sample.title.includes('小星星') && sample.stats.includes('26') && sample.stats.includes('103'),
-  `${sample.title} | ${sample.stats}`,
-)
-check('标题行不再带数字（数字归独立那一行）', !sample.title.includes('26'))
-
-const rich = splashStarLine({ supportsHyperlinks: true, usage: SAMPLE_USAGE, keyHint: 'Alt+S' })
-const richText = rich.ask ?? ''
-check('链接指向仓库（常量没被改错）', SPLASH_STAR_URL === REPO_URL, SPLASH_STAR_URL)
-check(
-  '求星行含成对的 OSC 8 序列（开/闭各 2 段）且 URL 正确',
-  richText.startsWith(`${OSC8_START}${REPO_URL}${OSC8_END}`) ||
-    richText.includes(`${OSC8_START}${REPO_URL}${OSC8_END}`),
-  richText.replaceAll('\x1b', '\\e').replaceAll('\x07', '\\a'),
-)
-check('链接显示的是短标签而不是裸 URL', richText.includes('Star') && !richText.includes(`Star${OSC8_END}${SPLASH_STAR_URL}`))
-check('求星行带括号提示与生效键位',
-  richText.includes('（点这一行或 Alt+S 一键支持）') || richText.includes('(click this line or Alt+S)'),
-  richText.replaceAll('\x1b', '\\e').replaceAll('\x07', '\\a'))
-check('整块宽度按可见文本算（OSC 8 不占列）',
-  stringWidth(richText.replace(/\x1b\]8;;[^\x07]*\x07/gu, '')) <= rich.width
-  && rich.width >= stringWidth(rich.title) && rich.width >= stringWidth(rich.stats),
-  `${rich.width}`)
-check('宽度不是沿用 logo-tagline 的', rich.width > stringWidth('探索未至之境！') && rich.width !== stringWidth('Explore the uncharted!'))
-
-const plain = splashStarLine({ supportsHyperlinks: false, usage: SAMPLE_USAGE })
-check('终端不支持超链接时**整行不画**（裸 URL 会把块撑破）', plain.ask === null)
-check('退化后宽度只按剩下的两行算', plain.width === Math.max(stringWidth(plain.title), stringWidth(plain.stats)))
-
-const caught = splashStarLine({ supportsHyperlinks: true, usage: SAMPLE_USAGE, caught: true })
-check('已 star 过的会话：标题换成"捡到小星星"', caught.title.includes('捡到') && caught.title !== rich.title, caught.title)
-
 // ── ④b 挂真实 LogoV2 读屏 ─────────────────────────────────────────────────
 const WIDTH = 120
 const TEXT_LEFT = WHALE_BOX_WIDTH + COLUMN_GAP
@@ -281,56 +238,18 @@ const textAt = (line: string): string => line.padEnd(TEXT_LEFT).slice(TEXT_LEFT)
 const centeredPad = (visible: number): number => Math.max(0, Math.round(WHALE_CENTER - visible / 2))
 
 {
-  // 先看"第一帧"：渐显只画出标题行——这就是动效本身（真机随后每秒补一行）。
-  const first = mount(view(<LogoV2 {...baseProps} starChance={1} />))
-  check('彩蛋首帧只画标题行（渐显第一拍）',
-    first.rows.some(line => line.includes('小星星'))
-    && !first.rows.some(line => line.includes('已陪你'))
-    && !first.rows.some(line => line.includes('一键支持')))
-
-  // 静态渲染夹具不会再渲染一轮，用 `starReveal="instant"` 把三行一次画全，
-  // 检查排版/链接落格这些与时间无关的部分。（2026-10 用户拍板：欢迎语/
-  // 求星标语维持原「艺术下方居中 + welcomePad 缩进」渲染路径，撤掉曾试
-  // 过的头顶气泡——以下为原始断言。）
-  const { rows, screen } = mount(view(<LogoV2 {...baseProps} starChance={1} starReveal="instant" />))
-  const row = bottomRow(rows)
-  const line = rows[row] ?? ''
-  const { first: firstColumn, width } = span(screen, row)
-  check('命中时底部那块就是求 star 彩蛋（标题 + 数字 + 求星）',
-    rows.some(entry => entry.includes('小星星')) && rows.some(entry => entry.includes('已陪你')) && line.includes('一键支持'),
-    line.trim())
-  const links = new Set<string>()
-  let linkCells = 0
-  for (let column = 0; column < WIDTH; column++) {
-    const hyperlink = cellAt(screen, column, row)?.hyperlink
-    if (hyperlink === undefined) continue
-    links.add(hyperlink)
-    linkCells += 1
-  }
-  check(
-    '链接落到真正的 OSC 8 单元格上且 URL 正确',
-    links.size === 1 && links.has(REPO_URL) && linkCells === 'Star'.length,
-    [...links].join(',') + ` ${linkCells} 格`,
-  )
-  check(
-    '缩进按最宽那行的实际显示宽度重算（不是沿用 logo-tagline 的宽度）',
-    firstColumn === centeredPad(width) && firstColumn !== centeredPad(stringWidth('探索未至之境！')),
-    `first=${firstColumn} width=${width} 期望 ${centeredPad(width)}`,
-  )
-  check('整块不超屏', width <= WIDTH && row >= 0)
-}
-
-{
-  const { rows, screen } = mount(view(<LogoV2 {...baseProps} starChance={0} />))
+  const { rows, screen } = mount(view(<LogoV2 {...baseProps} />))
   const row = bottomRow(rows)
   const { first, width } = span(screen, row)
   let linkCells = 0
   for (let column = 0; column < WIDTH; column++) {
     if (cellAt(screen, column, row)?.hyperlink !== undefined) linkCells += 1
   }
-  check('未命中时底部还是原来的欢迎语（无链接）', linkCells === 0 && (rows[row] ?? '').includes('探索未至之境！'), rows[row] ?? '')
+  const TAGLINES = ['探索未至之境！', 'Explore the uncharted!']
+  check('欢迎语照常显示（无链接）',
+    linkCells === 0 && TAGLINES.some(tagline => (rows[row] ?? '').includes(tagline)), rows[row] ?? '')
   check(
-    '未命中时缩进还是按 tagline 宽度算',
+    '欢迎语缩进还是按 tagline 宽度算',
     first === centeredPad(width),
     `first=${first} width=${width} 期望 ${centeredPad(width)}`,
   )
@@ -339,7 +258,7 @@ const centeredPad = (visible: number): number => Math.max(0, Math.round(WHALE_CE
 {
   const eggFont = withTagline(splashFontById('bold'), 'DEEPSEEK', 'MERRY')
   const egg = { id: 'probe-christmas', top: 'DEEPSEEK', bottom: 'MERRY' }
-  const { rows } = mount(view(<LogoV2 {...baseProps} egg={egg} starChance={0} />))
+  const { rows } = mount(view(<LogoV2 {...baseProps} egg={egg} />))
   const expected = [
     ...renderBigText(eggFont, 'DEEPSEEK', 0, ACCENT, ACCENT, PALE, 60, eggFont.tagline.topKerning),
     '',
@@ -378,7 +297,7 @@ const centeredPad = (visible: number): number => Math.max(0, Math.round(WHALE_CE
       ),
     }
   }
-  const { rows } = wideMount(wideView(<LogoV2 {...baseProps} fontId="shadow" egg={null} starChance={0} />))
+  const { rows } = wideMount(wideView(<LogoV2 {...baseProps} fontId="shadow" egg={null} />))
   const at = rows.findIndex((_, index) =>
     expected.every((want, offset) => textAt(rows[index + offset] ?? '') === want),
   )
@@ -412,7 +331,7 @@ const centeredPad = (visible: number): number => Math.max(0, Math.round(WHALE_CE
 }
 
 {
-  const { rows } = mount(view(<LogoV2 {...baseProps} egg={null} starChance={0} />))
+  const { rows } = mount(view(<LogoV2 {...baseProps} egg={null} />))
   const normal = withTagline(splashFontById('bold'), 'DEEPSEEK', 'HARNESS')
   const expected = strip(
     renderBigText(normal, 'HARNESS', 0, ACCENT, PALE, PALE, 60, normal.tagline.bottomKerning, normal.tagline.bottomIndent)[2] ?? '',
@@ -420,42 +339,6 @@ const centeredPad = (visible: number): number => Math.max(0, Math.round(WHALE_CE
   check('挂真实 LogoV2：正常日画的是 HARNESS 那一行', rows.some(line => textAt(line) === expected))
 }
 
-{
-  // 概率按 mount 钉一次：同一次 mount 里的**重渲染**不许重掷，否则那一行会在
-  // 每次重绘（切语言 / 改窗口大小 / 父级重渲染）时闪进闪出。判据是掷随机数的
-  // 次数不随重渲染增加——比"看那一行变没变"更稳（0.99 对 0.5 是恒定不中）。
-  const countRolls = (element: React.ReactElement): { rolls: number; rows: string[] } => {
-    const original = Math.random
-    let rolls = 0
-    Math.random = (): number => {
-      rolls += 1
-      return 0.99
-    }
-    try {
-      const { rows } = mount(element)
-      return { rolls, rows }
-    } finally {
-      Math.random = original
-    }
-  }
-  const once = countRolls(view(<LogoV2 {...baseProps} egg={null} starChance={1} />))
-  // `useLayoutEffect` 里自更新 + 每次渲染都换 `model`：commit 后再渲染一轮，
-  // LogoV2 拿到新 props 必须重渲染——这才是真实"重绘"（窗口 resize 同路径）。
-  const Remount = (): React.ReactElement => {
-    const [pass, setPass] = React.useState(0)
-    React.useLayoutEffect(() => {
-      setPass(1)
-    }, [])
-    return <LogoV2 {...baseProps} model={`pass-${pass}`} egg={null} starChance={1} />
-  }
-  const twice = countRolls(view(<Remount />))
-  check('重渲染真的发生了（否则上面那条断言是空转）', twice.rows.some(line => line.includes('pass-1')), 'pass-1 在屏上')
-  check(
-    '里程碑只在 mount 时判一次（重渲染不会把那一行甩掉）',
-    once.rows.some(line => line.includes('小星星')) && twice.rows.some(line => line.includes('小星星')),
-    `单次渲染 ${once.rolls} 次随机 → 重渲染后 ${twice.rolls} 次`,
-  )
-}
 
 if (failed > 0) {
   console.error(`verify-splash-eggs: ${failed} check(s) failed`)

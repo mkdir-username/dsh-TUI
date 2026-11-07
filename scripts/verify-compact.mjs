@@ -2,15 +2,16 @@
  * Channel-level verification of the post-compaction behaviour (real Channel
  * via createChannel + fake ctx/agent, plain node against the compiled lib):
  *
- * - the compaction checkpoint renders a localized `compact-done` Divider plus
- *   a `compact` summary row (defaults FOLDED in the transcript)
+ * - the compaction checkpoint renders ONE `compact` row whose view draws the
+ *   localized `compact-done` Divider header; the summary body hangs under it
+ *   and stays folded until the row is expanded
  * - the segmented bar's composition resets immediately (contextSegments), while
  *   OCCUPANCY is left to the official `contextPressure` projection: this
  *   composition mounts no token meter, so the fallback sample must stay
  *   untouched by the checkpoint (the old chars/4 rewrite of lastUsage /
  *   tokens.input is gone on purpose — see dsh-adapter/context-occupancy.ts)
- * - MessageList renders the folded summary as one line and the full text
- *   once expanded (Ctrl+O / message-selection Enter)
+ * - MessageList keeps only the header line when folded and adds the full text
+ *   below it once expanded (Ctrl+O / click / message-selection Enter)
  *
  * Run with plain node against the compiled lib: `node scripts/verify-compact.mjs`
  */
@@ -118,9 +119,8 @@ emit({
 
 const rows = channel.rows
 const compactRow = rows[rows.length - 1]
-const noticeRow = rows[rows.length - 2]
-check('checkpoint renders notice row', noticeRow?.kind === 'notice' && noticeRow?.text === t('compact-done'), JSON.stringify(noticeRow))
-check('checkpoint renders compact row with full summary', compactRow?.kind === 'compact' && compactRow?.text === SUMMARY, JSON.stringify(compactRow))
+check('checkpoint renders one compact row with the full summary', compactRow?.kind === 'compact' && compactRow?.text === SUMMARY, JSON.stringify(compactRow))
+check('checkpoint does not add a separate notice row', rows.every(row => row.kind !== 'notice'), JSON.stringify(rows.map(row => row.kind)))
 
 const summaryEst = est(SUMMARY)
 check(
@@ -206,8 +206,7 @@ function makeStreams() {
 
 const listProps = (expanded) => ({
   rows: [
-    { id: 1, kind: 'notice', text: t('compact-done') },
-    { id: 2, kind: 'compact', text: LONG_SUMMARY },
+    { id: 1, kind: 'compact', text: LONG_SUMMARY },
   ],
   expanded,
   expandedRows: new Set(),
@@ -228,12 +227,12 @@ const listProps = (expanded) => ({
   const frame = () => toPlain(stdout.frames.at(-1) ?? '')
   // 空帧守卫：渲染崩溃时两条 hides 断言会空洞通过（本文件曾因 MessageList
   // 新增必需 prop 而空帧,只有 shows 报警）。先证明画面存在。
-  await settled(() => frame().includes(t('compact-done')) && frame().includes('摘要已折叠'))
+  await settled(() => frame().includes(t('compact-done')))
   // 固定窗:探针 负向断言观察窗：完整摘要若在正向落定之后迟到出现，落定瞬间检查会漏掉。
   await sleep(200)
   const shot = frame()
   check('compact scenario renders at all', shot.includes(t('compact-done')), '')
-  check('folded summary shows the fold line', shot.includes('摘要已折叠'), '')
+  check('folded summary keeps only the header line', shot.includes(t('compact-done')), '')
   check('folded summary hides the full text', !shot.includes(LONG_SUMMARY), '')
   instance.unmount()
 }
@@ -251,7 +250,7 @@ const listProps = (expanded) => ({
   await sleep(200)
   const shot = frame()
   check('expanded summary shows the full text', shot.includes('压缩摘要'), '')
-  check('expanded summary hides the fold line', !shot.includes('摘要已折叠'), '')
+  check('expanded summary keeps the header line', shot.includes(t('compact-done')), '')
   instance.unmount()
 }
 

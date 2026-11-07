@@ -236,7 +236,7 @@ setActiveBrand('deepseek')
 
 // ── ④ 挂真 LogoV2 读屏 ────────────────────────────────────────────────────
 const TEXT_LEFT = 42
-const baseProps = { model: 'probe-model', cwd: '/tmp/probe', skipIntro: true, fontId: 'bold', drift: null, egg: null, starChance: 0 } as const
+const baseProps = { model: 'probe-model', cwd: '/tmp/probe', skipIntro: true, fontId: 'bold', drift: null, egg: null } as const
 const cellChar = (screen: ReturnType<typeof renderToScreen>['screen'], column: number, row: number): string => {
   const cell = cellAt(screen, column, row)
   return cell === undefined ? '' : cell.char

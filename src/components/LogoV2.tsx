@@ -13,9 +13,7 @@ import { interpolateColor, parseRGB } from './Spinner/spinnerUtils.js'
 import { paintedWidth, renderBigText } from './bigfont.js'
 import { COLUMN_GAP, WHALE_BOX_WIDTH, resolveSplashLayout } from './splashLayout.js'
 import { resolveSplashTitleFont, pickSplashFont, splashFontById, type SplashFont } from './splashFonts.js'
-import { pickSplashEgg, splashStarLine, type SplashEgg } from './splashEggs.js'
-import { isHistoricMilestone, markStarAsked, pendingStarMilestone, recordLaunch, STAR_MILESTONES, usageSnapshot } from '../usageStats.js'
-import { effectiveComboDisplay } from '../utils/keymap.js'
+import { pickSplashEgg, type SplashEgg } from './splashEggs.js'
 import { stringWidth } from '../ink/stringWidth.js'
 import { BRAND, EMBER, EMBER_BRIGHT, EMBER_FLASH, EMBER_LIGHT, EMBER_PALE, EMBER_PAPER, EMBER_PAPER_FLASH, FLASH, ICE, LAVENDER, LAVENDER_BRIGHT, LAVENDER_FLASH, LAVENDER_LIGHT, LAVENDER_PALE, LAVENDER_PAPER, LAVENDER_PAPER_FLASH, LAVENDER_SOFT, PALE, sweep } from './shimmer.js'
 import { STANDARD_FRAME_INDEX, WhaleArt } from './Whale.js'
@@ -111,13 +109,9 @@ export function LogoV2({
   whaleIdle = true,
   whaleGirl = false,
   brand = 'deepseek',
-  starred = false,
-  starReveal,
-  onStarClick,
   working = false,
   drift,
   egg,
-  starChance,
   align = 'start',
   chrome = 'full',
   arrangement = 'row',
@@ -141,9 +135,6 @@ export function LogoV2({
    * (`null` forces the normal words; `undefined` — production — rolls by
    * date). See `splashEggs.ts`. */
   egg?: SplashEgg | null
-  /** Test seam: pin the star tagline's chance (1 forces the egg, 0 suppresses
-   * it; production rolls `SPLASH_STAR_CHANCE` once per mount). */
-  starChance?: number
   /** Show the pixel whale art (settings `dsh-tui.whale`); off → text-only header. */
   whale?: boolean
   /** Swap the header's pixel whale for the maid portrait (settings
@@ -160,13 +151,6 @@ export function LogoV2({
    * whaleGirl 设置——鲸鱼与鲸鱼娘是 DeepSeek 品牌资产）。测试缝：缺省
    * `deepseek`，行为与品牌化之前逐字节一致。 */
   brand?: Brand
-  /** 本次会话已经 star 过：彩蛋标题换成「捡到一颗小星星啦」，不再重复求。 */
-  starred?: boolean
-  /** 彩蛋渐显的测试缝：`instant` 时三行一次画全（静态渲染夹具用；真机不传）。 */
-  starReveal?: 'instant'
-  /** 求 star 标语那一行被点击时执行（一键 star，与 `/star` / `Alt+S` 同一个
-   * 动作）。不传则那一行不可点——只有它出现时才有这个交互。 */
-  onStarClick?: () => void
   /** Welcome-phase idle whale behaviors — fin flutters, tail thumps,
    * sleep after inactivity (settings `dsh-tui.whaleIdle`; on by default —
    * an explicit `false` keeps the settled header timer-free). Click-hearts
@@ -291,8 +275,6 @@ export function LogoV2({
     }
   }, [heartSeq, heartKey, settled, whaleIdle, whaleFrozen])
 
-  /** 预览缝：`DSH_TUI_STAR_LINE=1` 时开屏就显示求 star 标语行（不记账）。 */
-  const starLinePreview = process.env.DSH_TUI_STAR_LINE === '1'
   const [themeName] = useTheme()
   /** 终端真底色（Sixel 不透明衬底；见渲染处的注释）。 */
   const theme = getTheme(themeName)
@@ -441,48 +423,6 @@ export function LogoV2({
     : tr('logo-tagline')
   /** 欢迎语逐行拆开（单行文案就是一元素）。 */
   const taglineLines = tagline.split('\n')
-  // 求 star 改由**本机用量里程碑**触发（累计启动次数 / 累计在线时长），不再每次随机：
-  // 跨档时只报最高那一档、每档只报一次（`usageStats` 记账）。`starChance` 退化成测试缝
-  // ——0 关掉、非 0 强开（强开时用最高那档的文案）。`DSH_TUI_STAR_LINE=1`
-  // 是给人看效果的预览缝：强开标语行且**不记账**（生产不设这个变量）。
-  const [starMilestone] = React.useState<number | null>(() => {
-    const usage = recordLaunch()
-    if (starLinePreview) return STAR_MILESTONES.length - 1
-    if (starChance === 0) return null
-    if (starChance !== undefined) return STAR_MILESTONES.length - 1
-    const pending = pendingStarMilestone(usage)
-    // 历史性时刻（99h / 999 次）不走标语行——那两档归 Chat 的开屏弹窗
-    //（弹窗自己 markStarAsked）。这里既不画也不记，档位保持待报；
-    // 弹窗这轮没机会弹（回合中等）就留给下一次启动。
-    return pending !== null && isHistoricMilestone(pending) ? null : pending
-  })
-  const starLine = starMilestone === null
-    ? null
-    : splashStarLine({ usage: usageSnapshot(), keyHint: effectiveComboDisplay('star'), caught: starred })
-  // 彩蛋的渐显：标题先出，数字一秒后、求星行两秒后各跟一行（只在标语块
-  // 出现时播一次；本次会话已 star 过、或重挂时直接展开）。
-  const starLineActive = starLine !== null
-  const starRevealInstant = starReveal === 'instant'
-  const [revealed, setRevealed] = React.useState(() => (starRevealInstant ? 2 : 0))
-  React.useEffect(() => {
-    if (!starLineActive) return
-    if (starRevealInstant || starred === true) {
-      setRevealed(2)
-      return
-    }
-    const timers = [
-      setTimeout(() => setRevealed(previous => Math.max(previous, 1)), 1000),
-      setTimeout(() => setRevealed(previous => Math.max(previous, 2)), 2000),
-    ]
-    for (const timer of timers) (timer as { unref?: () => void }).unref?.()
-    return () => { for (const timer of timers) clearTimeout(timer) }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- 只在标语块出现时播一次
-  }, [starLineActive])
-  // 显示过就把这一档记下来，下次启动不再冒出来（同档只求一次）。预览缝
-  // （`DSH_TUI_STAR_LINE=1`）不记账——那是给人看效果的，不该消耗档位。
-  React.useEffect(() => {
-    if (starMilestone !== null && !starLinePreview) markStarAsked(starMilestone)
-  }, [starMilestone])
   // One random tip per mount: the settled header must not re-roll on every
   // repaint (language switch, terminal resize), or the line would flicker.
   // `tip` is a test seam; production always passes undefined and rolls.
@@ -498,9 +438,7 @@ export function LogoV2({
   // line than `logo-tagline`, so reusing the tagline's width would push it
   // visibly off-center.
   // 多行欢迎语取**最宽行**算宽（居中缩进以此为准，窄行再各自补半差）。
-  const welcomeWidth = starLine === null
-    ? Math.max(...taglineLines.map(line => stringWidth(line)))
-    : starLine.width
+  const welcomeWidth = Math.max(...taglineLines.map(line => stringWidth(line)))
   // 居中排版（落地页）交给父级的 `alignItems="center"`，缩进一律为 0；只有
   // 转录区顶部那一版才需要"把标语钉在鲸鱼下方"。这条判据与根盒的
   // `align` 走同一个开关，否则两种对齐会各偏一点。
@@ -750,45 +688,23 @@ export function LogoV2({
           </Box>
         )}
       </Box>
-      {/* 求 star 彩蛋整块可点：点一下 = 一次一键 star（与 `/star`、`Alt+S`
-          同一个动作；终端里按 Ctrl/Cmd 点 `Star` 那几个字才是开浏览器）。
-          平时那句欢迎语不可点——只有彩蛋在邀请用户。 */}
-      {/* minimal 形态平时整块不画：落地页版面只要「图 + 大字」，欢迎语在
-          那边曾与落地页自己的一行重复（用户实测「重复了两次 删掉」）；
-          求 star 里程碑出现时仍画那几行——里程碑露出不因落地页改版而丢。 */}
-      {(chrome !== 'minimal' || starLine !== null) && (
-      <Box flexDirection="column" marginTop={1} {...(starLine === null || onStarClick === undefined ? {} : { onClick: onStarClick })}>
-        {starLine === null ? (
-          // 多行欢迎语（claude 品牌英文 slogan 是两行）：`center` 版式交给
-          // 父级逐行居中；`start` 版式在立绘中线下**块内居中**——窄行补半差，
-          // 两行的中轴对齐而不是左缘对齐。
-          taglineLines.map(line => (
-            <Box
-              key={line}
-              paddingLeft={align === 'center'
-                ? 0
-                : welcomePad + Math.max(0, Math.round((welcomeWidth - stringWidth(line)) / 2))}
-            >
-              <Text>{sweep(line, t, taglineRGB, flash, 60)}</Text>
-            </Box>
-          ))
-        ) : (
-          <>
-            <Box paddingLeft={welcomePad}>
-              <Text>{sweep(starLine.title, t, taglineRGB, flash, 60)}</Text>
-            </Box>
-            {revealed >= 1 && (
-              <Box paddingLeft={welcomePad}>
-                <Text dimColor>{starLine.stats}</Text>
-              </Box>
-            )}
-            {revealed >= 2 && starred !== true && starLine.ask !== null && (
-              <Box paddingLeft={welcomePad}>
-                <Text>{starLine.ask}</Text>
-              </Box>
-            )}
-          </>
-        )}
+      {/* minimal 形态不画欢迎语：落地页版面只要「图 + 大字」，那边曾与
+          落地页自己的一行重复（用户实测「重复了两次 删掉」）。 */}
+      {chrome !== 'minimal' && (
+      <Box flexDirection="column" marginTop={1}>
+        {/* 多行欢迎语（claude 品牌英文 slogan 是两行）：`center` 版式交给
+            父级逐行居中；`start` 版式在立绘中线下**块内居中**——窄行补半差，
+            两行的中轴对齐而不是左缘对齐。 */}
+        {taglineLines.map(line => (
+          <Box
+            key={line}
+            paddingLeft={align === 'center'
+              ? 0
+              : welcomePad + Math.max(0, Math.round((welcomeWidth - stringWidth(line)) / 2))}
+          >
+            <Text>{sweep(line, t, taglineRGB, flash, 60)}</Text>
+          </Box>
+        ))}
       </Box>
       )}
     </Box>

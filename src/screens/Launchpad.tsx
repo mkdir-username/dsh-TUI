@@ -418,8 +418,6 @@ export function Launchpad({
   companionSkin,
   fontId,
   egg,
-  starred,
-  onStarClick,
   firstRun,
   actions,
   overlayPanel,
@@ -475,8 +473,6 @@ export function Launchpad({
   fontId?: string | undefined
   /** 测试缝：固定节日词对；null 关闭换词，undefined 按本地日期选择。 */
   egg?: SplashEgg | null
-  starred: boolean
-  onStarClick?: () => void
   /** 引导还没跑过：Tips 换成首启那一句（动作表本身已由 resolveLaunchpadActions 状态驱动）。 */
   firstRun: boolean
   /**
@@ -1141,8 +1137,6 @@ export function Launchpad({
                       brand={brand}
                       companionSkin={companionSkin}
                       mascotBox={mascotBox}
-                      starred={starred}
-                      onStarClick={onStarClick}
                       skipIntro
                       align="center"
                       chrome="minimal"

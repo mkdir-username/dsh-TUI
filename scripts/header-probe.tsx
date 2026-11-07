@@ -95,12 +95,11 @@ await instance.unmount()
 
 // Phase B: mount straight into the settled header (skipIntro) and read the
 // COMPLETE first paint — differential diffs can't show the full screen.
-// starChance=0：底部那行要确定性（1/20 的求 star 彩蛋会顶掉欢迎语，见
-// components/splashEggs.ts），这条探针断言的就是欢迎语的居中缩进。
+// 这条探针断言的是底部欢迎语的居中缩进（求 star 彩蛋已从本 fork 删除）。
 const stdout2 = new FakeStdout()
 const instance2 = await render(
   <ThemeProvider>
-    <LogoV2 model="deepseek-v4-flash" effort="high" cwd="D:/code/projects/test" skipIntro starChance={0} />
+    <LogoV2 model="deepseek-v4-flash" effort="high" cwd="D:/code/projects/test" skipIntro />
   </ThemeProvider>,
   {
     stdout: stdout2,

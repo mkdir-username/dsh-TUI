@@ -28,10 +28,7 @@ export interface LaunchpadAction {
  *     里最近一条**可继续**会话的标题；没有就没有 Continue（不放假动作）；
  *   - `jobsRunning`：`channel.backgroundJobs` 里有 running/stopping 的任务；
  *   - `updateAvailable`：`checkForTuiUpdate()`（src/update.ts，与 /update
- *     同一条判定）在启动页挂起时异步探得的新版本；
- *   - `starDue`：`usageStats`（~/.dsh-tui/usage.json）有**未报过的**已达档
- *     里程碑（首档 24h）且本进程尚未 star 成功——口径与开屏求 star 弹窗
- *     完全一致（pendingStarMilestone + starred）。
+ *     同一条判定）在启动页挂起时异步探得的新版本。
  */
 export interface LaunchpadActionState {
   /** 最近一条可继续会话的标题；没有（或为空）视为"无历史"，整格不画。 */
@@ -40,8 +37,6 @@ export interface LaunchpadActionState {
   readonly jobsRunning: boolean
   /** 检测到可用更新（条件位②）。 */
   readonly updateAvailable: boolean
-  /** 用量到档且从未 star（条件位③）。 */
-  readonly starDue: boolean
   /** 当前内核（channel.backendCapabilities.backendId）；缺省 = 未知，内核
    *  入口用不带名的短标签。 */
   readonly backendId?: string | undefined
@@ -119,12 +114,6 @@ const UPDATE: LaunchpadAction = {
   labelKey: 'launchpad-action-update',
   command: 'update',
 }
-/** 条件位③：用量到档且从未 star。 */
-const STAR: LaunchpadAction = {
-  id: 'star',
-  labelKey: 'launchpad-action-star',
-  command: 'star',
-}
 /** Help（? 快捷键与命令）——条件位的兜底。 */
 const HELP: LaunchpadAction = {
   id: 'help',
@@ -148,8 +137,7 @@ const HELP: LaunchpadAction = {
  *      回归按这张优先级表驱动）：
  *        ① jobsRunning → `后台任务`（/jobs）
  *        ② updateAvailable → `有新版本`（/update，走既有更新路径）
- *        ③ starDue → `投喂一颗 Star`（/star）
- *        ④ 都不成立 → `帮助`（/help）兜底。
+ *        ③ 都不成立 → `帮助`（/help）兜底。
  *
  * 第六版的 doctor 入口已删（第七版）：它的输出属于转录区，天然把人带进
  * 对话页，不适合留在"Esc 必须回启动页"的这一屏；首启/配置问题专属按钮
@@ -163,9 +151,7 @@ export function resolveLaunchpadActions(state: LaunchpadActionState): readonly L
     ? JOBS
     : state.updateAvailable
       ? UPDATE
-      : state.starDue
-        ? STAR
-        : HELP
+      : HELP
   // 内核入口：当前内核已知 → 带名（「内核 · Claude」）；未知（Chat 侧接线
   // 前）→ 短标签。名字来自 manifest 的 shortLabel（state.backendLabel），与
   // 选择器、落地页铭牌和重启通知同源；没有就退回原样 id（不猜品牌名）。
