@@ -108,11 +108,15 @@ export function createManualCompaction(
       .join('\n')
       .trim()
     const last = text.split('\n').filter(line => line.trim() !== '').pop() ?? ''
-    if (result.stopReason === 'completed' && /^RP_(DONE|SKIP)\s/.test(last)) return { ok: true, notice: `compact-rp: ${last}` }
-    const detail = result.diagnostic !== undefined ? `: ${result.diagnostic}` : ''
+    // Human-shaped markers: `RP_SKIP: reason`, `**RP_DONE x**`, a list item. Requiring
+    // one exact space after the token blocked the compaction on a colon.
+    if (result.stopReason === 'completed' && /^\s*(?:[*_`>+-]+\s*)?RP_(DONE|SKIP)\b/i.test(last)) return { ok: true, notice: `compact-rp: ${last}` }
+    const why = result.stopReason === 'completed'
+      ? 'форк закончился без маркера RP_DONE/RP_SKIP'
+      : `форк завершился аварийно (${result.stopReason ?? 'unknown'}${result.diagnostic !== undefined ? ': ' + result.diagnostic : ''})`
     return {
       ok: false,
-      reason: `compact-rp: restruct-plan не завершился (${result.stopReason ?? 'unknown'})${detail}. Сжатие остановлено, знание не потеряно. Без restruct-plan: /compact --pure`,
+      reason: `compact-rp: ${why}. Сжатие остановлено, знание не потеряно. Без restruct-plan: /compact --pure`,
     }
   }
   const RP_PROMPT = 'Пользователь набрал /compact: это его явная команда выполнить restruct-plan сейчас, до сжатия контекста. Ты — форк этой сессии, запущенный TUI, история диалога тебе видна. Вызови Skill restruct-plan для плана .dev/<slug>/, над которым шла работа, и запиши на диск всё, что знает только диалог: прогресс, грабли, тупики, проверенные факты. Перед записью в .dev/ прочитай каталог плана — его сторожит гейт dev-docs. Вопросов не задавай, ответить некому. Ничего не коммить и не пушить. Последней строкой ответа выведи ровно RP_DONE <slug> или RP_SKIP <причина>.'

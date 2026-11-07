@@ -17,11 +17,12 @@ npm-пакет** `@deepseek-harness-tui/dsh-tui@0.19.0` из профиля `dsh
 |---|---|---|
 | Ctrl+Enter без аборта | `src/components/PromptInput.tsx`, `src/tips.ts`, `src/i18n.ts`, `README*.md` | `pnpm verify:ctrl-enter-steer` (4 PASS) |
 | Очередь ввода на время `/compact` | `src/dsh-adapter/channel/compact-hold.ts` (новый), `input-delivery.ts`, `input-actions.ts`, `PromptInput.tsx`, `channel-view.ts` | `pnpm verify:compact-queue` (20 PASS) |
-| restruct-plan перед сжатием | `src/dsh-adapter/channel/compaction.ts`, `action-readiness.ts`, `extensions.ts`, `channel-ui.ts`, `screens/Chat.tsx` | `pnpm typecheck` + гейты |
+| restruct-plan перед сжатием | `src/dsh-adapter/channel/compaction.ts`, `action-readiness.ts`, `extensions.ts`, `channel-ui.ts`, `screens/Chat.tsx` | `pnpm verify:compact-rp` (13 PASS) + `pnpm typecheck` + гейты |
 
-Обе `verify-*` пробы зарегистрированы в `package.json` и написаны по образцу
-апстримного `scripts/verify-shift-tab-mode.mjs` (headless-рендер композера +
-инъекция escape-последовательностей).
+Все `verify-*` пробы зарегистрированы в `package.json`. `verify:ctrl-enter-steer` и
+`verify:compact-queue` написаны по образцу апстримного `scripts/verify-shift-tab-mode.mjs`
+(headless-рендер композера + инъекция escape-последовательностей); `verify:compact-rp`
+проверяет вердикт маркера на собранном `lib/types`.
 
 ## Что осталось перенести
 
@@ -63,6 +64,7 @@ pnpm compile                       # ~13 с — src/ → lib/types/, после 
 pnpm typecheck                     # ~10 с
 pnpm verify:ctrl-enter-steer
 pnpm verify:compact-queue
+pnpm verify:compact-rp
 pnpm smoke                         # прочие гейты: boundary, source-hygiene, channel-ui, settings, patch-surface
 ```
 
