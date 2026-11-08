@@ -104,14 +104,24 @@ pnpm smoke                         # прочие гейты: boundary, source-h
 - README.md и README_ZH.md синхронно по хоткеям/поведению
 - Ничего не пушить: у клона нет remote `upstream`, а origin — чужой репозиторий
 
-## Как переключить `ds()` на форк (после переноса всех патчей)
+## Профиль уже смотрит в форк (2026-11-08)
 
-1. В `~/.dsh/profiles/dsh-tui/package.json` заменить версию пакета на `link:/Users/username/Docs/dsh-tui-spike/fork` и прогнать `pnpm install` в профиле
-2. Из `/Users/username/.dsh/bin/patch-dsh-tui.sh` убрать шаги, которые уже в исходниках, оставить четыре ядровых
-3. Проверить, что `/update` внутри TUI не тянет пакет из реестра и не затирает `link:`
+`~/.dsh/profiles/dsh-tui/package.json` → `link:/Users/username/Docs/dsh-tui-spike/fork`,
+`pnpm-lock.yaml` закрепляет тот же link; `node_modules/@deepseek-harness-tui/dsh-tui`
+— симлинк на клон. Проверки:
 
-Переключать раньше нельзя: в форке 3 патча из 12 TUI, живой TUI потеряет
-статуслайн, хоткеи и очередь.
+- `bash ~/.dsh/bin/patch-dsh-tui.sh` — режим fork: ядровые патчи + `паритет форка: 14/14`;
+  скрипт сам отказывается запускать TUI, если `src/**` новее сборки.
+- `node --input-type=module -e "console.log(import.meta.resolve('@deepseek-harness-tui/dsh-tui'))"`
+  из каталога профиля → `file:///Users/username/Docs/dsh-tui-spike/fork/lib/types/index.js`.
+
+Откат на реестровый пакет (обратимо): вернуть
+`/Users/username/.dsh/profiles/dsh-tui/package.json.bak-20261108-1730-registry`,
+`pnpm install` в профиле, перезапустить TUI.
+
+Что осталось проверить вручную: `/update` внутри TUI — он может поставить пакет из
+реестра и переписать `link:`; после него сверить `package.json` и при необходимости
+повторить `pnpm install`.
 
 ## Грабли текущего окружения
 
