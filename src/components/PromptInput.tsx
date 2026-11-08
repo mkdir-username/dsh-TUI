@@ -41,7 +41,7 @@ import { isBootSafeCommand, isHiddenCommandName, isLocalCommandName, isUnavailab
 import { appendHistory, HISTORY_LIMIT, historyProjectKey, loadHistoryOldestFirst } from '../history.js'
 import { mentionAtCaret } from '../utils/mentions.js'
 import { preserveSelection, type FileCandidate } from '../utils/fileSuggestions.js'
-import { isMod } from '../utils/modifiers.js'
+import { isMac, isMod } from '../utils/modifiers.js'
 import { actionMatches } from '../utils/keymap.js'
 import { CommandSuggestions } from './CommandSuggestions.js'
 import { FileSuggestions } from './FileSuggestions.js'
@@ -3218,27 +3218,43 @@ export function PromptInput({
       setInput(value, nextLine === -1 ? value.length : clampRowEnd(nextLine))
       return
     }
-    if (isMod(key) && input === 'a') {
+    // Local: Cmd+A selects the whole draft; readline's line-start keeps Ctrl.
+    if (isMac && key.super && !key.ctrl && input === 'a') {
+      updateSelection(0, valueRef.current.length)
+      placeCaret(valueRef.current.length, 'end')
+      return
+    }
+    if (isMac && key.super && !key.ctrl && input === 'x' && copySelectionNow()) {
+      const sel = selectionRef.current
+      if (sel) deleteInputRange(sel.start, sel.end)
+      return
+    }
+    if (key.ctrl && !key.super && input === 'a') {
       const lineStart = clampRowStart(value.lastIndexOf('\n', cursor - 1) + 1)
       setInput(value, lineStart)
       return
     }
-    if (isMod(key) && input === 'e') {
+    if (key.ctrl && !key.super && input === 'e') {
       const nextLine = value.indexOf('\n', cursor)
       setInput(value, nextLine === -1 ? value.length : clampRowEnd(nextLine))
       return
     }
-    if (isMod(key) && input === 'u') {
+    if (key.ctrl && !key.super && input === 'u') {
       // Delete to start of line (never into the block).
       const lineStart = clampRowStart(value.lastIndexOf('\n', cursor - 1) + 1)
       deleteInputRange(lineStart, cursor)
       return
     }
-    if (isMod(key) && input === 'k') {
+    if (key.ctrl && !key.super && input === 'k') {
       // Delete to end of line (never into the block).
       const nextLine = value.indexOf('\n', cursor)
       const end = nextLine === -1 ? value.length : clampRowEnd(nextLine)
       deleteInputRange(cursor, end)
+      return
+    }
+    // Local: Cmd+Z is the draft undo on macOS (upstream leaves Cmd out).
+    if (isMac && key.super && !key.ctrl && input === 'z') {
+      undoDraft()
       return
     }
     if (actionMatches('undo', input, key)) {
@@ -3249,7 +3265,7 @@ export function PromptInput({
       undoDraft()
       return
     }
-    if ((isMod(key) && input === 'w') || (key.meta && key.backspace)) {
+    if ((key.ctrl && !key.super && input === 'w') || (key.meta && key.backspace)) {
       // Delete the word before the cursor: readline's whitespace-delimited
       // rule (skip trailing whitespace, then the word). The ICU/CJK
       // alternative is a separate editor-UX change, not part of draft undo.
@@ -4094,6 +4110,20 @@ export function PromptInput({
     }
   }
 
+  // Local: a settled mouse selection goes to the clipboard, like the transcript
+  // does on select; the keyboard path stays manual (Ctrl+C).
+  const copySelectionNow = (): boolean => {
+    const sel = selectionRef.current
+    if (!sel || sel.end <= sel.start) return false
+    const text = valueRef.current.slice(sel.start, sel.end)
+    if (!text) return false
+    void setClipboard(text).then(raw => {
+      if (raw) writeRaw?.(raw)
+    })
+    channel.notify(t('copied-chars', { n: text.length }), { timeoutMs: 1500 })
+    return true
+  }
+
   const handleValueClick = (e: ClickEvent, colOffset = 0) => {
     const now = Date.now()
     const modified = e.shift || e.alt || e.ctrl
@@ -4130,6 +4160,7 @@ export function PromptInput({
         if (w) {
           updateSelection(w.start, w.end)
           placeCaret(selectionRef.current?.end ?? w.end, 'end')
+          copySelectionNow()
         }
         return
       }
@@ -4137,6 +4168,7 @@ export function PromptInput({
         const base = selectionRef.current ? selectionRef.current.start : cursorRef.current
         updateSelection(base, offset)
         placeCaret(offset, 'nearest')
+        copySelectionNow()
         return
       }
       clearSelection()
@@ -4169,6 +4201,7 @@ export function PromptInput({
       if (w) {
         updateSelection(w.start, w.end)
         placeCaret(selectionRef.current?.end ?? w.end, 'end')
+        copySelectionNow()
       }
       return
     }
@@ -4176,6 +4209,7 @@ export function PromptInput({
       const base = selectionRef.current ? selectionRef.current.start : cursorRef.current
       updateSelection(base, offset)
       placeCaret(offset, 'nearest')
+      copySelectionNow()
       return
     }
     clearSelection()
@@ -4218,6 +4252,10 @@ export function PromptInput({
     placeCaret(normalizeCursorOffset(valueRef.current, caret), 'nearest')
   }
   const handleDragEnd = () => {
+    // Local: the drag settled — copy what the user just highlighted, the same
+    // way the transcript copies on select. Keyboard extension stays manual:
+    // copying on every Shift+Arrow would fight the user's own clipboard.
+    copySelectionNow()
     dragAnchorRef.current = null
   }
 

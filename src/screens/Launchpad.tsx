@@ -566,8 +566,9 @@ export function Launchpad({
   onNewline?: (text: string, cursor: number) => void
   /** Remaining keys before the composer mounts belong to the handed-off draft. */
   onHandoffInput?: (event: InputEvent) => void
-  /** 空输入时按 Esc / `Ctrl+C`：`sessions` 去看会话，`exit` 走双击退出漏斗。 */
-  onEscape: (intent: 'sessions' | 'exit') => void
+  /** 空输入时按 Esc / `Ctrl+C`：`sessions` 去看会话，`exit` 走双击退出漏斗；
+   *  `quit` — 本地 Ctrl+Z，立即退出（跳过双击闸门）。 */
+  onEscape: (intent: 'sessions' | 'exit' | 'quit') => void
   /** 点空白处：把焦点收回输入框（不是提交、不是关闭）。 */
   onBlankClick: () => void
 }): React.ReactNode {
@@ -1006,6 +1007,12 @@ export function Launchpad({
       event.stopImmediatePropagation()
       return
     }
+    // Local (Ghostty): Ctrl+Z quits the TUI from the launchpad.
+    if (key.ctrl && !key.shift && !key.meta && !key.super && input === 'z') {
+      onEscape('quit')
+      event.stopImmediatePropagation()
+      return
+    }
     if (key.ctrl && (input === 'c' || input === 'd')) {
       pasteRevisionRef.current += 1
       if (query !== '') changeQuery('', 0)
@@ -1072,6 +1079,25 @@ export function Launchpad({
       event.stopImmediatePropagation()
       return
     }
+    // Local (Ghostty): Opt+←/→ arrive as ESC b / ESC f, Cmd+←/→ as Cmd+A / Cmd+E —
+    // the arrow branch below never sees them, so the same jumps are spelled here.
+    const escapeJump = key.meta && !key.ctrl && (input === 'b' || input === 'f')
+    const cmdLineJump = isMod(key) && (input === 'a' || input === 'e')
+    if (inputFocused && (escapeJump || cmdLineJump)) {
+      const back = input === 'b' || input === 'a'
+      let at = caret
+      if (cmdLineJump) at = back ? 0 : query.length
+      else if (back) {
+        while (at > 0 && /\s/u.test(query[at - 1]!)) at--
+        while (at > 0 && !/\s/u.test(query[at - 1]!)) at--
+      } else {
+        while (at < query.length && /\s/u.test(query[at]!)) at++
+        while (at < query.length && !/\s/u.test(query[at]!)) at++
+      }
+      changeQuery(query, at)
+      event.stopImmediatePropagation()
+      return
+    }
     if (key.leftArrow || key.rightArrow || key.home || key.end) {
       if (!inputFocused) return
       const at = caret
@@ -1100,6 +1126,14 @@ export function Launchpad({
     if ((isMod(key) && input === 'w') || (key.meta && key.backspace)) {
       if (!inputFocused) return
       deleteRange(wordBoundaryLeft(query, caret), caret)
+      event.stopImmediatePropagation()
+      return
+    }
+    // Local (Ghostty): Ctrl+K kills to the end of the line.
+    if (isMod(key) && input === 'k') {
+      if (!inputFocused) return
+      const lineEnd = query.indexOf('\n', caret)
+      deleteRange(caret, lineEnd === -1 ? query.length : lineEnd)
       event.stopImmediatePropagation()
       return
     }

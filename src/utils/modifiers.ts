@@ -18,7 +18,9 @@ export function isMod(key: { ctrl?: boolean; super?: boolean }): boolean {
  * `${modLabel}o`. Cmd is only a macOS matching alias (see isMod); most
  * terminals never deliver it, so a ⌘ hint would be dead (#640).
  */
-export const modLabel = 'ctrl+'
+// Local: on macOS the primary modifier is Cmd, and the hint says what the user
+// actually presses (the matcher accepts super as the alias, see isMod).
+export const modLabel = isMac ? '⌘' : 'ctrl+'
 
 /**
  * Modal-confirm guard. Since #110 the input pipeline can deliver Enter WITH

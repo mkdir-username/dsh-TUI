@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useRef } from 'react'
 import type { InputEvent, Key } from '../events/input-event.js'
 import { isInputSuppressed } from '../input-suppression.js'
+import { normalizeLayoutKey } from '../../utils/keyboardLayout.js'
 import useStdin from './use-stdin.js'
 
 type Handler = (input: string, key: Key, event: InputEvent) => void
@@ -101,7 +102,10 @@ const useInput = (inputHandler: Handler, options: Options = {}): void => {
     if (isInputSuppressed()) {
       return
     }
-    const { input, key } = event
+    // Local: handlers receive the Latin key for the physical position, so a
+    // Russian layout does not hide Ctrl/Cmd shortcuts.
+    const { input: rawInput, key } = event
+    const input = normalizeLayoutKey(rawInput, key)
 
     // If app is not supposed to exit on Ctrl+C, then let input listener handle it
     // Note: discreteUpdates is called at the App level when emitting events,

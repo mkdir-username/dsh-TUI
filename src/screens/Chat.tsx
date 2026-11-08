@@ -5715,6 +5715,15 @@ export function Chat({
         dispatchOverlay({ type: 'open', overlay: { kind: 'search' } })
         event.stopImmediatePropagation()
       }
+    } else if (key.super && !key.ctrl && input === 'c' && promptControllerRef.current?.consumeSelectionCopy()) {
+      // Local: Cmd+C copies the composer selection, never interrupts. Ghostty
+      // forwards the key when the terminal itself has no selection.
+      exitPendingRef.current = false
+      if (exitTimerRef.current) clearTimeout(exitTimerRef.current)
+    } else if (key.ctrl && !key.shift && !key.meta && !key.super && input === 'z') {
+      // Local: Ctrl+Z closes the session (undo lives on Ctrl+_).
+      requestExit()
+      event.stopImmediatePropagation()
     } else if (key.ctrl && (input === 'c' || input === 'd')) {
       // Ctrl+C interrupts a running turn; idle Ctrl+C
       // CLEARS a non-empty prompt (single press) and only arms the
@@ -6810,6 +6819,11 @@ export function Chat({
           void runCommand(action.command, '')
         }}
         onEscape={(intent) => {
+          // Local: Ctrl+Z on the launchpad quits the TUI.
+          if (intent === 'quit') {
+            requestExit()
+            return
+          }
           if (intent === 'exit') {
             requestExit()
             return

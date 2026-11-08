@@ -2866,9 +2866,11 @@ function keycodeToName(keycode: number): string | undefined {
     case 57426: // KP_DELETE
       return 'delete'
     default:
-      // Printable ASCII characters
-      if (keycode >= 32 && keycode <= 126) {
-        return String.fromCharCode(keycode).toLowerCase()
+      // Local: kitty CSI-u reports the key's codepoint; dropping anything above
+      // ASCII loses Cmd+С before the matcher sees it. Private-use codepoints
+      // stay unnamed — those are functional keys we don't know.
+      if (keycode >= 32 && keycode !== 127 && !(keycode >= 0xe000 && keycode <= 0xf8ff)) {
+        return String.fromCodePoint(keycode).toLowerCase()
       }
       return undefined
   }

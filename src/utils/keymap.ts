@@ -19,6 +19,7 @@
  */
 
 import { isMac } from './modifiers.js'
+import { normalizeLayoutChar } from './keyboardLayout.js'
 
 /** Minimal structural shape of the ink Key flags the matchers read. */
 export interface ComboKeyFlags {
@@ -106,7 +107,8 @@ export function parseCombo(raw: string): ParsedCombo | undefined {
       named = NAMED_KEYS[part]
     } else if ([...part].length === 1) {
       if (char !== undefined || named !== undefined) return undefined
-      char = part
+      // Local: a combo typed in Cyrillic names the same physical key.
+      char = normalizeLayoutChar(part)
     } else {
       return undefined
     }
@@ -149,7 +151,8 @@ export function comboMatchesStrict(combo: ParsedCombo, input: string, key: Combo
     return key[combo.named] === true
   }
   if (combo.char === undefined) return false
-  return input.toLowerCase() === combo.char
+  // Local: the event may carry the Cyrillic letter of the same physical key.
+  return normalizeLayoutChar(input).toLowerCase() === combo.char
 }
 
 /**
@@ -179,7 +182,8 @@ function comboMatchesBuiltin(
     return key[combo.named] === true
   }
   if (combo.char === undefined) return false
-  return input.toLowerCase() === combo.char
+  // Local: the event may carry the Cyrillic letter of the same physical key.
+  return normalizeLayoutChar(input).toLowerCase() === combo.char
 }
 
 /** Identifiers of every customizable built-in action. */
@@ -318,7 +322,8 @@ const COMBO_MODIFIER_LABELS: Readonly<Record<string, string>> = {
 export function comboDisplay(raw: string): string {
   return raw.split('+').map(token => {
     const lower = token.toLowerCase()
-    const mod = COMBO_MODIFIER_LABELS[lower]
+    // Local: the primary modifier reads ⌘ on macOS (the matcher accepts it).
+    const mod = lower === 'ctrl' && isMac ? '⌘' : COMBO_MODIFIER_LABELS[lower]
     if (mod !== undefined) return mod
     return token.length === 1 ? token.toUpperCase() : token[0].toUpperCase() + token.slice(1)
   }).join('+')
