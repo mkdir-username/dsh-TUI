@@ -28,19 +28,23 @@ npm-пакет** `@deepseek-harness-tui/dsh-tui@0.19.0` из профиля `dsh
 
 ## Что осталось перенести
 
-TUI (`src/**`), 11 единиц:
+TUI (`src/**`), перенесено 7 из 11 (коммиты `49609576`, `3912f31c`): thinking,
+баланс-гард, чип сессии, `plan-intent` для Shift+Tab, pid-старт в mount-ledger,
+no-todo, маркер контролёра.
 
-1. Thinking остаётся раскрытым после хода — `MessageList.js` (сейчас `sed` в `patch-dsh-tui.sh`)
-2. Баланс-гард через `127.0.0.1:8091` — `deepseekBalance.js`
-3. Чип имени сессии без лимита 28 ячеек — `PromptInput.js`
-4. `plan-mode`: Shift+Tab из плана после переключателя в последнем шаге — `dsh-adapter/channel/mode-actions.js`, `mode-permission-actions.js`
-5. stdout EIO на мёртвом pty — `dsh-adapter/plugin.js`
-6. pid-старт в mount-ledger — `sessionMounts.js` (апстрим #1770 закрыл только Linux TID; macOS-ветка `ps -o lstart` остаётся нашей)
-7. macOS-хоткеи, кириллическая раскладка, copy-on-select — `PromptInput`, `ink/hooks/use-input`, `ink/parse-keypress`, `screens/Chat`, `utils/keymap`, `utils/modifiers`
+Осталось:
+
+5. stdout EIO на мёртвом pty — `dsh-adapter/plugin.js` (гард опирается на
+   `appendCrashLog`, в форке он есть; ставится верхним блоком при импорте)
+7. macOS-хоткеи, кириллическая раскладка, copy-on-select — `PromptInput`,
+   `ink/hooks/use-input`, `ink/parse-keypress`, `screens/Chat`, `utils/keymap`,
+   `utils/modifiers`
 8. Ghostty word/line jump — `screens/Chat`, `screens/Launchpad`
-9. no-todo — `components/sidePanel/builtinPanels.js`, `channel/projection.js` (+ вырезание `tool-todo` из YAML пресетов, это ядро)
-10. handoff-marker в чате — `channel/projection.js`, `dsh-adapter/backend/translate.js`
 11. statusline: `$`-цена и цель сессии — `screens/StatusLine.tsx` + два новых модуля (`statuslineCost`, `sessionGoal`)
+
+Пункты 7 и 8 ждут `src/screens/Chat.tsx`: в нём идёт чужая правка (star → coupon),
+и коммит по этому пути утащил бы её целиком. Пункт 11 по заметке ведёт отдельная
+сессия — свериться, чтобы не портировать дважды.
 
 Ядро (остаётся `sed`-ом, fork его не забирает):
 
