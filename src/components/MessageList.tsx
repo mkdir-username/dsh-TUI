@@ -1974,9 +1974,9 @@ function TranscriptRow({
             marginTopOnTurn={marginTopOnTurn}
             streaming={streaming}
             preview={streamPreview}
-            // Settled rows keep the fold-on-settle default and expand via
-            // expandedRows/Ctrl+O; a current-turn row is preview or full.
-            verbose={isExpanded || expanded || (turnOpen && !streamPreview)}
+            // Local: thinking stays expanded after the turn settles instead of
+            // folding on settle; Ctrl+O still collapses the row by hand.
+            verbose
             durationMs={durationMs}
             reasoningTokens={reasoningTokens}
             isSelected={isSelected}

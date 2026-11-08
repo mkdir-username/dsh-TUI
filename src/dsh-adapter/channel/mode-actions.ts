@@ -78,6 +78,36 @@ const foldPlanActive = (events: readonly SessionEvent[]): boolean => {
   }
   return active
 }
+/** Plan state including a `/plan` command still in flight: a toggle queued in
+ *  the last step of a turn ends the turn unlogged, so an idle press must compare
+ *  against the command intent, not only the `plan/mode` event. */
+const foldPlanIntent = (events: readonly SessionEvent[]): boolean => {
+  let active = false
+  let wanted: boolean | null = null
+  let running: { id: unknown; wanted: boolean } | undefined
+  for (const event of events) {
+    const kind = (event as { type: string }).type
+    const data = event.data as unknown as {
+      name?: string
+      args?: string
+      commandId?: unknown
+      kind?: string
+      active?: boolean
+    }
+    if (kind === 'command/run' && data.name === 'plan' && data.args !== undefined) {
+      running = { id: data.commandId, wanted: data.args.trim() !== 'off' }
+    }
+    else if (running !== undefined && kind === 'command/done' && data.commandId === running.id) {
+      wanted = data.kind === 'success' && running.wanted !== active ? running.wanted : null
+      running = undefined
+    }
+    else if (kind === 'plan/mode') {
+      active = data.active === true
+      wanted = null
+    }
+  }
+  return running?.wanted ?? wanted ?? active
+}
 const foldSandboxMode = (events: readonly SessionEvent[]): string | undefined => {
   let mode: string | undefined
   for (const event of events) {
@@ -106,7 +136,7 @@ const foldApprovalPolicy = (events: readonly SessionEvent[]): string | undefined
 const deriveModeIndex = (events: readonly SessionEvent[]): number => {
   const index = sessionModes.findIndex(
     spec =>
-      (spec.plan === undefined || foldPlanActive(events) === spec.plan) &&
+      (spec.plan === undefined || foldPlanIntent(events) === spec.plan) &&
       (spec.sandbox === undefined || foldSandboxMode(events) === spec.sandbox) &&
       (spec.approval === undefined || foldApprovalPolicy(events) === spec.approval),
   )
@@ -227,7 +257,7 @@ const prePlanModeSpec = (log: readonly SessionEvent[]): SessionModeSpec | undefi
   if (planActive && planMode?.get?.(agent).pending === undefined) {
     explicitPlanExits.delete(session)
   }
-  if (spec.plan !== undefined && (planMode?.get?.(agent).pending ?? planActive) !== spec.plan) {
+  if (spec.plan !== undefined && (planMode?.get?.(agent).pending ?? foldPlanIntent(snapshotLiveSessionEvents(session))) !== spec.plan) {
     if (planRoute(agent) === 'none') {
       notify(t('mode-plan-unavailable'), { color: 'warning' })
       return

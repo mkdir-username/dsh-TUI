@@ -4271,7 +4271,9 @@ export function PromptInput({
   const topRightLabel: InputBorderLabel | undefined =
     channel.promptSessionLabel === true && sessionTitle !== ''
       ? {
-          text: truncateToWidth(sessionTitle, Math.max(8, Math.min(28, columns - 8))),
+          // Local: no 28-cell cap — a human-readable session name shows whole
+          // while it still fits the border.
+          text: truncateToWidth(sessionTitle, Math.max(8, columns - 8)),
           color: channel.mode.plan === true ? 'planMode' : (sessionAccent ?? 'accent'),
           ink: 'inverseText',
         }

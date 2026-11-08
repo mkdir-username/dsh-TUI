@@ -12,7 +12,8 @@ export interface BalanceQueryOptions {
   timeoutMs?: number
 }
 
-export const DEEPSEEK_BALANCE_ENDPOINT = 'https://api.deepseek.com/user/balance'
+// Local: the balance call goes through the local model guard, which owns the key.
+export const DEEPSEEK_BALANCE_ENDPOINT = 'http://127.0.0.1:8091/user/balance'
 
 const DEFAULT_TIMEOUT_MS = 8000
 

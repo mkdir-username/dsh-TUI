@@ -63,6 +63,7 @@ import {
   writeFileSync,
   writeSync,
 } from 'node:fs'
+import { execFileSync } from 'node:child_process'
 import { randomBytes } from 'node:crypto'
 import { join } from 'node:path'
 import { DATA_DIR } from './utils/paths.js'
@@ -183,6 +184,30 @@ export function pidAlive(pid: number): boolean {
   return true
 }
 
+// Local: pid reuse is the documented cost of pid-only liveness. A claim's
+// startedAt is the first publish after boot, so the real start of the pid is a
+// witness: a difference beyond the tolerance means this pid is somebody else.
+const STARTED_AT_TOLERANCE_MS = 120_000
+function processStartMs(pid: number): number | undefined {
+  try {
+    const printed = execFileSync('ps', ['-p', String(pid), '-o', 'lstart='], {
+      encoding: 'utf8',
+      timeout: 2000,
+      stdio: ['ignore', 'pipe', 'ignore'],
+    }).trim()
+    const parsed = printed.length === 0 ? NaN : Date.parse(printed)
+    return Number.isFinite(parsed) ? parsed : undefined
+  } catch {
+    return undefined
+  }
+}
+function ownerStartedAtMatches(owner: SessionMountOwner): boolean {
+  const actual = processStartMs(owner.pid)
+  // No readable start time is not proof of reuse.
+  if (actual === undefined) return true
+  return Math.abs(actual - owner.startedAt) <= STARTED_AT_TOLERANCE_MS
+}
+
 /** Parse one record, or undefined when the shape is wrong. */
 function parseOwner(value: unknown): SessionMountOwner | undefined {
   if (typeof value !== 'object' || value === null) return undefined
@@ -290,6 +315,7 @@ export function readSessionOwners(): ReadonlyMap<string, SessionMountOwner> {
   const owners = new Map<string, SessionMountOwner>()
   for (const owner of readMountLedger()) {
     if (!pidAlive(owner.pid)) continue
+    if (!ownerStartedAtMatches(owner)) continue
     for (const sessionId of owner.sessionIds) {
       const existing = owners.get(sessionId)
       if (existing === undefined || existing.startedAt < owner.startedAt) owners.set(sessionId, owner)
@@ -513,7 +539,9 @@ function writeLedger(mine: SessionMountOwner | undefined): { ok: true } | MountF
   }
   try {
     mkdirSync(DATA_DIR, { recursive: true, mode: 0o700 })
-    const records = existing.owners.filter(owner => !ownerIsSelf(owner) && pidAlive(owner.pid))
+    const records = existing.owners.filter(
+      owner => !ownerIsSelf(owner) && pidAlive(owner.pid) && ownerStartedAtMatches(owner),
+    )
     if (mine !== undefined) records.push(mine)
     writeFileSync(
       temporary,
