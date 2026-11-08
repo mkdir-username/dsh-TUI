@@ -52,6 +52,13 @@ export const DEEPSEEK_MODEL_PRICES: Readonly<Record<string, DeepSeekModelPrice>>
     inputHit: [0.02, 0.04],
     output: [4.0, 8.0],
   },
+  // 同一个 V4.1-Flash под id маршрута OpenCode Go: цена та же, иначе на этом
+  // маршруте футер молча теряет оценку в $ и показывает только token.
+  'deepseek-v4.1-flash': {
+    inputMiss: [1.0, 2.0],
+    inputHit: [0.02, 0.04],
+    output: [4.0, 8.0],
+  },
 }
 
 /**
@@ -64,6 +71,10 @@ export const DEEPSEEK_OFFICIAL_PROVIDERS: readonly string[] = [
   'deepseek',
   'deepseek-official',
   'deepseek-vision',
+  // OpenCode Go отдаёт те же DeepSeek-модели и считается по этой же таблице,
+  // поэтому оценка $ в футере работает и на нём. Баланса это не касается: его
+  // запрос берёт ключ DeepSeek напрямую и провайдера не спрашивает.
+  'opencode-go',
 ]
 
 /** 是否 DeepSeek 官方 provider（余额与定价只适用于官方计费口径）。 */
