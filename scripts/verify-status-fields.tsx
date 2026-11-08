@@ -551,11 +551,13 @@ try {
     check('R2 left-tail sits after the built-in left fields',
       row.includes('LTX')
       // `indexOf` is -1 for a missing anchor, so every anchor must be proven
-      // present before its position is compared.
+      // present before its position is compared. cwd is part of the left group
+      // since the footer split (place · window on the left, speed · spend on the
+      // right), so the tail lands after it too.
       && row.includes('MODELX') && row.includes('34') && row.includes('uniqdir')
-      && row.indexOf('MODELX') < row.indexOf('LTX')
-      && row.indexOf('LTX') > row.indexOf('34')
-      && row.indexOf('LTX') < row.indexOf('uniqdir'),
+      && row.indexOf('MODELX') < row.indexOf('uniqdir')
+      && row.indexOf('uniqdir') < row.indexOf('34')
+      && row.indexOf('34') < row.indexOf('LTX'),
       JSON.stringify(row))
   }
 
@@ -570,11 +572,12 @@ try {
       ],
     }, channelWith({ gitBranch: true, sessionId: true }))
     const row = statusRow(lines)
-    check('R3 right-head precedes git/cwd/sessionId',
+    check('R3 right-head precedes git/sessionId',
       row.includes('HEADX') && row.includes('main') && row.includes('uniqdir') && row.includes('#abcdef01')
       && row.indexOf('HEADX') < row.indexOf('main')
-      && row.indexOf('HEADX') < row.indexOf('uniqdir')
-      && row.indexOf('HEADX') < row.indexOf('#abcdef01'), JSON.stringify(row))
+      && row.indexOf('HEADX') < row.indexOf('#abcdef01')
+      // cwd now opens the left group, so the right-head slot must come after it.
+      && row.indexOf('uniqdir') < row.indexOf('HEADX'), JSON.stringify(row))
     check('R3 right-tail follows the right group',
       row.includes('TAILX') && row.includes('#abcdef01') && row.indexOf('TAILX') > row.indexOf('#abcdef01'),
       JSON.stringify(row))
@@ -631,10 +634,12 @@ try {
       check('R15 split: slots follow their own groups',
         row.includes('LTX') && row.includes('HEADX') && row.includes('TAILX')
         && row.includes('main') && row.includes('uniqdir') && row.includes('#abcdef01')
+        // Left group: model · cwd · ctx … left-tail. Right group: right-head ·
+        // built-ins · right-tail.
+        && row.indexOf('uniqdir') < row.indexOf('LTX')
         && row.indexOf('LTX') < row.indexOf('HEADX')
         && row.indexOf('HEADX') < row.indexOf('main')
-        && row.indexOf('main') < row.indexOf('uniqdir')
-        && row.indexOf('uniqdir') < row.indexOf('#abcdef01')
+        && row.indexOf('main') < row.indexOf('#abcdef01')
         && row.indexOf('#abcdef01') < row.indexOf('TAILX'), JSON.stringify(row))
       // The ctx chip is the trailing element that makes both claims
       // falsifiable: it belongs to the LEFT group (immediately after the
@@ -645,7 +650,7 @@ try {
       // assertion pins the ` · ` adjacency.
       check('R15 split: ctx keeps the left group',
         row.includes('ctx')
-        && row.includes('LTX · ctx')
+        && row.includes('uniqdir · ctx')
         && row.indexOf('ctx') < row.indexOf('HEADX'), JSON.stringify(row))
       // …and right-head OPENS the right group. The string order above cannot
       // tell: moving the slot into the left group after ctx keeps every order
@@ -768,7 +773,8 @@ try {
     check('O4 listed group overrides the declared slot',
       movedRow.includes('DDDX') && movedRow.includes('MODELX') && movedRow.includes('uniqdir')
       && movedRow.indexOf('DDDX') > movedRow.indexOf('MODELX')
-      && movedRow.indexOf('DDDX') < movedRow.indexOf('uniqdir') && !movedRow.includes('CCCX'),
+      // The right group starts after the whole left one, cwd included.
+      && movedRow.indexOf('DDDX') > movedRow.indexOf('uniqdir') && !movedRow.includes('CCCX'),
       JSON.stringify(movedRow))
 
     // O5 — keys missing from the list are hidden.

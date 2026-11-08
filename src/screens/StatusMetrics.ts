@@ -679,3 +679,19 @@ export function tpsStats(samples: readonly { tps: number; at: number }[], nowMs:
   const p95 = sorted[Math.min(sorted.length - 1, Math.ceil(sorted.length * 0.95) - 1)] ?? 0
   return { avg, mean, p95 }
 }
+
+/** Средняя скорость по последним завершённым ходам — то, что стоит в футере.
+ *  Один ход с холодным стартом или гигантским ответом не должен перекрашивать
+ *  цифру целиком, поэтому усредняется окно из `window` последних ходов.
+ * @param samples - Samples of completed turns, oldest first.
+ * @param window - How many trailing samples to average; the default keeps the last ten.
+ * @returns The average, or undefined while no turn has produced a sample yet.
+ */
+export function tpsRecentAverage(
+  samples: readonly { tps: number; at: number }[],
+  window = 10,
+): number | undefined {
+  if (samples.length === 0 || window <= 0) return undefined
+  const tail = samples.slice(-window)
+  return tail.reduce((sum, sample) => sum + sample.tps, 0) / tail.length
+}

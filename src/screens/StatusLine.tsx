@@ -47,9 +47,8 @@ import {
   contextBarBreakdown,
   contextBarSegmentColors,
   renderMiniContextBar,
-  renderTpsGauge,
-  renderTpsSparkline,
   speedColor,
+  tpsRecentAverage,
   tpsStats,
 } from './StatusMetrics.js'
 import type { WaveBand } from '../dsh-adapter/types.js'
@@ -342,16 +341,19 @@ export function StatusLine({
   const contextWindow = occupancy?.contextWindow
   const contextParts: FieldPart[] = []
 
-  if (statusBar.thinking && channel.reasoningEffort !== undefined) {
-    contextParts.push({
-      key: 'effort',
-      // The hover id rides only with the click target: the segment's whole
-      // detail line IS the affordance (level + /effort), so promising it
-      // without the picker behind it would be a lie.
-      ...(effortPicker === undefined ? {} : { id: 'effort' as const, onClick: effortPicker.onOpen }),
-      node: <Text color="inactiveShimmer">{channel.reasoningEffort}</Text>,
-    })
-  }
+  // Effort is its own part, not a member of contextParts: the footer puts it at
+  // the tail of the right-aligned group (tps · cost · effort) instead of next
+  // to the model.
+  const effortPart: FieldPart | undefined = statusBar.thinking && channel.reasoningEffort !== undefined
+    ? {
+        key: 'effort',
+        // The hover id rides only with the click target: the segment's whole
+        // detail line IS the affordance (level + /effort), so promising it
+        // without the picker behind it would be a lie.
+        ...(effortPicker === undefined ? {} : { id: 'effort' as const, onClick: effortPicker.onOpen }),
+        node: <Text color="inactiveShimmer">{channel.reasoningEffort}</Text>,
+      }
+    : undefined
   const modeNeedsExplicitMarker = channel.mode.plan === true
     || channel.mode.sandbox === 'danger-full-access'
     || channel.mode.approval === 'never'
@@ -452,37 +454,19 @@ export function StatusLine({
 
   let tpsPart: FieldPart | undefined
   if (statusBar.tps && channel.tps !== undefined) {
-    if (channel.working && channel.tpsSamples.length === 0) {
-      tpsPart = {
-        key: 'tps',
-        id: 'tps',
-        node: (
-          <Text>
-            {renderTpsGauge(channel.tps, channel.tps)}{' '}
-            <Text dimColor>{Math.round(channel.tps)} tps</Text>
-          </Text>
-        ),
-      }
-    } else if (channel.tpsSamples.length > 0) {
-      const peak = Math.max(...channel.tpsSamples.map(sample => sample.tps), channel.tps)
-      tpsPart = {
-        key: 'tps',
-        id: 'tps',
-        node: (
-          <Text>
-            {channel.working
-              ? renderTpsGauge(channel.tps, peak)
-              : renderTpsSparkline(channel.tpsSamples)}{' '}
-            {speedColor(channel.tps, `${Math.round(channel.tps)}`)} tps
-          </Text>
-        ),
-      }
-    } else {
-      tpsPart = {
-        key: 'tps',
-        id: 'tps',
-        node: <Text dimColor>{Math.round(channel.tps)} t/s</Text>,
-      }
+    // Averages over the last completed turns instead of the live per-chunk
+    // estimate: the instantaneous number jumps between 80 and 400 on the same
+    // answer, which reads as noise. Falls back to the live value only before
+    // the first completed turn has a sample.
+    const steadyTps = tpsRecentAverage(channel.tpsSamples) ?? channel.tps
+    tpsPart = {
+      key: 'tps',
+      id: 'tps',
+      node: (
+        <Text>
+          {speedColor(steadyTps, `${Math.round(steadyTps)}`)} tps
+        </Text>
+      ),
     }
   }
 
@@ -519,12 +503,40 @@ const selectionBadge = formatSelectionBadge(channel.selection)
         node: <Text color="warning">{t('status-starting', { backend: channel.backendCapabilities?.backendLabel ?? 'DSH' })}</Text>,
       }
     : undefined
+  // Left group answers "where am I and how full is the window": model · cwd ·
+  // ctx, then the situational chips. tps/cost/effort belong to the right group:
+  // they describe the last requests, not the place.
+  const cwdPart: FieldPart | undefined = statusBar.cwd
+    ? {
+        key: 'cwd',
+        id: 'cwd' as const,
+        flexShrink: 2,
+        node: (
+          <Text color="inactiveShimmer">
+            {statusBar.compact ? compactCwd(channel, displayCwd) : displayCwd}
+          </Text>
+        ),
+      }
+    : undefined
+  const ctxPart: FieldPart | undefined = ctxNode === undefined
+    ? undefined
+    : { key: 'context', id: 'ctx' as const, node: ctxNode }
   const builtinLeft: FieldPart[] = [
     ...(startingPart !== undefined ? [startingPart] : []),
     ...(statusBar.model
       ? [{ key: 'model', id: 'model' as const, flexShrink: 0, ...(modelPicker === undefined ? {} : { onClick: modelPicker.onOpen }), node: <Text color="inactiveShimmer">{channel.modelDisplay ?? channel.model}</Text> }]
       : []),
-    ...(tpsPart !== undefined ? [tpsPart] : []),
+    ...(cwdPart !== undefined ? [cwdPart] : []),
+    ...(ctxPart !== undefined ? [ctxPart] : []),
+    // Goal chip rides the left group with cwd: "где я, сколько контекста, какой
+    // бюджет" — one glance, while speed/spend/effort stay on the right.
+    ...(statusBar.goal && channel.goal !== undefined
+      ? [{
+          key: 'goal',
+          id: 'goal' as const,
+          node: <GoalStatusChip goal={channel.goal} minimal={channel.minimalUi} />,
+        }]
+      : []),
     ...(jobsPart !== undefined ? [jobsPart] : []),
     ...contextParts,
     ...(statusBar.tokens
@@ -538,6 +550,11 @@ const selectionBadge = formatSelectionBadge(channel.selection)
           ),
         }]
       : []),
+  ]
+
+  // Cost answers "what did the last requests cost" — the right group, next to
+  // tps, so the left side stays about place and window occupancy.
+  const costParts: FieldPart[] = [
     // Estimated session spend (≈¥): only for official DeepSeek providers.
     // Visible once there is a priced amount or at least one unpriced token (a
     // fresh, fully priced zero session keeps hiding ¥0.00 as noise; unpriced
@@ -584,6 +601,9 @@ const selectionBadge = formatSelectionBadge(channel.selection)
   ]
 
   const builtinRight: FieldPart[] = [
+    ...(tpsPart !== undefined ? [tpsPart] : []),
+    ...costParts,
+    ...(effortPart !== undefined ? [effortPart] : []),
     // Live IDE-selection badge first: it tracks the user's in-editor gesture,
     // the freshest signal in the footer (T-FIX-02). Absent without an IDE —
     // no placeholder, matching the official Claude Code footer.
@@ -595,14 +615,6 @@ const selectionBadge = formatSelectionBadge(channel.selection)
           ),
         }]
       : []),
-    // Goal chip first: session-level state outranks repo/location details.
-    ...(statusBar.goal && channel.goal !== undefined
-      ? [{
-          key: 'goal',
-          id: 'goal' as const,
-          node: <GoalStatusChip goal={channel.goal} minimal={channel.minimalUi} />,
-        }]
-      : []),
     ...(statusBar.gitBranch && channel.gitBranch
       ? [
           {
@@ -611,18 +623,6 @@ const selectionBadge = formatSelectionBadge(channel.selection)
             node: <Text color="professionalBlue">{channel.gitBranch}</Text>,
           },
         ]
-      : []),
-    ...(statusBar.cwd
-      ? [{
-          key: 'cwd',
-          id: 'cwd' as const,
-          flexShrink: 2,
-          node: (
-            <Text color="inactiveShimmer">
-              {statusBar.compact ? compactCwd(channel, displayCwd) : displayCwd}
-            </Text>
-          ),
-        }]
       : []),
     ...(statusBar.sessionTitle && channel.sessionTitle
       ? [{
@@ -717,12 +717,11 @@ const selectionBadge = formatSelectionBadge(channel.selection)
       ? <Text color="inactiveShimmer">{hint}</Text>
       : null
 
-  const compactFields = [...leftFields, ...rightFields]
-  const fullLeftFields = [
-    ...leftFields,
-    ...(ctxNode !== undefined ? [{ key: 'context', id: 'ctx' as const, node: ctxNode }] : []),
-  ]
-  const hasStatusFields = compactFields.length > 0 || ctxNode !== undefined
+  // One row, two groups: the left one answers "where and how full", the right
+  // one answers "how fast and how much" (tps · cost · effort). The compact
+  // toggle no longer merges them — a merged list put tps between the model and
+  // the effort chip, which read as one long heap.
+  const hasStatusFields = leftFields.length > 0 || rightFields.length > 0
   // The supplemental row is PERMANENTLY mounted (height pinned to 1)
   // whenever the footer carries hoverable chrome — mounting it from nothing
   // on hover is what made the footer grow mid-gesture and shoved the
@@ -768,21 +767,10 @@ const selectionBadge = formatSelectionBadge(channel.selection)
           />
         ) : null}
         {/* Row 2: optional status fields — every field is independently gated. */}
-        {hasStatusFields ? statusBar.compact ? (
+        {hasStatusFields ? (
           <Box flexDirection="row" justifyContent="space-between" gap={2}>
             <Box flexGrow={1} flexShrink={1} flexDirection="row" overflow="hidden">
-              <FieldLine parts={compactFields} hoverProps={hoverProps} />
-            </Box>
-            {ctxNode !== undefined ? (
-              <Box flexShrink={0} {...hoverProps('ctx')}>
-                <Text wrap="truncate">{ctxNode}</Text>
-              </Box>
-            ) : null}
-          </Box>
-        ) : (
-          <Box flexDirection="row" justifyContent="space-between" gap={2}>
-            <Box flexGrow={1} flexShrink={1} flexDirection="row" overflow="hidden">
-              <FieldLine parts={fullLeftFields} hoverProps={hoverProps} />
+              <FieldLine parts={leftFields} hoverProps={hoverProps} />
             </Box>
             <Box
               justifyContent="flex-end"
