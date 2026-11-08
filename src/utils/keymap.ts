@@ -200,7 +200,6 @@ export type ShortcutActionId =
   | 'redraw'
   | 'todoFold'
   | 'expandEditor'
-  | 'star'
   | 'undo'
   | 'sidePanel'
   | 'sidePanelZoom'
@@ -242,9 +241,6 @@ export const SHORTCUT_ACTIONS: readonly ShortcutActionSpec[] = [
   { id: 'questionDetailUp', defaults: ['alt+up'] },
   { id: 'questionDetailDown', defaults: ['alt+down'] },
   { id: 'expandEditor', defaults: ['ctrl+shift+e'] },
-  // 开屏标语里的"一键 star"：与 `/star`、弹窗按钮同一个动作（gh api PUT）。
-  // 用 alt 组合是为了不跟输入框抢字母键。
-  { id: 'star', defaults: ['alt+s'] },
   // Word-level undo for the prompt draft. `exactPrimary` keeps Cmd+Z out of
   // it on macOS; the combo stays remappable through /settings like any other.
   { id: 'undo', defaults: ['ctrl+z'], exactPrimary: true },

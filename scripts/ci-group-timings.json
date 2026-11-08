@@ -58,7 +58,6 @@
     "verify-smooth-reveal": 16,
     "verify-splash-eggs": 3.3,
     "verify-splash-layout": 0.2,
-    "verify-star-action": 0.3,
     "verify-sticky-anchor": 28.4,
     "verify-sticky-anchor-narrow": 31.6,
     "verify-streaming-markdown-blocks": 8.1,
@@ -76,8 +75,6 @@
     "verify-tool-history-window": 4.7,
     "verify-transcript-paging": 19.3,
     "verify-unseen-report-once": 2.5,
-    "verify-usage-stats": 0.2,
-    "verify-whale-girl": 18.3,
     "verify-zellij": 0.6
   },
   "input-terminal": {

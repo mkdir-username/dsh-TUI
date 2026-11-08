@@ -101,7 +101,7 @@ try {
   const update = () => { channel.version++; for (const fn of listeners) fn() }
   const screen = await mount(
     <PageMargin><ui.AlternateScreen><Chat channel={channel as never} questionStore={new QuestionStore()}
-      fullscreen starPrompt={null} trajectorySeen /></ui.AlternateScreen></PageMargin>,
+      fullscreen trajectorySeen /></ui.AlternateScreen></PageMargin>,
   )
   try {
     assert(await settled(() => screen.screen().includes('history-3999')), screen.screen())

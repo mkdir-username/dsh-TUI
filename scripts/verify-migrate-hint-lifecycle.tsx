@@ -140,7 +140,7 @@ try {
         return <Chat channel={mount.channel} questionStore={new QuestionStore()}
           onExit={() => { assert.fail('unexpected user exit') }}
           fullscreen={fullscreen} openHomeOnBoot={false} launchpadOnBoot={false}
-          onboardingOnBoot={false} starPrompt={null} />
+          onboardingOnBoot={false} />
       }
       const instance = await render(fullscreen ? <AlternateScreen><Probe /></AlternateScreen> : <Probe />, {
         stdout: stdout as unknown as NodeJS.WriteStream,

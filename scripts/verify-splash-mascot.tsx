@@ -15,7 +15,7 @@
  *
  * Run: node --import tsx/esm scripts/verify-splash-mascot.tsx
  */
-import fakeHome from './lib/fake-home.mjs' // 必须最先：usageStats 的 DATA_DIR 在 import 时定死
+import fakeHome from './lib/fake-home.mjs' // 必须最先：DATA_DIR 在 import 时定死
 import { readdirSync, readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 process.env.FORCE_COLOR = '3'

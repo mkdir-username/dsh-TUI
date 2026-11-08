@@ -119,8 +119,7 @@ results back to the chat screen and add no new behavior.
   there is nothing to continue) · `Sessions & workspaces` (`/home` — history and workspaces merged into
   one entry) · `Settings` (`/settings`) · `Kernel · <current kernel>` (`/kernel`, opens the kernel
   picker, see the commands section) · a **conditional slot** (priority: background jobs running → `Background
-  jobs`; update detected → `Update available`; usage milestone reached and never starred → `Feed us a
-  star`; fallback `Help`). Full screens opened from the launchpad (sessions & workspaces / settings /
+  jobs`; update detected → `Update available`; fallback `Help`). Full screens opened from the launchpad (sessions & workspaces / settings /
   background jobs / the family tree / the wizard) render **above the launchpad** — `Esc` closes them
   back onto the launchpad (draft, params and focus intact); there are two ways off the launchpad into
   the chat: submit a non-command line with Enter, or press `Shift+Enter` (`Option+Enter`) in the input

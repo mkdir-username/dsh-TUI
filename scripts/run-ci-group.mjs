@@ -220,16 +220,10 @@ const GROUPS = {
     ['verify-raw-color-depth', ['node', 'scripts/verify-raw-color-depth.mjs']],
     ["verify-splash-layout", ['node', '--import', 'tsx/esm', 'scripts/verify-splash-layout.ts']],
 // 开屏彩蛋契约：节日换词（每款字体都要有 HAPPINESS/MERRY/NEW YEAR 的全部字形，
-// 两行等宽 + 下排居中取最紧解）与 1/20 的求 star 标语（OSC 8 成对 + URL 正确、
-// 缩进按该行实际宽度重算、不支持超链接时退化成纯文本 URL），并挂真实 LogoV2 读屏。
+// 两行等宽 + 下排居中取最紧解），并挂真实 LogoV2 读屏。
     ["verify-splash-eggs", ['node', '--import', 'tsx/esm', 'scripts/verify-splash-eggs.tsx']],
-    // 求 star 的触发条件（累计启动次数 / 累计在线时长的里程碑阶梯、账本坏文件兜底）：
-    ["verify-usage-stats", ['node', '--import', 'tsx/esm', 'scripts/verify-usage-stats.mjs']],
-    // 一键 star 的 gh 集成（探测/登录态/超时/失败分类，全用假执行器不联网）：
-    ["verify-star-action", ['node', '--import', 'tsx/esm', 'scripts/verify-star-action.mjs']],
-    // 女仆娘立绘（whaleGirl 设置 + 头部换画/阶梯契约）与 99h/999 次"求 star"
-    // 开屏弹窗（挂真实 Chat：弹一次/记账/Esc 关且关后不抢键/忙时不弹不记账）：
-    ["verify-whale-girl", ['node', '--import', 'tsx/esm', 'scripts/verify-whale-girl.tsx']],
+    // 登录赠金弹窗（挂真实 Chat：金额/到期地气、展示后回执、Esc 关闭）：
+    ["verify-coupon-prompt", ['node', '--import', 'tsx/esm', 'scripts/verify-coupon-prompt.tsx']],
 // 标题女仆娘立绘透明回归：假 Windows Terminal（DA1→Sixel）下立绘以
 // transparent 放置、无衬底色——只画她自己的像素，壁纸从周围透出来。
     ["verify-maid-portrait-transparent", ['node', '--import', 'tsx/esm', 'scripts/verify-maid-portrait-transparent.tsx']],

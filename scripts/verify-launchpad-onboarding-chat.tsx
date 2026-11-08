@@ -316,7 +316,6 @@ async function mountChat(flags: Flags, over: Record<string, unknown> = {}, chatP
         <Chat
           channel={channel as never}
           questionStore={new QuestionStore()}
-          starPrompt={null}
           openHomeOnBoot={flags.openHomeOnBoot === true}
           launchpadOnBoot={flags.launchpadOnBoot === true}
           onboardingOnBoot={flags.onboardingOnBoot === true}

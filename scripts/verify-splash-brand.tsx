@@ -14,8 +14,8 @@
  * ⑤ bevel 的静态灰阶已拆除（配色随主题派生——修复"灰色字体"）。
  * Run: node --import tsx/esm scripts/verify-splash-brand.tsx
  */
-// 隔离用户级偏好：ThemeProvider 的强制链读 ~/.dsh-tui/theme.json，usageStats
-// 写 ~/.dsh-tui/——指到空临时目录，测试不受本机配置影响也不污染本机计数。
+// 隔离用户级偏好：ThemeProvider 的强制链读 ~/.dsh-tui/theme.json，启动计数与
+// 活动偏好也写 ~/.dsh-tui/——指到空临时目录，测试不受本机配置影响也不污染本机计数。
 // （os.homedir 在 win32 读 USERPROFILE、posix 读 HOME，调用期生效。）
 import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'

@@ -71,9 +71,8 @@ import { useSelection } from '../ink/hooks/use-selection.js'
 import { NoSelect } from '../ink/components/NoSelect.js'
 import { LogoHeader, MessageList } from '../components/MessageList.js'
 import { splashFontIdOf } from '../components/splashFonts.js'
-import { StarPrompt, WhaleCouponPrompt, type StarAttempt } from '../components/StarPrompt.js'
+import { WhaleCouponPrompt } from '../components/WhaleCouponPrompt.js'
 import type { WhaleCouponStore } from '../dsh-adapter/oauth/bonus.js'
-import { STAR_MILESTONES } from '../usageStats.js'
 import { TimelineRail } from '../components/TimelineRail.js'
 import { ScrollbarGutter } from '../components/ScrollbarGutter.js'
 import type { TimelineSnapshot } from '../ink/timeline-rail.js'
@@ -442,7 +441,6 @@ export function Chat({
   openHomeOnBoot,
   launchpadOnBoot,
   onboardingOnBoot,
-  starPrompt,
 }: {
   channel: Channel
   renderScene?: (id: string, channel: Channel) => React.ReactNode
@@ -600,14 +598,6 @@ export function Chat({
    * which is upstream of "what do I want to do first".
    */
   onboardingOnBoot?: boolean
-  /**
-   * Test seam for the startup star modal (usage milestones 99h / 999
-   * launches): `null` disables the modal outright; `dir` points the usage
-   * ledger at a fixture directory; overriding the actions keeps it fully
-   * interactive without spawning `gh` or a browser. Production leaves it
-   * undefined.
-   */
-  starPrompt?: { dir?: string; onStar?: () => StarAttempt | Promise<StarAttempt>; onOpen?: () => void } | null
   /**
    * The composer's live controller, published every render. Exposed as a prop
    * so a regression can read the draft the composer HOLDS — the ownership
@@ -1338,99 +1328,6 @@ export function Chat({
     if (held.onboarding) setOnboardingOpen(true)
     if (held.home) setSupervisorOpen(true)
   }, [channelReady, channelStartupFailed, settingsOpen, treeOpen])
-  /** `/star` / `Alt+S` 成功后的庆祝弹窗。开屏标语和里程碑求 star 都已删除：
-   * 只有用户自己按下动作时才可能看到它，启动时不再有任何弹窗。 */
-  const [starModal, setStarModal] = React.useState<{ index: number; phase: 'done' } | null>(null)
-  /** `/star` 命令、开屏标语的点击/`Alt+S` 共用的一键动作：异步跑 gh，界面
-   * 全程不阻塞，结果回来按四类各报一句（成功 / 没装 gh / 没登录 / 失败）。
-   * `starPrompt.onStar` 存在时走同一条测试缝（夹具因此不会真的去 star）。 */
-  /** 打开仓库页（走 `starPrompt.onOpen` 测试缝——夹具里不会真的拉起浏览器）。 */
-  const openStarPage = React.useCallback((): void => {
-    const seam = starPrompt?.onOpen
-    if (seam !== undefined) { seam(); return }
-    void import('../starAction.js').then(({ STAR_REPO }) => {
-      openExternal(`https://github.com/${STAR_REPO}`)
-    })
-  }, [starPrompt])
-  const runStarAction = React.useCallback((): void => {
-    const seam = starPrompt?.onStar
-    void (seam !== undefined
-      ? Promise.resolve(seam())
-      : import('../starAction.js').then(async ({ starRepo, STAR_REPO }) => {
-        const url = `https://github.com/${STAR_REPO}`
-        const outcome = await starRepo()
-        if (outcome.kind === 'starred') return { kind: 'starred' as const }
-        if (outcome.kind === 'no-gh') return { kind: 'no-gh' as const, url }
-        if (outcome.kind === 'not-authed') return { kind: 'not-authed' as const, url }
-        return { kind: 'failed' as const, detail: outcome.detail, url }
-      })).then(attempt => {
-      if (attempt.kind === 'starred') {
-        // 成功就演一段庆祝（女仆娘接住星星）——`/star`、`Alt+S` 都是这一条路。
-        // 整屏界面开着或回合进行中时弹窗放不下，退回一句通知，用户至少
-        // 知道 star 点上了。
-        const blocked = channel.working || supervisorOpen || treeOpen || settingsOpen
-        const index = STAR_MILESTONES.findIndex(milestone => milestone.hours === 99)
-        if (!blocked && index >= 0) {
-          setStarModal({ index, phase: 'done' })
-          return
-        }
-        channel.notify(t('star-ok'), { color: 'success' })
-        return
-      }
-      if (attempt.kind === 'no-gh') {
-        // 本机没法一键（没装 gh / 没登录）→ **自动**打开仓库页让用户自己点，
-        // 通知里说明原因（浏览器没拉起来时 URL 也还在文案里）。
-        openStarPage()
-        channel.notify(t('star-no-gh', { url: attempt.url }), { color: 'warning' })
-        return
-      }
-      if (attempt.kind === 'not-authed') {
-        openStarPage()
-        channel.notify(t('star-not-authed', { url: attempt.url }), { color: 'warning' })
-        return
-      }
-      channel.notify(t('star-failed', { detail: attempt.detail, url: attempt.url }), { color: 'error' })
-    })
-  }, [channel, starPrompt, openStarPage, supervisorOpen, treeOpen, settingsOpen])
-  const starModalActions = React.useMemo(() => ({
-    // 弹窗自己演结果（成功→庆祝、失败→留在卡里说明原因），所以这里把
-    // 结局**回传**给它；`/star` 命令那条路仍走 runStarAction 的 notify。
-    onStar: (): StarAttempt | Promise<StarAttempt> => {
-      const seam = starPrompt?.onStar
-      // gh 缺失/未登录**自动**打开仓库页（与一键路径同一套兜底）。注意
-      // **不要**给返回值再包一层 `.then()`——多一个微任务会让弹窗"庆祝那一帧"
-      // 被紧随其后的 Enter 关窗批掉（夹具 C8/C9 实测）。这里只挂副作用、
-      // 原样返回。
-      const afterAttempt = (attempt: StarAttempt): StarAttempt => {
-        if (attempt.kind === 'no-gh' || attempt.kind === 'not-authed') openStarPage()
-        return attempt
-      }
-      if (seam !== undefined) {
-        const result = seam()
-        if (result instanceof Promise) {
-          void result.then(afterAttempt)
-          return result
-        }
-        return afterAttempt(result)
-      }
-      const run = import('../starAction.js').then(async ({ starRepo, STAR_REPO }) => {
-        const url = `https://github.com/${STAR_REPO}`
-        const outcome = await starRepo()
-        if (outcome.kind === 'starred') return { kind: 'starred' as const }
-        if (outcome.kind === 'no-gh') return { kind: 'no-gh' as const, url }
-        if (outcome.kind === 'not-authed') return { kind: 'not-authed' as const, url }
-        return { kind: 'failed' as const, detail: outcome.detail, url }
-      })
-      void run.then(afterAttempt)
-      return run
-    },
-    onOpen: () => {
-      setStarModal(null)
-      openStarPage()
-    },
-  }), [starPrompt, openStarPage])
-  /** 弹窗关闭回调：稳定引用（见渲染处的注释）。 */
-  const closeStarModal = React.useCallback((): void => { setStarModal(null) }, [])
   const [workspaceTargets, setWorkspaceTargets] = React.useState<readonly TuiWorkspaceTarget[]>([])
   const workspaceFlowRequestRef = React.useRef(0)
   const workspaceFlowAbortRef = React.useRef<AbortController | null>(null)
@@ -1539,7 +1436,7 @@ export function Chat({
   /** 有模态或整屏界面时，/btw 的回答不抢着打开面板，只标未读。 */
   const btwSurfaceFree = () =>
     approvalSnapshot === null && dialogSnapshot === null && questionSnapshot === null
-    && overlay.kind === 'none' && !helpOpen && !starModal && !couponVisible
+    && overlay.kind === 'none' && !helpOpen && !couponVisible
     && !supervisorOpen && !treeOpen && !settingsOpen && !jobsPanelOpen
     && !sceneOpen && channel.pluginScene === undefined
     && !subagentDashboardOpen && subagentDetailId === null
@@ -3770,13 +3667,6 @@ export function Chat({
         setOnboardingOpen(true)
         return true
       }
-      case 'star': {
-        // 一键 star：**只有用户主动敲 /star 才会跑**（绝不自动）。动作用
-        // runStarAction（与开屏弹窗共用），异步执行、结果用 notify 报。
-        setHelpOpen(false)
-        runStarAction()
-        return true
-      }
       case 'config': {
         const userHome = process.env.USERPROFILE ?? ''
         const lines = [
@@ -4784,7 +4674,7 @@ export function Chat({
   }, [])
   /** Deduplicate terminals that report one Enter as parsed Return then raw CR/LF. */
   const lastModalEnterAtRef = React.useRef(0)
-  const couponVisible = coupon !== null && starModal === null
+  const couponVisible = coupon !== null
     && approvalSnapshot === null && dialogSnapshot === null && questionSnapshot === null
     && overlay.kind === 'none' && !btwOverlayVisible && recap === null
     && !supervisorOpen && !treeOpen && !settingsOpen && !jobsPanelOpen
@@ -4831,10 +4721,9 @@ export function Chat({
   React.useEffect(() => () => clearInterruptWatchdog(), [clearInterruptWatchdog])
 
   useInput((input, key, event) => {
-    // 开屏"求 star"弹窗开着时键盘全归它（↑/↓/Enter/Esc 由它自己的
-    // useInput 处理），滚轮也不许滚动它身后的转录——和下面的整屏界面
-    // 同一套让位规则。
-    if (starModal !== null || couponVisible) return
+    // 登录赠金弹窗开着时键盘全归它（Enter/Esc 由它自己的 useInput
+    // 处理），滚轮也不许滚动它身后的转录——和下面的整屏界面同一套让位规则。
+    if (couponVisible) return
     // Prompt-slot panels own the keyboard while visible. Their own useInput
     // handles the relevant keys; Chat registered first, so yielding here
     // still lets the panel receive them. PromptInput now stays mounted but
@@ -5885,11 +5774,6 @@ export function Chat({
       toggleTodoFooter()
       // Consume: same readline-shadowing rule as dashboard/showAll above.
       event.stopImmediatePropagation()
-    } else if (actionMatches('star', input, key)) {
-      // 一键 star（默认 Alt+S）——与 `/star`、开屏标语点击同一个动作。
-      // 消费事件：alt 组合不该再落进输入框当普通字符。
-      runStarAction()
-      event.stopImmediatePropagation()
     } else if (plainReturn && !isSticky) {
       // Enter while scrolled up returns to the bottom: the
       // affordance now exists whenever the view is off the bottom, not
@@ -6790,7 +6674,6 @@ export function Chat({
     || (recap !== null && (!recap.auto || recap.expanded))
     || btwOverlayVisible
     || questionPanelNode !== null
-    || starModal !== null
     || couponVisible
 
   // The trajectory scene replaces the conversation for as long as it is open.
@@ -7505,14 +7388,6 @@ export function Chat({
           草稿编辑器在内的全部后绘兄弟；关闭即整树卸载——键盘自然交还，
           没有残留的监听会再抢键。onClose 用 useCallback 钉死引用：弹窗
           开着的每一帧 Chat 重渲染都不弄脏它的绝对定位捕获层。 */}
-      {starModal !== null && STAR_MILESTONES[starModal.index] !== undefined && (
-        <StarPrompt
-          milestone={STAR_MILESTONES[starModal.index]}
-          actions={starModalActions}
-          onClose={closeStarModal}
-          initialPhase={starModal.phase}
-        />
-      )}
       {couponVisible && coupon !== null && (
         <WhaleCouponPrompt notice={coupon} onShown={markCouponShown} onClose={closeCoupon} />
       )}

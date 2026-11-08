@@ -694,12 +694,6 @@ export const SHORTCUT_FIELD_META: Record<ShortcutActionId, { label: string; zh: 
     hintEn: d => `Toggle the fullscreen draft editor (Enter inserts a newline, Ctrl+Enter sends). Default: ${d}.`,
     hintZh: d => `切换全屏草稿编辑器（Enter 换行、Ctrl+Enter 发送）。默认 ${d}。`,
   },
-  star: {
-    label: 'One-key star shortcut',
-    zh: '一键 star 快捷键',
-    hintEn: d => `Star the project via the gh CLI (same action as /star and the splash line's click). Default: ${d}.`,
-    hintZh: d => `用 gh 给项目点 star（与 /star、开屏标语点击同一个动作）。默认 ${d}。`,
-  },
   undo: {
     label: 'Draft undo shortcut',
     zh: '草稿撤销快捷键',

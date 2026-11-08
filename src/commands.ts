@@ -86,7 +86,6 @@ export const LOCAL_COMMANDS: LocalCommand[] = [
   { name: 'reload', description: 'Reload preference files from disk and apply live' },
   { name: 'settings', description: 'View and edit plugin settings' },
   { name: 'setup', description: 'Re-run the first-run guide (accounts + models / language + theme / model + workspace / shortcuts)' },
-  { name: 'star', description: 'Star this project on GitHub (one-key via the gh CLI)' },
   { name: 'doctor', description: 'Run environment checks' },
   { name: 'migrate', description: 'Import conversations from other coding agents (claude-code / codex / omp / zcode / grok-build)' },
   { name: 'init', description: 'Create AGENTS.md in the working directory' },
@@ -197,7 +196,7 @@ export type LocalCommandRequirement =
 
 const LOCAL_COMMAND_REQUIREMENTS: ReadonlyMap<string, LocalCommandRequirement> = new Map<string, LocalCommandRequirement>([
   ['new', 'any'], ['clear', 'any'], ['status', 'any'], ['cost', 'any'], ['tokens', 'any'],
-  ['settings', 'any'], ['star', 'any'], ['doctor', 'any'], ['help', 'any'], ['tips', 'any'],
+  ['settings', 'any'], ['doctor', 'any'], ['help', 'any'], ['tips', 'any'],
   ['exit', 'any'], ['quit', 'any'], ['q', 'any'], ['theme', 'any'], ['lang', 'any'],
   ['activity', 'any'], ['thinking', 'any'], ['vim', 'any'], ['terminal-setup', 'any'],
   ['connect', 'any'], ['update', 'any'], ['export', 'any'], ['panel', 'any'],

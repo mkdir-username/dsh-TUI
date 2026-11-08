@@ -404,7 +404,6 @@ const fsInstance = await render(
     channel,
     questionStore: { subscribe: () => () => {}, getSnapshot: () => null, answerCurrent: () => {} },
     // The star prompt reads the real usage stats; it must not steal keys here.
-    starPrompt: null,
     fullscreen: true,
     promptControllerRef: fsController,
     onExit() {},
@@ -503,7 +502,6 @@ for (const columns of [120, 48]) {
     const chat = React.createElement(Chat, {
       channel,
       questionStore: { subscribe: () => () => {}, getSnapshot: () => null, answerCurrent() {} },
-      starPrompt: null,
       fullscreen,
       promptControllerRef: controller,
       onExit() {},

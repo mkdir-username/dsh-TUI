@@ -18,7 +18,7 @@
  * - **Never write a document the reader would call corrupt.** The rewritten
  *   text is parsed again before it reaches the disk.
  * - **Atomic, undoable, and serialized across processes.** Same-directory
- *   temporary file + rename, like `usageStats.ts`, under the same sibling file
+ *   temporary file + rename, like the other preference writers, under the same sibling file
  *   lock (`extension-grants.json.lock`) the profile's atomic writes use, so a
  *   second TUI instance cannot lose an ensure/revoke/forget between our read
  *   and our rename. `undo()` restores the previous bytes only while the file

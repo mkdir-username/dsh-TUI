@@ -75,7 +75,7 @@ dsh-tui
    the slot is simply absent when there is nothing to continue · `Sessions & workspaces` — history
    and workspaces are the same `/home` screen, merged into one entry · `Settings` · a **conditional
    slot** — `Background jobs` while jobs are running, `Update available` when a newer release is
-   detected, `Feed us a star` once usage milestones are reached and you never starred, falling back
+   detected, falling back
    to `Help`). Move with `↑/↓` or `Tab`, activate with `Enter`, or just click; short terminals drop
    whole blocks (quick actions → hint line → input only) and narrow ones climb down the ladder in
    5.1. Full screens opened from this screen (sessions & workspaces / settings / background jobs /
@@ -174,7 +174,6 @@ Unrecognized keys are ignored, `Esc` does nothing, clear with `Ctrl+C`/`dd`.
 | `Shift+↑` | message selection mode (`↑/↓` move, `Enter` expand one, `Esc` exit) |
 | `Ctrl+T` (⌘T) | open the trace scene (same as `/trace`) |
 | `Alt+R` | on the launchpad, **continue the most recent session** (same as the `Continue "…"` entry; bound only while the launchpad is up, no-op when there is nothing to continue). Remappable in `/settings` |
-| `Alt+S` | one-key star (same as `/star`). Remappable in `/settings`; a short "the whale girl catches the star" celebration plays on success |
 
 ### 2.6 Mouse (fullscreen mode; drag/double-click/triple-click select-and-copy)
 

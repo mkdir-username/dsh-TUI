@@ -145,5 +145,4 @@ Community health should be measured by:
 - whether new contributors can make a useful contribution from the documentation;
 - whether regressions are recorded and fed into future work.
 
-Stars, PR count, commit count, and activity alone are not the primary measures
-of progress.
+PR count and activity alone are not the primary measures of progress.

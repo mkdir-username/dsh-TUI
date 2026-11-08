@@ -61,6 +61,23 @@ statusline dsh»), ей отправлено указание править `sr
 `statusline-patch/statuslineCost.js`. Порт в `src/` должен повторить оба решения, иначе
 форк вернёт старое поведение.
 
+## 2026-11-08: star-механика вырезана, tps включён по умолчанию
+
+- Удалены `src/components/StarPrompt.tsx`, `src/starAction.ts`, `src/usageStats.ts`;
+  из `Chat.tsx` ушли seam `starPrompt`, `/star`, `Alt+S` и авто-модалка, из
+  `commands.ts` / `utils/keymap.ts` / `settings/definitions.ts` / `i18n.ts` —
+  команда, биндинг, описание шортката и все `star-*` строки.
+- Купонный поп-ап (login bonus) вынесен в `src/components/WhaleCouponPrompt.tsx`
+  вместе с пузырьками и константами карточки; регрессия — `scripts/verify-coupon-prompt.tsx`.
+  Старые `verify-star-action.mjs`, `verify-usage-stats.mjs`, `verify-whale-girl.tsx`
+  удалены, `scripts/run-ci-group.mjs` обновлён.
+- `statusBar.tps` теперь `true` по умолчанию (`src/tuiDisplayPrefs.ts`); в живом
+  TUI включено `"tps": true` в `~/.dsh-tui/settings.json`. Чип рисуется как
+  `▕████▏ 42 tps` во время ответа и держит последний замер между ходами.
+- В живом npm-пакете правка пока живёт зеркалом (до переключения профиля на форк):
+  `usageStats.dueStarModal` возвращает null, чип star на launchpad и строка в
+  сплэше отключены, `/star` убран из списка команд. Действует после перезапуска TUI.
+
 ## Сборка и проверки
 
 ```bash
