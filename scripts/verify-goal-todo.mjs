@@ -23,7 +23,10 @@ const toPlain = s =>
   s
     .replace(/\x1b\[(\d+)C/g, (_, n) => ' '.repeat(Number(n)))
     .replace(/\x1b\[[0-9;?>:]*[a-zA-Z]/g, '')
-    .replace(/\x1b\]9;[^\x07]*\x07/g, '')
+    // Any OSC string (hyperlink open/close, progress, title) — ink paints an
+    // empty frame with `ESC ] 8 ; ; BEL`, which would otherwise read as
+    // content in the "renders nothing" checks.
+    .replace(/\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)/g, '')
 
 function makeStreams() {
   const stdout = new Writable({
@@ -109,7 +112,9 @@ async function run() {
     instance.unmount()
   }
 
-  // 2. Goal + todos present.
+  // 2. Goal + todos present: the chat footer renders the todo section only —
+  //    the objective sentence and its phase badge live in the sidebar panel
+  //    and the status-line chip.
   {
     const { stdout, stderr, stdin } = makeStreams()
     const channel = {
@@ -137,8 +142,9 @@ async function run() {
     const frame = toPlain(stdout.frames.join(''))
     console.log('--- GoalTodoPanel frame ---')
     console.log(JSON.stringify(frame))
-    check('objective shown', frame.includes('Fix the login page crash'))
-    check('phase badge + rounds shown', /active · 2\/10/.test(frame))
+    check('goal objective not in the chat footer', !frame.includes('Fix the login page crash'))
+    check('goal phase badge not in the chat footer', !/active · 2\/10/.test(frame))
+    check('no goal glyph in the chat footer', !frame.includes('🎯'))
     check('completed todo shown', frame.includes('Reproduce the crash'))
     check('in-progress todo shown', frame.includes('Fix the null deref in auth'))
     check('pending todo shown', frame.includes('Add a regression test'))
@@ -187,7 +193,9 @@ async function run() {
     instance.unmount()
   }
 
-  // 5. Blocked goal with reason.
+  // 5. Blocked goal with reason and no todos: the chat footer shows the todo
+  //    section only, so a bare goal (whatever its phase) renders nothing —
+  //    no empty frame with padding.
   {
     const { stdout, stderr, stdin } = makeStreams()
     const channel = {
@@ -208,8 +216,7 @@ async function run() {
     )
     await sleep(500)
     const frame = toPlain(stdout.frames.join(''))
-    check('blocked phase shown', /blocked · 4\/5/.test(frame))
-    check('block reason shown', frame.includes('CI is red: dependency update broke the build'))
+    check('goal-only channel renders nothing', frame.trim() === '', JSON.stringify(frame))
     instance.unmount()
   }
 
@@ -249,12 +256,13 @@ async function run() {
     check('nothing before data arrives', before.trim() === '', JSON.stringify(before))
     await sleep(600)
     const after = toPlain(stdout.frames.at(-1) ?? '')
-    check('panel appears after live update', after.includes('Polish the panel') && after.includes('Render live'), JSON.stringify(after))
+    check('todo rows appear after live update', after.includes('Render live') && !after.includes('Polish the panel'), JSON.stringify(after))
     instance.unmount()
   }
 
   // 7. Collapsed mode (ctrl/cmd+q): the todo section folds to its header
-  //    line — counts plus the live-task preview — while the goal card stays.
+  //    line — counts plus the live-task preview; the goal row is not part of
+  //    the chat footer in either fold state.
   {
     const { stdout, stderr, stdin } = makeStreams()
     const channel = {
@@ -280,7 +288,7 @@ async function run() {
     )
     await sleep(500)
     const frame = toPlain(stdout.frames.join(''))
-    check('collapsed keeps the goal card', frame.includes('Fix the login page crash'))
+    check('collapsed hides the goal row', !frame.includes('Fix the login page crash'))
     check('collapsed shows the done/total header', /✓ 1\/3/.test(frame))
     check('collapsed previews the live task', frame.includes('Fix the null deref in auth'))
     check('collapsed hides non-preview todo rows', !frame.includes('Add a regression test'))

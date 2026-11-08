@@ -6,8 +6,6 @@ import type { ChannelGoal, TodoPanelItem } from '../dsh-adapter/channel.js'
 import { t } from '../i18n.js'
 import { primaryComboString } from '../utils/keymap.js'
 import { formatGoalBudget, formatGoalBudgetCompact } from '../channel/goal-command.js'
-import { useTooltip } from './Tooltip.js'
-import type { DOMElement } from '../ink/dom.js'
 import { stringWidth } from '../ink/stringWidth.js'
 import type { WheelEvent } from '../ink/events/wheel-event.js'
 
@@ -241,6 +239,11 @@ export interface GoalTodoPanelScrollHandle {
  * update re-renders this panel in real time (no polling). Renders nothing
  * while both slots are empty.
  *
+ * The default (chat footer) shape shows the todo section only: the goal is a
+ * full sentence that never fits one footer row, so the objective and its
+ * phase badge live in the sidebar `panel` shape and the compact status-line
+ * chip. A goal with no todos therefore renders nothing here.
+ *
  * The todo section folds two ways: completed rows fold automatically once
  * the agent goes idle (the header's `✓ done/total` count keeps the
  * summary), and `collapsed` folds the whole section to that single header
@@ -289,17 +292,6 @@ export function GoalTodoPanel({
   scrollRef?: React.Ref<GoalTodoPanelScrollHandle>
 }): React.ReactNode {
   const goal = channel.goal
-  const objectiveRef = React.useRef<DOMElement | null>(null)
-  const goalTooltip = useTooltip(() => {
-    // panel 形态目标完整可见、滚动就是全文入口——不挂 hover 全文（D-7）；
-    // default 形态（chat 页底部 chrome）的 tooltip 原样保留。
-    if (variant === 'panel') return ''
-    const width = objectiveRef.current?.yogaNode?.getComputedWidth() ?? 0
-    if (goal === undefined || width <= 0) return ''
-    return stringWidth(goal.objective) > width || goal.objective.includes('\n')
-      ? goal.objective
-      : ''
-  })
   const allTodos = channel.todos ?? []
   const doneCount = allTodos.filter(todo => todo.status === 'completed').length
   // Completed rows are useful progress while a turn is running, but become
@@ -383,7 +375,10 @@ export function GoalTodoPanel({
     setScrollTop(current => Math.min(current, maxScroll))
   }, [maxScroll])
 
-  if (goal === undefined && !showTodoSection) return null
+  // The sidebar panel renders the objective rows even without todos; the
+  // chat footer has none to show in that case, so it disappears entirely
+  // instead of leaving an empty padded box above the prompt.
+  if (variant !== 'panel' && !showTodoSection) return null
 
   // Collapsed preview: the live task when one runs, else the next open row.
   const preview = allTodos.find(todo => todo.status === 'in_progress')
@@ -530,39 +525,6 @@ export function GoalTodoPanel({
       paddingRight={2}
       paddingTop={1}
     >
-      {goal !== undefined && (
-        <Box flexDirection="column">
-          {/* 行盒显式 height={1}：窄屏下与截断文本同行的布局会被量出虚高
-              （行内出现幽灵空行，实测窄终端里 🎯 行与折叠头之间多出空行），
-              钉死单行高度可消除；本面板各行本就设计为单行（内容均
-              truncate）。 */}
-          <Box flexDirection="row" width="100%" height={1}>
-            <Text color="suggestion">{GOAL_GLYPH}</Text>
-            <Box ref={objectiveRef} flexGrow={1} flexShrink={1} {...goalTooltip}>
-              <Text bold wrap="truncate">
-                {goal.objective}
-              </Text>
-            </Box>
-            <Box flexShrink={0} marginLeft={1}>
-              <PhaseBadge
-                phase={goal.phase}
-                roundsStarted={goal.roundsStarted}
-                maxGoalRounds={goal.maxGoalRounds}
-                budget={goal.budget}
-                elapsed={elapsed}
-              />
-            </Box>
-          </Box>
-          {goal.phase === 'blocked' && goal.blockedReason !== undefined && (
-            <Box flexDirection="row" marginTop={1} height={1}>
-              <Text dimColor>{BLOCKED_BAR}</Text>
-              <Text color="error" wrap="truncate">
-                {goal.blockedReason.message}
-              </Text>
-            </Box>
-          )}
-        </Box>
-      )}
       {showTodoSection && (
         <Box flexDirection="column">
           {/* Fold header: done/total summary, clickable, doubles as the

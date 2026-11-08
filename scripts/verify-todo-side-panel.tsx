@@ -726,12 +726,12 @@ try {
     const xRows2 = ls2.filter(l => l.includes('XXXXX'))
     check('control: default variant does NOT wrap the long todo (single truncated row)',
       xRows2.length === 1 && !ls2.some(l => l.includes('BBBBB')), String(xRows2.length))
-    // default 形态的长目标仍是单行 truncate + 状态同排（panel 的改动不外溢）。
-    const defaultGoalRows = ls2.filter(l => l.includes(GOAL_HEAD))
-    check('control: default keeps the long goal on one truncated row',
-      defaultGoalRows.length === 1 && !ls2.some(l => l.includes(GOAL_TAIL)), String(defaultGoalRows.length))
-    check('control: default keeps the status badge on the goal row',
-      defaultGoalRows[0]?.includes('active \u00b7') === true, defaultGoalRows[0] ?? '')
+    // chat 底部的 default 形态不画 goal 行：目标与状态徽章只在侧栏 panel
+    // 与状态栏 chip 里（panel 的行预算不外溢到 chat 底部）。
+    check('control: default variant draws no goal row',
+      !ls2.some(l => l.includes(GOAL_HEAD) || l.includes(GOAL_TAIL)), JSON.stringify(ls2.filter(l => l.includes(GOAL_HEAD))))
+    check('control: default variant draws no goal status badge',
+      ls2.every(l => !l.includes('active \u00b7')), ls2.find(l => l.includes('active')) ?? '')
   } finally {
     await app2.unmount()
     term2.dispose()
