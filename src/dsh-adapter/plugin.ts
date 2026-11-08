@@ -2612,6 +2612,22 @@ export async function apply(ctx: Context, runtimeConfig: RuntimeConfig<Config>, 
     },
   })
   const handleExit = funnel.handleExit
+  // Local: рестарт по запросу агента — тот же выход, что у /restart, но без
+  // ввода человека. Зовётся как ctx.get('dshRestart')?.request(reason).
+  ctx.provide('dshRestart', {
+    request(reason: string) {
+      if (exited || restartRequested || updateRequested || backendSwitchRequested !== undefined) return false
+      restartRequested = true
+      logRestartEvent('service: restart requested', { reason: String(reason ?? '') })
+      try {
+        notifyChannel(t('restart-starting'))
+      } catch {
+        // Плашка — украшение: решение о рестарте от неё не зависит.
+      }
+      handleExit()
+      return true
+    },
+  })
   const exitSeam = runtimeOptions.exitSeam
   const requestProcessExit = (request: ExitRequest): ExitRequestAnswer => {
     // A handoff is under way: no backstop, which could kill the supervisor of
