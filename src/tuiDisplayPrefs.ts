@@ -26,7 +26,7 @@ export const DEFAULT_STATUS_BAR: Readonly<StatusBarConfig> = Object.freeze({
   cache: true,
   tokens: false,
   cost: true,
-  tps: false,
+  tps: true,
   gitBranch: false,
   sessionTitle: false,
   sessionId: false,
