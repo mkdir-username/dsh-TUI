@@ -6,8 +6,10 @@ npm-пакет** `@deepseek-harness-tui/dsh-tui@0.19.0` из профиля `dsh
 на форк не было.
 
 - Клон: `/Users/username/Docs/dsh-tui-spike/fork` (upstream `ccch1mneyyy/dsh-TUI`, 0.19.0)
+- Ремоуты: `mine` = `mkdir-username/dsh-TUI` (личный, private) — пушим туда, ветка
+  `main` отслеживает `mine/main`; `origin` = upstream, только fetch/merge
 - Ветка одна, коммит порта: `25a15d4` («портированы локальные патчи ctrl-enter,
-  очереди /compact и restruct-plan»), 17 файлов, +581/−43, в origin не пушили
+  очереди /compact и restruct-plan»), 17 файлов, +581/−43
 - Источник патчей, которые ещё переносятся: `/Users/username/.dsh/bin/patch-dsh-tui.sh`
   и соседние `patch-dsh-*.mjs`, `statusline-patch/apply.sh`
 
