@@ -148,3 +148,11 @@ pnpm smoke                         # прочие гейты: boundary, source-h
   `~/.claude/dotfiles/dsh/plugins/dsh-session-restart`; в процессе, запущенном до
   появления плагина, вызов падает с «dshRestart service is missing» — нужен один
   человеческий `/restart`, дальше перезапуски агент делает сам.
+
+## Известная краснота гейтов (не наша)
+
+- `scripts/verify-todo-side-panel.tsx`: 43 проверки красные и на этом же дереве без правок
+  (`git show HEAD:src/components/GoalTodoPanel.tsx` → 43 фейла: секции `copy:` и
+  `status:` — пустой выделенный текст / не находится строка статуса). С правкой goal-строки
+  набор фейлов совпадает построчно. Разбирать отдельно: место правки — копирование через
+  `noSelect`-забор панели, не хром.
