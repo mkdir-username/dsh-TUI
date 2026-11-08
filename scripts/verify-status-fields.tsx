@@ -561,6 +561,23 @@ try {
       JSON.stringify(row))
   }
 
+  // R2b — the tps chip carries a number, not a sparkline, and that number is
+  // the average over past turns: a live per-chunk estimate jumps between 80 and
+  // 400 on one answer, so the footer used to twitch on every frame.
+  {
+    const lines = await capture(100, {}, channelWith({ tps: true }, {
+      tps: 40,
+      tpsSamples: [{ tps: 100, at: 0 }, { tps: 200, at: 1 }],
+    }))
+    const row = statusRow(lines)
+    check('R2b tps chip is an average without sparkline glyphs',
+      row.includes('150 tps')
+      // No gauge/sparkline blocks anywhere on the footer row: the glyphs lived
+      // in front of the number and made the chip twice as wide.
+      && !/[▁▂▃▄▅▆▇█▏▕]/u.test(row),
+      JSON.stringify(row))
+  }
+
   // R3 — right-head before the host right group, right-tail after it. The
   // compact row is one chain, so this proves ORDER, not the right edge; the
   // split-layout case (R15) owns the edge assertion.
