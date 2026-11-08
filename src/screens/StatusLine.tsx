@@ -4,7 +4,9 @@ import type { Color } from '../ink/styles.js'
 import { formatTokens } from '../terminal-utils/format.js'
 import { t } from '../i18n.js'
 import { applyPluginFieldsOrder, formatContextUsage, DEFAULT_STATUS_BAR, normalizeStatusBar, type StatusBarConfig } from '../tuiDisplayPrefs.js'
-import { estimateSessionCostSnapshotCny, isDeepSeekOfficialProvider, isPeakHour } from '../deepseekPricing.js'
+import { estimateSessionCostSnapshotCny, isDeepSeekOfficialProvider } from '../deepseekPricing.js'
+import { formatCostChip, formatUsd, loadFxInfo, loadFxRate } from '../statuslineCost.js'
+import { readSessionGoal, sessionStatusLine } from '../sessionGoal.js'
 import { getActiveBrand } from '../branding.js'
 import { ActivityLine, contextPressurePct, type ActivityLineValue } from '../components/ActivityLine.js'
 import { formatClock } from '../trajectory/format.js'
@@ -313,6 +315,13 @@ export function StatusLine({
     ? applyPluginFieldsOrder(pluginFields ?? NO_PLUGIN_FIELDS, statusBar.pluginFieldsOrder)
       .filter(field => columns >= field.minColumns)
     : NO_PLUGIN_FIELDS
+  // The session goal is a full sentence, not a footer cell: it gets a row of
+  // its own below the status line, read by this footer's own session — a pid
+  // walk would show another session's goal on a fresh one.
+  const row3Text = sessionStatusLine(
+    readSessionGoal(channel.sessionRef?.sessionId ?? channel.agentId),
+    channel.working,
+  )
   const inSlot = (slot: TuiStatusFieldSlot): FieldPart[] =>
     visibleFields.filter(field => field.slot === slot).map(toFieldPart)
   // Provider workspaces expose a remote display path alongside a host alias;
@@ -559,20 +568,17 @@ const selectionBadge = formatSelectionBadge(channel.selection)
           fallbackTokens: channel.tokens,
           fallbackModel: channel.model,
         })
-        return estimate !== undefined && (estimate.total > 0 || estimate.unpricedTokens > 0)
-          ? [{
+        const chip = formatCostChip(estimate, loadFxRate())
+        return chip === null
+          ? []
+          : [{
               key: 'cost',
               id: 'cost' as const,
-              node: (
-                <Text color="inactiveShimmer">
-                  {t('status-cost-label')}
-                  {estimate.total > 0
-                    ? <>¥{estimate.total.toFixed(2)} {t(isPeakHour() ? 'cost-now-peak' : 'cost-now-idle')}</>
-                    : <> {t('cost-unpriced', { tokens: formatTokens(estimate.unpricedTokens) })}</>}
-                </Text>
-              ),
+              // USD by the CBR cross, around the clock: the estimate already
+              // prices peak and idle tokens apart, so there is no half-price
+              // figure to hide at idle.
+              node: <Text color="inactiveShimmer">{chip}</Text>,
             }]
-          : []
       })()
       : []),
   ]
@@ -657,7 +663,7 @@ const selectionBadge = formatSelectionBadge(channel.selection)
       // interrupt" would promise an action the channel ignores by contract
       // (and a wedged turn can hold this state forever). Say what the state
       // is instead, so the key never looks dead.
-      ? t(channel.cancelPending ? 'statusline-hint-interrupting' : 'statusline-hint-working')
+      ? ''
       : statusBar.shortcutHint && !helpOpen
         ? t('statusline-hint-shortcuts')
         : ''
@@ -788,6 +794,11 @@ const selectionBadge = formatSelectionBadge(channel.selection)
             </Box>
           </Box>
         ) : null}
+        {row3Text === undefined ? null : (
+          <Box flexDirection="row" flexShrink={0}>
+            <Text wrap="wrap" dimColor>{row3Text}</Text>
+          </Box>
+        )}
         {/* Row 3: one stable hint/activity/detail area plus an optional
             wake. Permanently one line tall — hover swaps what it says,
             never whether it exists. */}
@@ -1043,17 +1054,22 @@ function buildHoverDetail(
       // total>0 gate hid the only explanation for an all-unpriced session.
       if (estimate === undefined || (estimate.total <= 0 && estimate.unpricedTokens <= 0)) return null
       const { input, output, cacheRead } = channel.tokens
+      // One currency for the whole breakdown: the CNY estimate is converted
+      // once, so the hover cannot mix glyphs.
+      const fx = loadFxInfo()
+      if (fx === undefined) return null
+      const usd = (amount: number): string => formatUsd(amount, fx.rate)
+      const rateNote = fx.asOf === undefined ? fx.rate.toFixed(2) : `${fx.rate.toFixed(2)} · ${fx.asOf}`
       return (
         <Text wrap="truncate">
-          {dim('≈¥')}{estimate.total.toFixed(2)} · {dim('peak ')}¥{estimate.peak.toFixed(2)}
-          {' · '}{dim('idle ')}¥{estimate.idle.toFixed(2)} · {dim('in ')}{formatTokens(input)}
+          {dim('≈')}{usd(estimate.total)} · {dim('in ')}{formatTokens(input)}
           {' · '}{dim('out ')}{formatTokens(output)} · {dim('cache ')}{formatTokens(cacheRead)}
-          {' · '}{t('cost-split-main', { cost: estimate.main.toFixed(2) })}
-          {' · '}{t('cost-split-subagent', { cost: estimate.subagent.toFixed(2) })}
+          {' · '}{dim('main ')}{usd(estimate.main)}
+          {' · '}{dim('subagent ')}{usd(estimate.subagent)}
+          {' · '}{dim('rate ')}{rateNote} · {t('status-cost-note')}
           {estimate.unpricedTokens > 0
             ? <>{' · '}{t('cost-unpriced', { tokens: formatTokens(estimate.unpricedTokens) })}</>
             : null}
-          {' · '}{t('status-cost-note')}
         </Text>
       )
     }

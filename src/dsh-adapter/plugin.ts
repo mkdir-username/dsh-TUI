@@ -1,4 +1,6 @@
 import { randomUUID } from 'node:crypto'
+import { execFileSync } from 'node:child_process'
+import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import React from 'react'
 import { SessionId } from '@deepseek-ai/dsh-session'
@@ -33,6 +35,65 @@ import { registerTuiChannel } from '../adapter/channel/host-registry.js'
 import { createChildStderrReporter, installChildStderrGuard } from './childStderr.js'
 import { removeClipboardImageDir } from '../utils/clipboard.js'
 import { appendCrashLog, serializeCrashDetail, unserializableCrashDetail, type CrashDetail } from '../utils/crashDetail.js'
+
+// Local: a vanished terminal must not kill the TUI with a stack trace. After the
+// pty is revoked every later write fails with EIO, and the unhandled error aborts
+// the process — leaving the session claimed while the user is back at the prompt.
+// Two shapes reach us: an 'error' event on the stream, and a synchronous throw out
+// of writeSync when Ink re-asserts terminal modes on the first keypress after an
+// idle gap. Both leave through the normal exit path and one crash.log line.
+const ptyName = (() => {
+  try {
+    return execFileSync('ps', ['-o', 'tty=', '-p', String(process.pid)], { encoding: 'utf8', timeout: 2000 }).trim() || '-'
+  } catch {
+    return '-'
+  }
+})()
+// The session ledger is the only place holding a pid → session pair, and by the
+// crash the pty is gone, so the tty has to be read at startup.
+const mountedSession = (): string => {
+  try {
+    const owners = (JSON.parse(readFileSync(`${process.env.HOME}/.dsh-tui/session-mounts.json`, 'utf8')) as {
+      owners?: { pid?: number; sessionIds?: string[] }[]
+    }).owners ?? []
+    return owners.find(owner => owner.pid === process.pid)?.sessionIds?.[0] ?? '-'
+  } catch {
+    return '-'
+  }
+}
+const leavePtyLost = (error: { message?: string; code?: string } | undefined): void => {
+  try {
+    const text = `dsh-tui crashed: eio pty closed · pid=${process.pid} · ppid=${process.ppid} · tty=${ptyName} · session=${mountedSession()} · fd=${process.stdout?.fd ?? 1} · ${error?.message ?? error?.code ?? 'unknown'}`
+    appendCrashLog({ message: text, text, summary: text, levels: [] })
+  } catch {
+    // Post-mortem only: the exit path below must still run.
+  }
+  try {
+    process.exit(1)
+  } catch {
+    // `exit` can be replaced; the native one always leaves.
+    ;(process as unknown as { reallyExit(code: number): void }).reallyExit(1)
+  }
+}
+for (const guardedStream of [process.stdin, process.stdout, process.stderr]) {
+  guardedStream?.on?.('error', (error: { code?: string }) => {
+    const code = error?.code
+    if (code !== 'EIO' && code !== 'EPIPE') return
+    leavePtyLost(error)
+  })
+}
+// writeSync into a dead pty throws before the stream ever emits an error event, so
+// the listener above never sees it. Anything that is not a pty failure stays with
+// the dsh-app-boot reporter.
+process.prependListener('uncaughtException', (error: { code?: string }) => {
+  const code = error?.code
+  if (code !== 'EIO' && code !== 'EPIPE') {
+    if (process.listenerCount?.('uncaughtException') <= 1) process.exit(1)
+    return
+  }
+  leavePtyLost(error)
+})
+
 import { pluginManagerOf, type PluginManagerView } from './plugin-manager.js'
 import { logForDebugging } from '../utils/debug.js'
 import { createTerminalNotifier, type NotificationMethod, type TaskNotifications } from '../ink/terminal-notification.js'
