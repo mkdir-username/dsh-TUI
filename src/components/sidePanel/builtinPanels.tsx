@@ -245,16 +245,8 @@ let registered = false
 export function registerBuiltinPanels(): void {
   if (registered) return
   registered = true
-  panelStore.register({
-    id: 'todo',
-    titleKey: 'panel-title-todo',
-    icon: '≡',
-    order: 10,
-    source: 'builtin',
-    mountPolicy: 'enabled',
-    defaultEnabled: true,
-    component: TodoPanelAdapter,
-  }, 'builtin')
+  // Local: no Todo panel — todo_write is cut from the agent preset, tasks live in
+  // .dev/<slug>/tasks.md and /goal, and an empty panel only eats the panel bar.
   panelStore.register({
     id: 'jobs',
     titleKey: 'panel-title-jobs',

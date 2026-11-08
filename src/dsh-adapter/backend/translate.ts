@@ -341,7 +341,9 @@ export function createDshTranslator(deps: DshTranslatorDeps) {
     }
     // Injected context (plugin/skill source) is model-facing only; it has no
     // transcript-facing text.
-    if (data.source.kind !== 'user') return [{ type: 'user.message', ...base, source: 'injected', text: '' }]
+    // Local: the handoff controller's injected verdict is shown in the chat, so the
+    // text has to survive translation.
+    if (data.source.kind !== 'user') return [{ type: 'user.message', ...base, source: 'injected', text: textOf(data.content) }]
     // compat(dsh 0.2.0, log): a 0.2.0 teammate's first prompt drops its identity block.
     const content = promptSeen ? data.content : withoutTeammateReminder(data).content
     promptSeen = true

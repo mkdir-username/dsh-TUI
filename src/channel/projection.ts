@@ -831,6 +831,22 @@ export function createChannelProjection(state: ProjectionState, deps: ChannelPro
       deps.rowIds.value += 1
       return
     }
+    // Local: dsh renders no text for hook-injected context, so the controller's
+    // verdict got a marker row of its own (the rating plugin still opens its window).
+    if (event.source === 'injected' && event.text) {
+      const plain = event.text.replace(/\x1b\][^\x1b]*\x1b\\/g, '').replace(/\x1b\[[\d;]*m/g, '')
+      const mark = /КОНТРОЛЬ СДАЧИ ХОДА №(\d+) \(hook stop-handoff-control[^,]*, вердикт (\w+), уверенность ([\d.]+)/.exec(plain)
+      if (mark !== null) {
+        appendRow({
+          id: deps.rowIds.value,
+          kind: 'notice',
+          text: '⚖ Контролёр №' + mark[1] + ': ' + mark[2] + ' ' + mark[3] + ' · /handoff-rate ' + mark[1],
+          seq: event.seq,
+        })
+        deps.rowIds.value += 1
+      }
+      return
+    }
     // Injected context (plugin/skill/goal source) is not a human bubble;
     // v1 renders direct human prompts only.
     if (event.source !== 'user') return
@@ -1418,8 +1434,8 @@ export function createChannelProjection(state: ProjectionState, deps: ChannelPro
         state.workingDirectory = event.cwd
         return
       case 'todo.write':
-        // The snapshot array is adopted as-is (the durable record owns it).
-        state.todos = event.items as TodoPanelItem[]
+        // Local: todo_write is cut from the preset, so snapshots from older
+        // sessions must not resurrect a stale "✓ 0/N" footer.
         return
       case 'preset.selected': {
         // A transcript marker so a replayed log shows which composition
