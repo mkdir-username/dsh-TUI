@@ -1,9 +1,22 @@
-# Локальный форк dsh-TUI — состояние на 2026-11-07
+# Локальный форк dsh-TUI — состояние на 2026-11-08 (миграция завершена)
+
+**`ds()` запускает форк.** Профиль `~/.dsh/profiles/dsh-tui` держит зависимость
+`"@deepseek-harness-tui/dsh-tui": "link:/Users/username/Docs/dsh-tui-spike/fork"`,
+поэтому TUI приезжает из этого дерева (`pnpm compile` → `lib/types`), а
+`~/.dsh/bin/patch-dsh-tui.sh` работает в режиме форка: ставит только ядровые
+патчи (`bin.js`, env-guard, transport-cause, ядровая часть plan-mode) и гоняет
+гейт паритета `~/.dsh/bin/verify-fork-parity.mjs` (14/14). TUI-правки в скрипте
+отключены — они уже в `src/**`. Откат на реестр: вернуть `package.json` из
+`package.json.bak-registry` в профиле и `pnpm install`.
+
+Маршрут модели: по умолчанию OpenCode Go (`opencode-go/deepseek-v4.1-flash`) по
+ключу `OPENCODE_API_KEY`; без ключа профиль уходит на прямой
+`deepseek-official/deepseek-flash` через барьер `:8091`. `web_search` и `/balance`
+всегда идут прямым DeepSeek через тот же барьер (в подписку OpenCode поиск не
+входит). Выбор — `/model` внутри TUI или `DSH_LLM_ROUTE=deepseek ds`.
 
 Форк клонирован, чтобы локальные патчи жили в git, а не в `sed` по собранному
-`lib/types` установленного пакета. `~/zshrc`-обёртка `ds()` **всё ещё запускает
-npm-пакет** `@deepseek-harness-tui/dsh-tui@0.19.0` из профиля `dsh-tui` — миграции
-на форк не было.
+`lib/types` установленного пакета.
 
 - Клон: `/Users/username/Docs/dsh-tui-spike/fork` (upstream `ccch1mneyyy/dsh-TUI`, 0.19.0)
 - Ремоуты: `mine` = `mkdir-username/dsh-TUI` (личный, private) — пушим туда, ветка
