@@ -34,3 +34,26 @@ export function logMouseDebug(message: string, fields?: Record<string, unknown>)
     // ignore — see doc comment
   }
 }
+
+/**
+ * Lifecycle breadcrumb: always appends to `~/.dsh-tui/lifecycle.log`.
+ *
+ * Why a file and not stderr: a TUI that quits without a signal and without a
+ * funnel request (stdin went away, or an in-app exit) otherwise leaves nothing
+ * behind — the session records `turn/end interrupted` but not what caused it,
+ * and the terminal keeps no log. Exit is rare enough that the file stays small.
+ * @param message - Stage name (e.g. 'app: exit requested').
+ * @param fields - Optional JSON-serialized fields appended to the line.
+ */
+export function logLifecycle(message: string, fields?: Record<string, unknown>): void {
+  try {
+    const suffix = fields === undefined ? '' : ` ${JSON.stringify(fields)}`
+    appendFileSync(
+      join(DATA_DIR, 'lifecycle.log'),
+      `${new Date().toISOString()} pid=${process.pid} ${message}${suffix}\n`,
+      { mode: 0o600 },
+    )
+  } catch {
+    // Diagnostics must never take the UI down.
+  }
+}

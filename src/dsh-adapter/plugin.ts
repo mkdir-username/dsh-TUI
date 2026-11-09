@@ -141,6 +141,7 @@ import {
 } from '../utils/keymap.js'
 import { attachHerdrIntegration } from '../herdr.js'
 import { logMouseDebug } from '../utils/debug.js'
+import { logLifecycle } from '../utils/debug.js'
 import { Chat } from '../screens/Chat.js'
 import { openInjectChannel, type InjectChannel, type InjectController } from './inject-channel.js'
 import { startSessionMountHeartbeat } from './session-mount-heartbeat.js'
@@ -439,7 +440,25 @@ async function showWindowsToast(input: WindowsToastInput): Promise<WindowsToastR
   }
 }
 
+/** Один раз на процесс: метку выхода ставит первая сборка дерева. */
+let exitBreadcrumbInstalled = false
+
 export async function apply(ctx: Context, runtimeConfig: RuntimeConfig<Config>, configOwner: Context = ctx, runtimeOptions: RuntimeApplyOptions = {}): Promise<void> {
+  // Профильный запуск идёт не через host-entry, поэтому метку выхода ставим здесь —
+  // один раз на процесс, до остальной сборки. Без неё выход, не дошедший до воронки,
+  // не оставляет следа: в сессии только `turn/end interrupted`.
+  if (!exitBreadcrumbInstalled) {
+    exitBreadcrumbInstalled = true
+    process.once('exit', (code) => {
+      logLifecycle('process: exit', {
+        code,
+        stdinEnded: process.stdin.readableEnded,
+        stdinDestroyed: process.stdin.destroyed,
+        stdoutTty: process.stdout.isTTY,
+        restartChild: process.env.DSH_TUI_RESTART_CHILD === '1',
+      })
+    })
+  }
   const config = configValues<Config>(runtimeConfig)
   const taskNotifier = createTerminalNotifier(process.stdout)
   const { settings: notificationSettings, configure: configureTaskNotifications } = createTaskNotificationSettings(taskNotifier, {
@@ -3483,6 +3502,10 @@ export function createExitFunnel(deps: { onUserExit: (error?: unknown) => void }
       if (teardown) return false
       if (exited) return false
       exited = true
+      logLifecycle('funnel: user exit', {
+        error: error === undefined ? null : String((error as { message?: unknown }).message ?? error),
+        stdoutTty: process.stdout.isTTY,
+      })
       deps.onUserExit(error)
       return true
     },

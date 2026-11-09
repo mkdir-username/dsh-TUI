@@ -11,7 +11,7 @@ import { markBoot } from '../utils/bootTrace.js'
 import { configuredBackend, delegatesToProfile, entryKernel, hostProfile } from '../hostEntryRoute.js'
 import { HANDOFF_ACK_FD_ENV } from '../handoffAck.js'
 import { HOST_NOTICE_ENV, type KernelBackendId } from '../kernelPrefs.js'
-import { logForDebugging } from '../utils/debug.js'
+import { logForDebugging, logLifecycle } from '../utils/debug.js'
 import { setProcessName } from '../utils/processName.js'
 import { cmdEscapeArgument } from '../utils/shellQuote.js'
 import type { Context } from '@deepseek-ai/cordis'
@@ -189,6 +189,18 @@ async function runInEntry(kernelBeforeHost: KernelBackendId): Promise<void> {
     seam: exitSeam,
     disposeRoot: () => disposeEntryRoot(ctx),
     log: logRestartEvent,
+  })
+  // Exit breadcrumb: a quit that never reaches the funnel (stdin went away, or
+  // the tree unmounted on its own) used to leave no trace at all — the session
+  // log shows `turn/end interrupted` and nothing names the cause.
+  process.once('exit', (code) => {
+    logLifecycle('process: exit', {
+      code,
+      stdinEnded: process.stdin.readableEnded,
+      stdinDestroyed: process.stdin.destroyed,
+      stdoutTty: process.stdout.isTTY,
+      restartChild: env.DSH_TUI_RESTART_CHILD === '1',
+    })
   })
   // Only a host root gets a composition (DSH without one was delegated above).
   const slot = root === undefined ? undefined : createEntrySlot(kernel === 'dsh', root.kernelVersion)

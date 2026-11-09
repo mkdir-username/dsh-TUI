@@ -1,6 +1,6 @@
 import React, { PureComponent, type ReactNode } from "react";
 import { updateLastInteractionTime } from "../../bootstrap/state.js";
-import { logForDebugging } from "../../utils/debug.js";
+import { logForDebugging, logLifecycle } from "../../utils/debug.js";
 import { stopCapturingEarlyInput } from "../../utils/earlyInput.js";
 import { isEnvTruthy } from "../../utils/envUtils.js";
 import { isMouseClicksDisabled } from "../../utils/fullscreen.js";
@@ -487,7 +487,13 @@ export default class App extends PureComponent<Props, State> {
 			</TerminalWriteProvider>
 		);
 	}
+	/** Lifecycle breadcrumb: a pty that goes away surfaces as stdin end, not as a signal. */
+	private stdinEnded = false;
 	override componentDidMount() {
+		this.props.stdin.once("end", () => {
+			this.stdinEnded = true;
+			logLifecycle("stdin: end", { tty: this.props.stdin.isTTY });
+		});
 		// In accessibility mode, keep the native cursor visible for screen magnifiers and other tools
 		if (
 			this.props.stdout.isTTY &&
@@ -855,6 +861,11 @@ export default class App extends PureComponent<Props, State> {
 		}
 	};
 	handleExit = (error?: Error): void => {
+		logLifecycle("app: exit requested", {
+			error: error?.message ?? null,
+			stdinEnded: this.stdinEnded,
+			stdinDestroyed: this.props.stdin.destroyed,
+		});
 		if (this.isRawModeSupported()) {
 			this.handleSetRawMode(false);
 		}
