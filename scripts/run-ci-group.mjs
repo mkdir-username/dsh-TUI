@@ -526,6 +526,13 @@ const GROUPS = {
 // `[<35;10`、Esc 后接 `[` 必须原样通过）与 hold 上界/到期释放（>1000ms 或 >64B
 // 必须把持有字节按普通键回放，不丢字节、不重复）。
     ["verify-mouse-report-fragments", ['node', '--import', 'tsx/esm', 'scripts/verify-mouse-report-fragments.tsx']],
+// 单行输入框共享编辑器回归：agent-message 发送框、btw 追问框、插件 input 对话框
+// 与问卷/plan-review 用同一套键位（按词/按行、Ctrl+A/E/W/U、Option+Backspace、
+// 码点步进、粘贴压平）；btw 的草稿归 store（UTF-16 caret），边界处换算码点索引；
+// 对话框保留自己的 INPUT_CELLS 显示列上限（打字越界拒绝、粘贴截断）。
+    ["verify-agent-message-editing", ['node', '--import', 'tsx/esm', 'scripts/verify-agent-message-editing.tsx']],
+    ["verify-btw-composer-keys", ['node', '--import', 'tsx/esm', 'scripts/verify-btw-composer-keys.ts']],
+    ["verify-extension-input-editing", ['node', '--import', 'tsx/esm', 'scripts/verify-extension-input-editing.tsx']],
 // Chat 覆盖层搜索框编辑回归（Ctrl+R 历史搜索、转录模式 `/` 搜索）：与共享
 // answer-field 核心同一套码点步进——⌫/Del/←/→ 不得把 emoji 拆成孤立代理项
 // （查询会渲染成替换符且再也匹配不上），括号粘贴压平且不提交。

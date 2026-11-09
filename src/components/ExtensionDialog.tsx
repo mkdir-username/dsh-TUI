@@ -33,7 +33,6 @@ import React from 'react'
 import { t } from '../i18n.js'
 import { Box, Text, useInput, useTerminalSize } from '../ui.js'
 import { SearchBox } from './SearchBox.js'
-import { stringWidth } from '../ink/stringWidth.js'
 import { isPlainReturnInput } from '../utils/modifiers.js'
 import { actionMatches } from '../utils/keymap.js'
 import { readClipboard } from '../utils/clipboard.js'
@@ -42,7 +41,7 @@ import { ListItem } from './design-system/ListItem.js'
 import { HintLine } from './design-system/HintLine.js'
 import { listWindow } from './listWindow.js'
 import { INPUT_CELLS, type TuiDialogAnswer, type TuiDialogSnapshot } from '../dsh-adapter/dialogs.js'
-import { capCells, flattenPasteInline } from '../dsh-adapter/sanitize.js'
+import { useAnswerField } from './questions/useAnswerField.js'
 
 export type ExtensionDialogProps = {
   /** The pending dialog (TuiDialogStore snapshot; `key` remounts per dialog). */
@@ -223,45 +222,13 @@ function InputDialog({
   onDecide: (value: TuiDialogAnswer) => void
   onCancel: () => void
 }): React.ReactNode {
-  const [value, setValue] = React.useState(dialog.initial)
-  const [cursor, setCursor] = React.useState<number>(() => [...dialog.initial].length)
-  // Synchronous source of truth for the handlers (see the module header):
-  // two Backspaces in one stdin chunk must BOTH delete, each seeing the
-  // other's result. The cursor counts CODE POINTS, not UTF-16 units — an
-  // emoji is one step and can never be split into a lone surrogate.
-  const valueRef = React.useRef(dialog.initial)
-  const cursorRef = React.useRef([...dialog.initial].length)
-  const applyEdit = (nextValue: string, nextCursor: number): void => {
-    valueRef.current = nextValue
-    cursorRef.current = nextCursor
-    setValue(nextValue)
-    setCursor(nextCursor)
-  }
-  /** True while the component is mounted (async clipboard continuation
-   *  guard: the dialog can close before the read resolves). */
-  const mountedRef = React.useRef(true)
-  React.useEffect(() => () => { mountedRef.current = false }, [])
-  /** True while a clipboard read is in flight (ignore repeat Ctrl+V). */
-  const pasteBusyRef = React.useRef(false)
+  // The value is the shared single-line answer field: refs mutated
+  // synchronously per key (a batched chunk must compose), code-point caret,
+  // the macOS/readline contract — plus the display-cell cap this dialog has
+  // always enforced (typing past it is refused, paste is truncated).
+  const field = useAnswerField(dialog.initial, { multiline: false, maxCells: INPUT_CELLS })
 
-  /** Insert one chunk under the single-line + cell-cap contract: content
-   *  that fits lands at the caret; oversized PASTE content is truncated
-   *  (mayCap) while oversized typing stays ignored — the value never
-   *  exceeds INPUT_CELLS cells either way. */
-  const insertChunk = (chunk: string, mayCap: boolean): void => {
-    const points = [...valueRef.current]
-    const at = cursorRef.current
-    const chunkPoints = [...chunk].length
-    const candidate = points.slice(0, at).join('') + chunk + points.slice(at).join('')
-    if (stringWidth(candidate) <= INPUT_CELLS) {
-      applyEdit(candidate, at + chunkPoints)
-    } else if (mayCap) {
-      const capped = capCells(candidate, INPUT_CELLS)
-      applyEdit(capped, Math.min(at + chunkPoints, [...capped].length))
-    }
-  }
-
-  useInput((input, key, event) => {
+  useInput((input, key) => {
     if (key.escape || (key.ctrl && input === 'c')) {
       onCancel()
       return
@@ -270,69 +237,20 @@ function InputDialog({
     // submitted — the key carries isPasted, and isPlainReturnInput refuses
     // pastes before the plain-return test.
     if (isPlainReturnInput(input, key)) {
-      onDecide(valueRef.current)
+      onDecide(field.textRef.current)
       return
     }
-    const points = [...valueRef.current]
-    const at = cursorRef.current
-    // Single-line editing, same key set as the transcript search bar.
-    if (key.backspace) {
-      if (at > 0) {
-        points.splice(at - 1, 1)
-        applyEdit(points.join(''), at - 1)
-      }
+    if (key.isPasted === true) {
+      if (input !== '') field.insertPasted(input, true)
       return
     }
-    if (key.delete) {
-      if (at < points.length) {
-        points.splice(at, 1)
-        applyEdit(points.join(''), at)
-      }
-      return
-    }
-    if (key.leftArrow) {
-      if (at > 0) applyEdit(valueRef.current, at - 1)
-      return
-    }
-    if (key.rightArrow) {
-      if (at < points.length) applyEdit(valueRef.current, at + 1)
-      return
-    }
-    if (key.home) {
-      applyEdit(valueRef.current, 0)
-      return
-    }
-    if (key.end) {
-      applyEdit(valueRef.current, points.length)
-      return
-    }
-    // Clipboard paste (default Ctrl+V / Alt+V — the keymap `paste`
-    // binding): raw mode hands the key to the app, so the clipboard is
-    // read here. Only text offers insert — files/images have no text form
-    // in a single-line value, and read failures are silently ignored (the
-    // dialog has no notice channel; repeat keys while a read is in flight
-    // are dropped by the busy guard).
+    // Clipboard paste (default Ctrl+V / Alt+V — the keymap `paste` binding):
+    // read failures stay silent (the dialog has no notice channel).
     if (actionMatches('paste', input, key)) {
-      if (!pasteBusyRef.current) {
-        pasteBusyRef.current = true
-        void readClipboard()
-          .then(content => {
-            if (!mountedRef.current) return
-            if (content?.kind === 'text' && content.text !== '') {
-              insertChunk(flattenPasteInline(content.text), true)
-            }
-          })
-          .finally(() => { pasteBusyRef.current = false })
-      }
+      field.pasteFromClipboard(true, () => {})
       return
     }
-    if (input && !key.ctrl && !key.meta && !key.super && !key.tab && !key.escape) {
-      // A bracketed paste arrives as one chunk and may carry newlines/control
-      // chars (even complete ANSI sequences) — this is a single-line panel,
-      // so strip ANSI and flatten controls to spaces (typed text is already
-      // control-free; mayCap only applies to paste).
-      insertChunk(event.isPasted ? flattenPasteInline(input) : input, event.isPasted === true)
-    }
+    field.handleKey(input, key, { onSubmit: () => onDecide(field.textRef.current) })
   }, { isActive: true })
 
   return (
@@ -344,8 +262,8 @@ function InputDialog({
           </Text>
         </Box>
         <SearchBox
-          query={value}
-          cursorOffset={[...value].slice(0, cursor).join('').length}
+          query={field.text}
+          cursorOffset={[...field.text].slice(0, field.cursor).join('').length}
           placeholder={dialog.placeholder ?? ''}
           placeholderAlign="left"
           prefix=""

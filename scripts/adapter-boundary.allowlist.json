@@ -24,10 +24,6 @@
       "to": "dsh-adapter/dialogs.js"
     },
     {
-      "from": "components/ExtensionDialog.tsx",
-      "to": "dsh-adapter/sanitize.js"
-    },
-    {
       "from": "components/JobsPanel.tsx",
       "to": "dsh-adapter/jobs.js"
     },
