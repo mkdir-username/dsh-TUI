@@ -420,6 +420,7 @@ export function Chat({
   extensionStatus,
   activityStore,
   extensionShortcuts,
+  onCancelPendingResume,
   themeHost,
   onExit,
   onUpdate,
@@ -467,6 +468,7 @@ export function Chat({
   activityStore?: ActivityStore
   /** Host-only keyboard shortcut dispatch path. */
   extensionShortcuts?: TuiShortcutHost
+  onCancelPendingResume?: () => boolean
   /** Optional runtime theme host; static JSON themes work without it. */
   themeHost?: TuiThemeHost
   onExit: () => void
@@ -5721,6 +5723,14 @@ export function Chat({
       // while a manual compaction runs, stopping it is what the status row
       // promises (and the host closes the bracket cleanly on abort).
       channel.cancelCompact()
+      event.stopImmediatePropagation()
+    } else if (
+      key.escape
+      && !helpOpen
+      && !channel.working
+      && !promptControllerRef.current?.vimActive()
+      && onCancelPendingResume?.() === true
+    ) {
       event.stopImmediatePropagation()
     } else if (actionMatches('transcript', input, key) && !helpOpen) {
       // Leaving transcript mode (default Ctrl+O) — search was already
