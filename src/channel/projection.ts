@@ -35,6 +35,15 @@ const MAX_KEYED_TOASTS = 32
 /** Short buffered deliveries are not reliable decode-rate samples. */
 const MIN_TPS_DECODE_MS = 500
 
+/**
+ * The live readout averages only the tail of the decode. A cumulative turn
+ * average converges after a few steps and then rounds to one integer for
+ * minutes — measured on a 42-step turn: 38 tps on seven steps in a row — which
+ * reads as a dead widget. Three seconds keeps the digits alive without the
+ * per-chunk 80…400 twitch the older instantaneous readout had.
+ */
+const TPS_WINDOW_MS = 3_000
+
 /** The channel state slice the projector writes. */
 export interface ProjectionState extends Mutable<Pick<ChannelUi,
   | 'thinkingFold' | 'activeToolCount' | 'spinnerMode' | 'goal' | 'contextSegments' | 'tokens' | 'mainCost'
@@ -125,6 +134,8 @@ export function createChannelProjection(state: ProjectionState, deps: ChannelPro
       step: number
       firstTokenTime: number | undefined
       outputEstimate: number
+      /** Recent deltas of this step, oldest first, bounded by TPS_WINDOW_MS. */
+      window: { time: number; tokens: number }[]
     }
     | undefined
   /** The open turn's per-step token contributions (real or estimated): a
@@ -260,6 +271,7 @@ export function createChannelProjection(state: ProjectionState, deps: ChannelPro
     if (tpsStep !== undefined && tpsStep.turn === turn && tpsStep.step === step) {
       tpsStep.firstTokenTime = undefined
       tpsStep.outputEstimate = 0
+      tpsStep.window.length = 0
     }
     updateSpinnerMode()
   }
@@ -535,13 +547,18 @@ export function createChannelProjection(state: ProjectionState, deps: ChannelPro
       tps.step === step &&
       isTokenDelta(delta)
     ) {
+      const chunkTokens = tokenDeltaEstimate(delta)
       tps.firstTokenTime ??= time
-      tps.outputEstimate += tokenDeltaEstimate(delta)
-      const elapsedMs = Math.max(0, time - tps.firstTokenTime)
-      if (elapsedMs > MIN_TPS_DECODE_MS) {
-        const decodeMs = tpsTurnDecodeMs + elapsedMs
-        const outputTokens = tpsTurnDecodeTokens + Math.ceil(tps.outputEstimate)
-        state.tps = outputTokens / (decodeMs / 1000)
+      tps.outputEstimate += chunkTokens
+      const window = tps.window
+      window.push({ time, tokens: chunkTokens })
+      const cutoff = time - TPS_WINDOW_MS
+      while (window.length > 1 && window[0].time < cutoff) window.shift()
+      const span = time - window[0].time
+      if (span > MIN_TPS_DECODE_MS) {
+        let windowTokens = 0
+        for (const sample of window) windowTokens += sample.tokens
+        state.tps = Math.ceil(windowTokens) / (span / 1000)
       }
     }
     updateSpinnerMode()
@@ -715,9 +732,9 @@ export function createChannelProjection(state: ProjectionState, deps: ChannelPro
       if (outputTokens !== undefined) {
         tpsTurnDecodeTokens += outputTokens
         tpsTurnSampled = true
-        if (tpsTurnDecodeMs > 0) {
-          state.tps = tpsTurnDecodeTokens / (tpsTurnDecodeMs / 1000)
-        }
+        // This step's own rate, not the turn's running total: the accumulate
+        // below still feeds the exact average the turn-end readout shows.
+        if (decodeMs > 0) state.tps = outputTokens / (decodeMs / 1000)
       }
       // A backend can signal hidden generation without any content delta.
       // Keep its timed span for later usage, without sampling a zero rate.
@@ -1211,6 +1228,7 @@ export function createChannelProjection(state: ProjectionState, deps: ChannelPro
             step: event.step,
             firstTokenTime: undefined,
             outputEstimate: 0,
+            window: [],
           }
         }
         return

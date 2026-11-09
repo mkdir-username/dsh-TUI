@@ -5,6 +5,8 @@
  * - reasoning and tool-call deltas both establish the first-token boundary
  * - live script-weighted estimates (ASCII = chars/4, CJK ~1.4 chars/token) use
  *   every token delta, then provider usage settles it
+ * - the live readout averages only the last seconds of decode, so a long turn
+ *   keeps moving instead of converging on one rounded integer
  * - a retry-like delay stays inside the same step's decode span
  * - missing provider usage falls back to the streamed character estimate
  * - empty deltas do not start decode; a name-only tool delta does
@@ -248,6 +250,43 @@ for (const [index, duration] of [0, 1, 499, 500, 501].entries()) {
     ? near(channel.tps, 500 / (duration / 1000)) && channel.tpsSamples.length === previousSamples + 1
     : channel.tps === previousRate && channel.tpsSamples.length === previousSamples)
   check(`DSH ${duration}ms billing is not filtered or duplicated`, channel.tokens.output === previousOutput + 500)
+}
+
+// Turn 30: the live readout follows the last seconds of decode. A cumulative
+// turn average sits at (2000 + 20) / 2 s = 1010 through the whole slow second
+// step, which is why the footer digit looked dead in long turns.
+{
+  const start = B + 700_000
+  emit('turn/start', start, { turn: 30 })
+  emit('step/start', start + 100, { turn: 30, step: 1 })
+  emit('assistant/chunk', start + 1_000, {
+    turn: 30, step: 1, chunk: { type: 'text-delta', index: 0, text: 'a'.repeat(4_000) },
+  })
+  emit('assistant/chunk', start + 2_000, {
+    turn: 30, step: 1, chunk: { type: 'text-delta', index: 0, text: 'a'.repeat(4_000) },
+  })
+  check('live window reads the current decode rate', near(channel.tps, 2_000), String(channel.tps))
+  emit('assistant/message', start + 2_000, message(30, 1, 2_000))
+  emit('step/end', start + 2_100, { turn: 30, step: 1 })
+  emit('step/start', start + 10_000, { turn: 30, step: 2 })
+  emit('assistant/chunk', start + 11_000, {
+    turn: 30, step: 2, chunk: { type: 'text-delta', index: 0, text: 'a'.repeat(40) },
+  })
+  emit('assistant/chunk', start + 12_000, {
+    turn: 30, step: 2, chunk: { type: 'text-delta', index: 0, text: 'a'.repeat(40) },
+  })
+  check('a slow step shows its own rate, not the turn average 1010', near(channel.tps, 20), String(channel.tps))
+  emit('assistant/message', start + 12_000, message(30, 2, 20))
+  emit('step/end', start + 12_100, { turn: 30, step: 2 })
+  emit('step/start', start + 20_000, { turn: 30, step: 3 })
+  emit('assistant/chunk', start + 21_000, {
+    turn: 30, step: 3, chunk: { type: 'text-delta', index: 0, text: 'a'.repeat(400) },
+  })
+  emit('assistant/chunk', start + 22_000, {
+    turn: 30, step: 3, chunk: { type: 'text-delta', index: 0, text: 'a'.repeat(400) },
+  })
+  check('samples older than the window leave the average', near(channel.tps, 200), String(channel.tps))
+  emit('turn/end', start + 22_100, completed(30))
 }
 
 // Rebuild from durable history. prepareReplayEvents intentionally drops
