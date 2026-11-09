@@ -155,7 +155,7 @@ export function btwComposerKey(state: BtwComposerState, input: string, key: BtwK
     // 纯控制字符的块（Shift+Enter 的 CR 回退）是按键回退，不是文本。
     if (typed.trim() === '' && typed !== input) return {}
     const next = insertAt(value, typed)
-    return { state: { text: next.text, caret: next.cursor } }
+    return { state: { text: next.text, caret: toCaret(next.text, next.cursor) } }
   }
   return null
 }

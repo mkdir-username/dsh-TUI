@@ -73,6 +73,18 @@ check('5g: Home/End are absolute in a single line',
 check('5h: typing inserts at the caret',
   stateOf(btwComposerKey({ text: 'ac', caret: 1 }, 'b', {}))?.text === 'abc')
 
+// ── Typing past an emoji keeps the caret in UTF-16 units ─────────────
+// The store caret and composerWindow are UTF-16 offsets; the shared core
+// counts code points. A raw code-point index written back as `caret` puts
+// the next keystroke BEFORE the previous character.
+{
+  const first = stateOf(btwComposerKey({ text: '👍a', caret: 3 }, 'b', {}))
+  const second = first === undefined ? undefined : stateOf(btwComposerKey(first, 'c', {}))
+  check('6: typing after an emoji keeps the UTF-16 caret and appends in order',
+    first?.text === '👍ab' && first?.caret === 4 && second?.text === '👍abc' && second?.caret === 5,
+    JSON.stringify({ first, second }))
+}
+
 if (failures > 0) {
   console.log(`\n${failures} btw-composer key check(s) FAILED`)
   process.exit(1)
