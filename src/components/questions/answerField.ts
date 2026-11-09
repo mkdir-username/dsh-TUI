@@ -172,10 +172,6 @@ export interface AnswerWindow {
   readonly end: number
   /** Caret index relative to `start`. */
   readonly caret: number
-  /** Logical lines in the whole answer. */
-  readonly lineCount: number
-  /** The caret sits on a painted newline (the cell closes that line). */
-  readonly caretOnNewline: boolean
 }
 
 export function answerWindow(points: readonly string[], cursor: number, maxLines: number): AnswerWindow {
@@ -193,14 +189,7 @@ export function answerWindow(points: readonly string[], cursor: number, maxLines
   const end = startLine + maxLines < lineStarts.length
     ? lineStarts[startLine + maxLines]! - 1
     : points.length
-  const caret = cursor - start
-  return {
-    start,
-    end,
-    caret,
-    lineCount: lineStarts.length,
-    caretOnNewline: start + caret < points.length && points[start + caret] === '\n',
-  }
+  return { start, end, caret: cursor - start }
 }
 
 /** The caret cell split: head, the inverted cell glyph, tail. A caret on a

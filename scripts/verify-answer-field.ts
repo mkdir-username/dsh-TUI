@@ -45,7 +45,7 @@ check('3d: an option-row paste appends at the tail', field.pasteInto(value('ab',
 // ── The multi-line window ────────────────────────────────────────────
 const win = field.answerWindow([...'one\ntwo\nthree'], 9, 2)
 check('4a: the window keeps the caret line and drops the opening newline',
-  win.start === 4 && win.end === 13 && win.caret === 5 && win.lineCount === 3)
+  win.start === 4 && win.end === 13 && win.caret === 5)
 check('4b: a short answer paints whole', (() => {
   const whole = field.answerWindow([...'one\ntwo'], 3, 6)
   return whole.start === 0 && whole.end === 7 && whole.caret === 3
