@@ -533,6 +533,9 @@ const GROUPS = {
     ["verify-agent-message-editing", ['node', '--import', 'tsx/esm', 'scripts/verify-agent-message-editing.tsx']],
     ["verify-btw-composer-keys", ['node', '--import', 'tsx/esm', 'scripts/verify-btw-composer-keys.ts']],
     ["verify-extension-input-editing", ['node', '--import', 'tsx/esm', 'scripts/verify-extension-input-editing.tsx']],
+// 能力表单 Ctrl+U 回归：readline「删到行首」而不是清空整个字段——单行字段里
+// 光标前的部分消失、光标后的后缀保留（修复前 1234 + Home + →→ + Ctrl+U 得到空）。
+    ["verify-provider-model-ctrl-u", ['node', '--import', 'tsx/esm', 'scripts/verify-provider-model-ctrl-u.tsx']],
 // Chat 覆盖层搜索框编辑回归（Ctrl+R 历史搜索、转录模式 `/` 搜索）：与共享
 // answer-field 核心同一套码点步进——⌫/Del/←/→ 不得把 emoji 拆成孤立代理项
 // （查询会渲染成替换符且再也匹配不上），括号粘贴压平且不提交。

@@ -4,6 +4,7 @@ import { formatModelReasoning, parseModelCapacity, parseModelReasoning } from '.
 import { cleanRenderText, flattenPasteInline } from '../../channel/sanitize.js'
 import { t } from '../../i18n.js'
 import { SearchBox } from '../SearchBox.js'
+import { deleteRange } from './answerField.js'
 import { Box, Text, useInput, useTerminalSize } from '../../ui.js'
 import { readClipboard, type ClipboardRead } from '../../utils/clipboard.js'
 import { actionMatches } from '../../utils/keymap.js'
@@ -177,7 +178,10 @@ export function ProviderModelEditor({ model, editor, onClose, onAbort, readClipb
       return
     }
     if (key.ctrl && input === 'u') {
-      edit(name, '', 0)
+      // Readline Ctrl+U deletes to the LINE START, not the whole field: the
+      // suffix after the caret survives (the shared answer-field rule).
+      const next = deleteRange({ text: points.join(''), cursor: at }, 0, at)
+      edit(name, next.text, next.cursor)
       return
     }
     if (key.leftArrow) {

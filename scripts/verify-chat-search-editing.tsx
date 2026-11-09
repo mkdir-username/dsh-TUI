@@ -171,6 +171,64 @@ async function feed(stdin: PassThrough, sequence: string): Promise<void> {
   await chat.done()
 }
 
+// ── 4. History search: the macOS/readline layer ────────────────────
+{
+  const chat = await mountChat()
+  chat.stdin.write('\x12')
+  await settled(() => chat.screen().includes('搜索历史'))
+  chat.stdin.write('foo bar baz')
+  await settled(() => chat.screen().includes('foo bar baz'))
+  await feed(chat.stdin, '\x17') // Ctrl+W
+  chat.stdin.write('Q')
+  const deleted = await settled(() => chat.screen().includes('foo bar Q'))
+  check('4a: history search Ctrl+W deletes the previous word', deleted, chat.screen())
+  await chat.done()
+}
+
+{
+  const chat = await mountChat()
+  chat.stdin.write('\x12')
+  await settled(() => chat.screen().includes('搜索历史'))
+  chat.stdin.write('abcde')
+  await settled(() => chat.screen().includes('abcde'))
+  await feed(chat.stdin, '\x1b[H') // Home
+  await feed(chat.stdin, '\x1b[C') // →
+  await feed(chat.stdin, '\x1b[C') // →
+  await feed(chat.stdin, '\x15') // Ctrl+U
+  // The discriminator is the WHOLE old query disappearing: any suffix is a
+  // substring of the old text, so "shows cde" alone would pass vacuously.
+  const suffix = await settled(() => !chat.screen().includes('abcde') && chat.screen().includes('cde'))
+  check('4b: history search Ctrl+U keeps the suffix after the caret', suffix, chat.screen())
+  await chat.done()
+}
+
+{
+  const chat = await mountChat()
+  chat.stdin.write('\x12')
+  await settled(() => chat.screen().includes('搜索历史'))
+  chat.stdin.write('alpha beta gamma')
+  await settled(() => chat.screen().includes('alpha beta gamma'))
+  await feed(chat.stdin, '\x1b[1;3D') // Alt+←
+  chat.stdin.write('X')
+  const jumped = await settled(() => chat.screen().includes('alpha beta Xgamma'))
+  check('4c: history search Alt+← jumps by words', jumped, chat.screen())
+  await chat.done()
+}
+
+// ── 5. Transcript search: the macOS/readline layer ─────────────────
+{
+  const chat = await mountChat()
+  await feed(chat.stdin, '\x0f') // Ctrl+O — transcript mode
+  await feed(chat.stdin, '/') // open transcript search
+  chat.stdin.write('foo bar baz')
+  await settled(() => chat.screen().includes('无匹配'))
+  await feed(chat.stdin, '\x17') // Ctrl+W
+  chat.stdin.write('Q')
+  const deleted = await settled(() => chat.screen().includes('foo bar Q'))
+  check('5: transcript search Ctrl+W deletes the previous word', deleted, chat.screen())
+  await chat.done()
+}
+
 console.log(results.join('\n'))
 if (failures > 0) {
   console.log(`\n${failures} chat search editing check(s) FAILED`)

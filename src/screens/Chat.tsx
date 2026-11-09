@@ -10,14 +10,14 @@ import { envThemeOverride } from '../components/design-system/ThemeProvider.js'
 import { resolveBrand, setActiveBrand } from '../branding.js'
 import { hasPath } from '../dsh-adapter/settingsEditor.js'
 import { planReload, type ReloadKind } from '../reload.js'
-import { AlternateScreen, Box, Image, Text, InputCaret, useInput, useApp, useStdin, ScrollBox, type ScrollBoxHandle, useTheme, useTerminalSize } from '../ui.js'
+import { AlternateScreen, Box, Image, Text, InputCaret, useInput, useApp, useStdin, ScrollBox, type Key, type ScrollBoxHandle, useTheme, useTerminalSize } from '../ui.js'
 import * as tuiKit from '../ui.js'
 import { usePageInset } from '../components/PageMargin.js'
 import { POINTER } from '../terminal-utils/figures.js'
 import { previousCodePoint } from '../components/AgentMessageComposer.js'
 import { resetRevealSession } from '../components/smoothReveal.js'
 import { RevealScopeContext } from '../components/revealScope.js'
-import { isPlainReturnInput } from '../utils/modifiers.js'
+import { isMod, isPlainReturnInput } from '../utils/modifiers.js'
 import { actionMatches, effectiveComboDisplay, primaryComboString } from '../utils/keymap.js'
 import { formatTokens } from '../terminal-utils/format.js'
 import { formatClock } from '../trajectory/format.js'
@@ -80,7 +80,7 @@ import { normalizeScrollGutter } from '../tuiDisplayPrefs.js'
 import { OverlayAbove } from '../components/OverlayAbove.js'
 import { TooltipLayer } from '../components/Tooltip.js'
 import { PromptInput, composerImageRefsForText, type PromptController } from '../components/PromptInput.js'
-import { backspaceAt, deleteAt, insertAt, nextPoint, previousPoint } from '../components/questions/answerField.js'
+import { backspaceAt, deleteAt, deleteRange, insertAt, lineEnd, lineStart, nextPoint, previousPoint, wordEnd, wordStart } from '../components/questions/answerField.js'
 import { flattenPasteInline } from '../channel/sanitize.js'
 import { turnUsageParts } from '../components/TurnUsageRow.js'
 import { AgentTranscriptScene } from './AgentTranscriptScene.js'
@@ -412,6 +412,40 @@ function peekKey(image: TranscriptImage, title: string | undefined): string {
 
 /** Distinguishes reveal keyspaces of concurrently mounted Chat roots. */
 let revealRootSequence = 0
+
+/**
+ * The overlay search fields' editing keys: the shared answer-field core plus
+ * the macOS/readline layer — word jumps (Alt/Option+←/→, Ctrl+←/→, Ghostty's
+ * ESC b/f), Ctrl+A/E line edges, Ctrl+W / Option+Backspace and Ctrl+U. These
+ * are single-line fields, so a line edge is a field edge. Returns null when
+ * the key is not an edit (the caller keeps its own semantics).
+ */
+function editOverlayField(
+  text: string,
+  cursor: number,
+  input: string,
+  key: Key,
+): { text: string; cursor: number } | null {
+  const value = { text, cursor }
+  // Word/line deletions come BEFORE the plain Backspace branch: an
+  // Option+Backspace must not degrade into one character.
+  if ((isMod(key) && input === 'w') || (key.meta && key.backspace)) {
+    const next = deleteRange(value, wordStart(text, cursor), cursor)
+    return next.text === text ? null : next
+  }
+  if (isMod(key) && input === 'u') {
+    const next = deleteRange(value, lineStart(text, cursor), cursor)
+    return next.text === text ? null : next
+  }
+  const escapeJump = key.meta && !key.ctrl && (input === 'b' || input === 'f')
+  if (escapeJump || ((isMod(key) || key.meta) && (key.leftArrow || key.rightArrow))) {
+    const back = escapeJump ? input === 'b' : key.leftArrow === true
+    return { text, cursor: back ? wordStart(text, cursor) : wordEnd(text, cursor) }
+  }
+  if (isMod(key) && input === 'a') return { text, cursor: lineStart(text, cursor) }
+  if (isMod(key) && input === 'e') return { text, cursor: lineEnd(text, cursor) }
+  return null
+}
 
 export function Chat({
   channel,
@@ -4964,6 +4998,9 @@ export function Chat({
     if (overlay.kind === 'search') {
       // Transcript search bar (less-style): edit the query, Enter commits
       // (query persists for n/N), Esc/ctrl+c cancels back to the anchor.
+      const edited = key.escape || (key.ctrl && input === 'c') || plainReturn
+        ? null
+        : editOverlayField(searchQuery, searchCursor, input, key)
       if (key.escape || (key.ctrl && input === 'c')) {
         dispatchOverlay({ type: 'close' })
         setHighlight('')
@@ -4972,6 +5009,9 @@ export function Chat({
         // Enter commits; 0-match junk queries don't persist.
         if (searchCount === 0) setSearchQuery('')
         dispatchOverlay({ type: 'close' })
+      } else if (edited !== null) {
+        setSearchQuery(edited.text)
+        setSearchCursor(edited.cursor)
       } else if (key.backspace) {
         // Code-point stepping (shared answer-field core): a ⌫ that removed
         // one UTF-16 unit would leave a lone surrogate in the query.
@@ -5067,6 +5107,7 @@ export function Chat({
       if (flowInput !== null) {
         const choice = flow.choices.find(candidate => candidate.id === flowInput.choiceId)
         const editor = choice?.input
+        const edited = plainReturn ? null : editOverlayField(flowInput.value, flowInput.cursor, input, key)
         if (plainReturn) {
           const value = flowInput.value.trim()
           if (value.length === 0) {
@@ -5074,6 +5115,8 @@ export function Chat({
           } else if (editor !== undefined) {
             runWorkspaceFlowAction(signal => editor.submit(value, signal))
           }
+        } else if (edited !== null) {
+          dispatchOverlay({ type: 'flow-input-edit', value: edited.text, cursor: edited.cursor })
         } else if (key.backspace) {
           const next = backspaceAt({ text: flowInput.value, cursor: flowInput.cursor })
           if (next.text !== flowInput.value) {
@@ -5504,6 +5547,9 @@ export function Chat({
     }
     if (overlay.kind === 'history') {
       const { query, cursor, focus } = overlay
+      const edited = key.escape || (key.ctrl && (input === 'c' || input === 'd')) || plainReturn
+        ? null
+        : editOverlayField(query, cursor, input, key)
       if (key.escape) {
         dispatchOverlay({ type: 'close' })
       } else if (key.ctrl && (input === 'c' || input === 'd')) {
@@ -5526,6 +5572,8 @@ export function Chat({
         if (historyMatches.length > 0) {
           dispatchOverlay({ type: 'move', delta: 1, count: historyMatches.length })
         }
+      } else if (edited !== null) {
+        dispatchOverlay({ type: 'history-edit', query: edited.text, cursor: edited.cursor, focus: 0 })
       } else if (key.backspace) {
         // Code-point stepping (shared answer-field core): deleting one
         // UTF-16 unit would split an emoji into lone surrogates.
