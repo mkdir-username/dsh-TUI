@@ -840,7 +840,8 @@ export function createChannelProjection(state: ProjectionState, deps: ChannelPro
         appendRow({
           id: deps.rowIds.value,
           kind: 'notice',
-          text: '⚖ Контролёр №' + mark[1] + ': ' + mark[2] + ' ' + mark[3] + ' · /handoff-rate ' + mark[1],
+          text: '⚖ Контролёр №' + mark[1] + ': ' + mark[2] + ' ' + mark[3] + ' · клик — оценить',
+          action: { command: 'handoff-rate', input: mark[1] },
           seq: event.seq,
         })
         deps.rowIds.value += 1

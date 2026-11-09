@@ -407,6 +407,7 @@ export function MessageList({
   onOpenJobs,
   onWatchJobOutput,
   onOpenFile,
+  onRowCommand,
   sessionCwd,
   onPreviewImage,
   suppressImageGraphics = false,
@@ -518,6 +519,9 @@ export function MessageList({
   onOpenJobs?: (focusId?: string) => void
   /** 点击工具卡内的文件路径（打开文件操作菜单）。 */
   onOpenFile?: (path: string) => void
+  /** A click on a row that carries an `action` (the controller marker) runs
+   *  that command through the screen's dispatcher. */
+  onRowCommand?: (action: { command: string; input?: string }) => void
   /** Session working directory (fs path, `channel.cwd`): the IDE-selection
    *  indicator line strips this prefix for display (T-FIX-01). Optional —
    *  repro/verify harnesses that predate the field render unchanged with
@@ -1578,6 +1582,7 @@ export function MessageList({
               executionTarget={row.executionTarget}
               selectionAttached={row.selectionAttached}
               sender={teamSenderOf(row)}
+              rowAction={row.action}
               streaming={displayStreaming}
               thinkingOpen={row.thinkingOpen === true}
               durationMs={row.durationMs}
@@ -1626,6 +1631,7 @@ export function MessageList({
               onOpenJobs={onOpenJobs}
               onWatchJobOutput={onWatchJobOutput}
               onOpenFile={onOpenFile}
+              onRowCommand={onRowCommand}
               sessionCwd={sessionCwd}
               onPreviewImage={onPreviewImage}
               suppressImageGraphics={suppressImageGraphics}
@@ -1661,6 +1667,8 @@ type MemoRowProps = {
   /** IDE selection indicator (user rows): rendered above the prompt bubble. */
   selectionAttached: ChatRow['selectionAttached']
   sender: ChatRow['sender']
+  /** Click action carried by the row itself (the controller marker). */
+  rowAction: ChatRow['action']
   /** Session cwd for the indicator's display-path relativization (T-FIX-01). */
   sessionCwd: string | undefined
   streaming: boolean
@@ -1736,6 +1744,7 @@ type MemoRowProps = {
   onOpenJobs: ((focusId?: string) => void) | undefined
   onWatchJobOutput: ((id: string) => () => void) | undefined
   onOpenFile: ((path: string) => void) | undefined
+  onRowCommand: ((action: { command: string; input?: string }) => void) | undefined
   onPreviewImage: ((image: TranscriptImage) => void) | undefined
   suppressImageGraphics: boolean
   setRowRef: (rowId: number, el: DOMElement | null) => void
@@ -1768,6 +1777,7 @@ function TranscriptRow({
   executionTarget,
   selectionAttached,
   sender,
+  rowAction,
   sessionCwd,
   streaming,
   thinkingOpen,
@@ -1817,6 +1827,7 @@ function TranscriptRow({
   onOpenJobs,
   onWatchJobOutput,
   onOpenFile,
+  onRowCommand,
   onPreviewImage,
   suppressImageGraphics,
   setRowRef,
@@ -2040,8 +2051,15 @@ function TranscriptRow({
       )
     }
     case 'notice':
+      // A row carrying an action (the controller marker) is a control, not a
+      // fold: the click runs the command even when the text is long enough to
+      // fold.
       return (
-        <Box marginTop={1} ref={ref} onClick={foldClickable ? foldOnClick : undefined}>
+        <Box
+          marginTop={1}
+          ref={ref}
+          onClick={rowAction !== undefined ? () => onRowCommand?.(rowAction) : foldClickable ? foldOnClick : undefined}
+        >
           <Divider title={` ${displayText} `} />
         </Box>
       )

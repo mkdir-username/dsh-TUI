@@ -112,6 +112,9 @@ export interface ChatRow {
   interruptBackend?: string
   /** Actual execution location for `!command` rows. */
   executionTarget?: string
+  /** A click on this row dispatches a local command through the screen's
+   *  dispatcher (the controller marker is the only producer today). */
+  action?: { command: string; input?: string }
   text: string
   /** Durable session image blocks, loaded lazily through the attachment store. */
   images?: readonly TranscriptImage[]

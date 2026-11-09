@@ -4330,6 +4330,18 @@ export function Chat({
     }
   }
 
+  // A row action (the controller marker) takes the same registry path a typed
+  // command does. The ref keeps ONE callback identity: MemoRow shallow-compares
+  // its props, so a fresh function would re-render the whole transcript on
+  // every streamed chunk.
+  const runCommandRef = React.useRef(runCommand)
+  React.useEffect(() => {
+    runCommandRef.current = runCommand
+  })
+  const runRowCommand = React.useCallback((action: { command: string; input?: string }): void => {
+    void runCommandRef.current(action.command, action.input ?? '')
+  }, [])
+
   // === Message-selection mode (Shift+↑ message actions) ===
   // NOTE: rows is a live in-place array on the channel (no new reference per
   // update), so derived lists must be computed per render — a useMemo keyed
@@ -7062,6 +7074,7 @@ export function Chat({
           onOpenSubagentView={openSubagentViewFromCard}
           onOpenJobs={openJobsPanel}
           onOpenFile={openFileActions}
+          onRowCommand={runRowCommand}
           sessionCwd={channel.cwd}
           onPreviewImage={openImagePreview}
           suppressImageGraphics={activePreview !== null}
