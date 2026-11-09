@@ -31,6 +31,7 @@ import { DSH_TAB, useForeignSessions } from './sessionSupervisor/useForeignSessi
 import { ForeignSessionPanes } from './sessionSupervisor/ForeignSessionPanes.js'
 import { SourceTabs, layoutSourceTabs, sourceTabsWidth, type SourceTab } from '../components/sessions/SourceTabs.js'
 import { stringWidth } from '../ink/stringWidth.js'
+import { dropLastPoint } from '../components/questions/answerField.js'
 import { RAIL_CHROME_ROWS, WORKSPACE_ROW_LINES, RAIL_MIN_TOTAL_COLUMNS, RAIL_WIDTH_MIN, RAIL_WIDTH_MAX, SESSION_ROW_LINES, SESSION_PANE_CHROME_ROWS, MENU_WIDTH, MENU_LABEL_KEYS, menuActionsFor, SupervisorLiveState, RailEntry, UNREGISTERED_RAIL_ID, message, samePath, sessionMatchesQuery } from './sessionSupervisor/model.js'
 export { sessionMatchesQuery }
 
@@ -265,7 +266,7 @@ export function SessionSupervisor({
         return
       }
       if (key.backspace || key.delete) {
-        update({ ...renaming, draft: renaming.draft.slice(0, -1) })
+        update({ ...renaming, draft: dropLastPoint(renaming.draft) })
         return
       }
       if (!isMod(key) && !key.meta && input && !key.return) {
@@ -296,7 +297,7 @@ export function SessionSupervisor({
         return
       }
       if (key.backspace || key.delete) {
-        setRename(current => (current === undefined ? current : { ...current, draft: current.draft.slice(0, -1) }))
+        setRename(current => (current === undefined ? current : { ...current, draft: dropLastPoint(current.draft) }))
         return
       }
       if (!isMod(key) && !key.meta && input && !key.return) {
@@ -408,7 +409,7 @@ export function SessionSupervisor({
     // still belong to the rail/list, so filtering adds no separate input mode.
     if (key.backspace || key.delete) {
       setFilterFocused(true)
-      setQuery(text => text.slice(0, -1))
+      setQuery(text => dropLastPoint(text))
       return
     }
     if (isMod(key) && input === 'n') {
@@ -505,7 +506,7 @@ export function SessionSupervisor({
     }
     if (key.backspace || key.delete) {
       setFilterFocused(true)
-      setQuery(text => text.slice(0, -1))
+      setQuery(text => dropLastPoint(text))
       return
     }
     if (isMod(key) && input === 'l') {

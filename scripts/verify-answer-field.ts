@@ -23,6 +23,9 @@ check('1c: caret and deletion step over an emoji as one code point',
   && field.caretTo(value('👍', 2), 1).cursor === 1
   && field.insertAt(value('👍b', 0), 'X').text === 'X👍b')
 
+check('1e: a tail-only ⌫ drops the whole emoji',
+  field.dropLastPoint('a👍') === 'a' && field.dropLastPoint('👍') === '' && field.dropLastPoint('') === '')
+
 check('1d: ←/→ step over a whole emoji',
   field.previousPoint('a👍b', 3) === 1 && field.nextPoint('a👍b', 1) === 3
   && field.previousPoint('a👍b', 0) === 0 && field.nextPoint('a👍b', 4) === 4)

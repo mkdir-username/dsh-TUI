@@ -15,6 +15,7 @@ import type { LocalizedDescriptions } from '../commands.js'
 import type { ChannelUi as Channel } from '../adapter/channel/ui-policy.js'
 import { panelStore } from '../components/sidePanel/PanelStore.js'
 import { registerBuiltinPanels } from '../components/sidePanel/builtinPanels.js'
+import { dropLastPoint } from '../components/questions/answerField.js'
 import type { TuiStatusFieldEntry } from '../dsh-adapter/status.js'
 import { ALL_PLUGIN_FIELDS, ALL_SIDE_PANELS, formatPluginFieldsOrder, getHiddenTemporarySidePanels, isLegacyAnonymousSidePanelId, isTemporarySidePanelId, parsePluginFieldsOrder, parseSidePanelPanels, persistentSidePanelId, resolveSidePanelIds, setTemporarySidePanelHidden, STATUS_FIELD_SLOTS, subscribeHiddenTemporarySidePanels, type StatusFieldSlot } from '../tuiDisplayPrefs.js'
 
@@ -1163,7 +1164,7 @@ export function Settings({
         setMode('list')
         setEditing(null)
       } else if (key.backspace || key.delete) {
-        setEditing(state => state === null ? null : { ...state, draft: state.draft.slice(0, -1) })
+        setEditing(state => state === null ? null : { ...state, draft: dropLastPoint(state.draft) })
       } else if (!isMod(key) && !key.meta && !key.super && input && !key.return) {
         // Only real characters reach the draft (see the supervisor's filter).
         const typed = input.replace(/\p{Cc}/gu, '')

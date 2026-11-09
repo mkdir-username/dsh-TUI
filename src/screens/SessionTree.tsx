@@ -10,6 +10,7 @@ import { spreadRow, tailWidth, truncateWidth, wrapWidth } from '../sessions/form
 import { stringWidth } from '../ink/stringWidth.js'
 import { TICK, MULTIPLICATION_X } from '../terminal-utils/figures.js'
 import { t } from '../i18n.js'
+import { dropLastPoint } from '../components/questions/answerField.js'
 import type { ChannelUi as Channel } from '../adapter/channel/ui-policy.js'
 import {
   droppedTurnInfo,
@@ -481,7 +482,7 @@ export function SessionTree({
     } else if (isMod(key) && input === 'b' && focusedEntry !== null) {
       askAdopt(focusedEntry)
     } else if (key.backspace || key.delete) {
-      setQuery(text => text.slice(0, -1))
+      setQuery(text => dropLastPoint(text))
     } else if (!isMod(key) && !key.meta && !key.super && input && !key.return) {
       // Only real characters reach the query — anything else the terminal
       // delivers would be typed into the search invisibly.

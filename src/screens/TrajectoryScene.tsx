@@ -25,6 +25,7 @@ import {
 import { HOTSPOT_SORTS, WAVE_PROJECTIONS } from '../dsh-adapter/trajectory/index.js'
 import { useTrajectoryScope } from '../components/trajectory/useTrajectoryScope.js'
 import { scopeChipParts } from '../components/trajectory/scope.js'
+import { dropLastPoint } from '../components/questions/answerField.js'
 import type { ChannelUi as Channel } from '../adapter/channel/ui-policy.js'
 import type { HotspotRow, HotspotSort, WaveProjection } from '../dsh-adapter/types.js'
 
@@ -300,7 +301,7 @@ export function TrajectoryScene({
         return
       }
       if (key.backspace || key.delete) {
-        setQueryText(previous => previous.slice(0, -1))
+        setQueryText(previous => dropLastPoint(previous))
         setCursor(0)
         return
       }

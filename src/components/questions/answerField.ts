@@ -40,6 +40,15 @@ export function appendAtTail(value: AnswerValue, chunk: string): AnswerValue {
   return { text, cursor: pointsOf(text).length }
 }
 
+/** Drop the last code point — the ⌫ of a tail-only field (filters, renames,
+ *  the settings draft) that never grows a caret. A UTF-16 `slice(0, -1)`
+ *  leaves a lone surrogate of an emoji behind. */
+export function dropLastPoint(text: string): string {
+  const points = pointsOf(text)
+  points.pop()
+  return points.join('')
+}
+
 export function backspaceAt(value: AnswerValue): AnswerValue {
   const points = pointsOf(value.text)
   const at = value.cursor
