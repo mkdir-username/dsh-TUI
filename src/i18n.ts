@@ -1119,7 +1119,6 @@ const dict = {
   'tool-running-elapsed': { zh: '运行中…（{{duration}}）', en: 'Running… ({{duration}})' },
   'tool-running-park-hint': { zh: '{{key}} 转到后台', en: '{{key}} moves it to the background' },
   'tool-park-started': { zh: '已转到后台：{{command}}', en: 'Moved to the background: {{command}}' },
-  'tool-park-failed': { zh: '暂时无法转到后台——再按一次', en: 'Cannot move it to the background yet — press again' },
   'diff-patch-added': { zh: '新文件', en: 'new file' },
   'diff-patch-deleted': { zh: '已删除', en: 'deleted' },
   'tool-live-omitted': { zh: '… 已省略 {{count}} 行', en: { one: '… {{count}} line omitted', other: '… {{count}} lines omitted' } },
