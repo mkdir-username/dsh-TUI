@@ -9,6 +9,8 @@
  *
  * 运行：node --import tsx/esm scripts/verify-controller-marker-click.tsx
  */
+import { settled, sleep } from './lib/term-test.mjs'
+
 process.env.FORCE_COLOR = '3'
 process.env.DSH_TUI_THEME = 'dark'
 
@@ -24,7 +26,6 @@ const [{ PassThrough, Writable }, React, { Terminal: XTerm }, { render, Alternat
 
 const COLS = 100
 const ROWS = 30
-const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
 
 let failed = 0
 function check(name: string, ok: boolean, extra = ''): void {
@@ -122,7 +123,7 @@ const inst = await render(
   </AlternateScreen>,
   { stdout: stdout as any, stdin: stdin as any, stderr: stderr as any, exitOnCtrlC: false, patchConsole: false },
 )
-await sleep(600)
+await sleep(600) // 固定窗:pacing Даём Chat установить обработчики ввода после первого кадра.
 
 const lines = screenLines()
 const rowIdx = lines.findIndex(l => l.includes('Контролёр'))
@@ -137,17 +138,16 @@ check('до клика команда не вызывалась', calls.length =
 // Клик по заголовку строки: та же клетка, что видит человек.
 const col1 = lines[rowIdx]!.indexOf('Контролёр') + 1
 clickCell(col1, rowIdx + 1)
-await sleep(500)
-
 check('клик по строке вызвал handoff-rate 4',
-  calls.length === 1 && calls[0]!.name === 'handoff-rate' && calls[0]!.input === '4',
+  await settled(() => calls.length === 1 && calls[0]!.name === 'handoff-rate' && calls[0]!.input === '4'),
   JSON.stringify(calls))
 
-// Второй клик — повторный вход, а не потерянный: окно оценки открывается снова.
+// 固定窗:墙钟 Повторный клик после окна двойного клика Ink (500 мс).
+await sleep(600)
 clickCell(col1, rowIdx + 1)
-await sleep(500)
 check('повторный клик снова вызвал handoff-rate 4',
-  calls.length === 2 && calls[1]!.input === '4', JSON.stringify(calls))
+  await settled(() => calls.length === 2 && calls[1]!.name === 'handoff-rate' && calls[1]!.input === '4'),
+  JSON.stringify(calls))
 
 await inst.unmount()
 console.log(failed === 0 ? 'verify-controller-marker-click: all checks passed' : `verify-controller-marker-click: ${failed} failed`)
