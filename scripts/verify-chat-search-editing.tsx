@@ -229,6 +229,37 @@ async function feed(stdin: PassThrough, sequence: string): Promise<void> {
   await chat.done()
 }
 
+// ── 6. History search: End + ⌫ clears the emoji ─────────────────────
+// The bar's caret is a UTF-16 offset (SearchBox slices by it) while the
+// edit core counts code points: End parks the caret past the last unit,
+// and a code-point ⌫ at that offset used to be a no-op.
+{
+  const chat = await mountChat()
+  chat.stdin.write('\x12')
+  await settled(() => chat.screen().includes('搜索历史'))
+  chat.stdin.write('👍')
+  await settled(() => chat.screen().includes('👍'))
+  await feed(chat.stdin, '\x1b[F') // End
+  await feed(chat.stdin, '\x7f') // Backspace
+  const cleared = await settled(() => !chat.screen().includes('👍'))
+  check('6: history search End then ⌫ clears the emoji', cleared, chat.screen())
+  await chat.done()
+}
+
+// ── 7. Transcript search: End + ⌫ clears the emoji ──────────────────
+{
+  const chat = await mountChat()
+  await feed(chat.stdin, '\x0f') // Ctrl+O — transcript mode
+  await feed(chat.stdin, '/') // open transcript search
+  chat.stdin.write('👍')
+  await settled(() => chat.screen().includes('无匹配'))
+  await feed(chat.stdin, '\x1b[F') // End
+  await feed(chat.stdin, '\x7f') // Backspace
+  const cleared = await settled(() => !chat.screen().includes('无匹配'))
+  check('7: transcript search End then ⌫ clears the emoji', cleared, chat.screen())
+  await chat.done()
+}
+
 console.log(results.join('\n'))
 if (failures > 0) {
   console.log(`\n${failures} chat search editing check(s) FAILED`)

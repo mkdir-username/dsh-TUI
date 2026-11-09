@@ -80,7 +80,7 @@ import { normalizeScrollGutter } from '../tuiDisplayPrefs.js'
 import { OverlayAbove } from '../components/OverlayAbove.js'
 import { TooltipLayer } from '../components/Tooltip.js'
 import { PromptInput, composerImageRefsForText, type PromptController } from '../components/PromptInput.js'
-import { backspaceAt, deleteAt, deleteRange, insertAt, lineEnd, lineStart, nextPoint, previousPoint, wordEnd, wordStart } from '../components/questions/answerField.js'
+import { backspaceAt, deleteAt, deleteRange, insertAt, lineEnd, lineStart, nextPoint, pointsOf, previousPoint, wordEnd, wordStart } from '../components/questions/answerField.js'
 import { flattenPasteInline } from '../channel/sanitize.js'
 import { turnUsageParts } from '../components/TurnUsageRow.js'
 import { AgentTranscriptScene } from './AgentTranscriptScene.js'
@@ -414,36 +414,49 @@ function peekKey(image: TranscriptImage, title: string | undefined): string {
 let revealRootSequence = 0
 
 /**
+ * The overlay fields' caret is a UTF-16 offset — SearchBox, the history
+ * dialog and WorkspaceFlowPicker all slice by it — while the shared core
+ * counts code points. Convert at the boundary; never mix the two units.
+ */
+function pointAtOffset(text: string, offset: number): number {
+  return pointsOf(text.slice(0, offset)).length
+}
+function offsetOfPoint(text: string, point: number): number {
+  return pointsOf(text).slice(0, point).join('').length
+}
+
+/**
  * The overlay search fields' editing keys: the shared answer-field core plus
  * the macOS/readline layer — word jumps (Alt/Option+←/→, Ctrl+←/→, Ghostty's
  * ESC b/f), Ctrl+A/E line edges, Ctrl+W / Option+Backspace and Ctrl+U. These
- * are single-line fields, so a line edge is a field edge. Returns null when
- * the key is not an edit (the caller keeps its own semantics).
+ * are single-line fields, so a line edge is a field edge. `point` is a
+ * code-point index (see pointAtOffset). Returns null when the key is not an
+ * edit (the caller keeps its own semantics).
  */
 function editOverlayField(
   text: string,
-  cursor: number,
+  point: number,
   input: string,
   key: Key,
-): { text: string; cursor: number } | null {
-  const value = { text, cursor }
+): { text: string; point: number } | null {
+  const value = { text, cursor: point }
   // Word/line deletions come BEFORE the plain Backspace branch: an
   // Option+Backspace must not degrade into one character.
   if ((isMod(key) && input === 'w') || (key.meta && key.backspace)) {
-    const next = deleteRange(value, wordStart(text, cursor), cursor)
-    return next.text === text ? null : next
+    const next = deleteRange(value, wordStart(text, point), point)
+    return next.text === text ? null : { text: next.text, point: next.cursor }
   }
   if (isMod(key) && input === 'u') {
-    const next = deleteRange(value, lineStart(text, cursor), cursor)
-    return next.text === text ? null : next
+    const next = deleteRange(value, lineStart(text, point), point)
+    return next.text === text ? null : { text: next.text, point: next.cursor }
   }
   const escapeJump = key.meta && !key.ctrl && (input === 'b' || input === 'f')
   if (escapeJump || ((isMod(key) || key.meta) && (key.leftArrow || key.rightArrow))) {
     const back = escapeJump ? input === 'b' : key.leftArrow === true
-    return { text, cursor: back ? wordStart(text, cursor) : wordEnd(text, cursor) }
+    return { text, point: back ? wordStart(text, point) : wordEnd(text, point) }
   }
-  if (isMod(key) && input === 'a') return { text, cursor: lineStart(text, cursor) }
-  if (isMod(key) && input === 'e') return { text, cursor: lineEnd(text, cursor) }
+  if (isMod(key) && input === 'a') return { text, point: lineStart(text, point) }
+  if (isMod(key) && input === 'e') return { text, point: lineEnd(text, point) }
   return null
 }
 
@@ -4998,9 +5011,10 @@ export function Chat({
     if (overlay.kind === 'search') {
       // Transcript search bar (less-style): edit the query, Enter commits
       // (query persists for n/N), Esc/ctrl+c cancels back to the anchor.
+      const searchPoint = pointAtOffset(searchQuery, searchCursor)
       const edited = key.escape || (key.ctrl && input === 'c') || plainReturn
         ? null
-        : editOverlayField(searchQuery, searchCursor, input, key)
+        : editOverlayField(searchQuery, searchPoint, input, key)
       if (key.escape || (key.ctrl && input === 'c')) {
         dispatchOverlay({ type: 'close' })
         setHighlight('')
@@ -5011,17 +5025,17 @@ export function Chat({
         dispatchOverlay({ type: 'close' })
       } else if (edited !== null) {
         setSearchQuery(edited.text)
-        setSearchCursor(edited.cursor)
+        setSearchCursor(offsetOfPoint(edited.text, edited.point))
       } else if (key.backspace) {
         // Code-point stepping (shared answer-field core): a ⌫ that removed
         // one UTF-16 unit would leave a lone surrogate in the query.
-        const next = backspaceAt({ text: searchQuery, cursor: searchCursor })
+        const next = backspaceAt({ text: searchQuery, cursor: searchPoint })
         setSearchQuery(next.text)
-        setSearchCursor(next.cursor)
+        setSearchCursor(offsetOfPoint(next.text, next.cursor))
       } else if (key.delete) {
-        const next = deleteAt({ text: searchQuery, cursor: searchCursor })
+        const next = deleteAt({ text: searchQuery, cursor: searchPoint })
         setSearchQuery(next.text)
-        setSearchCursor(next.cursor)
+        setSearchCursor(offsetOfPoint(next.text, next.cursor))
       } else if (key.leftArrow) {
         setSearchCursor(c => previousPoint(searchQuery, c))
       } else if (key.rightArrow) {
@@ -5032,13 +5046,13 @@ export function Chat({
         setSearchCursor(searchQuery.length)
       } else if (key.isPasted === true && input) {
         // A bracketed paste is text: flatten its breaks, never submit.
-        const next = insertAt({ text: searchQuery, cursor: searchCursor }, flattenPasteInline(input))
+        const next = insertAt({ text: searchQuery, cursor: searchPoint }, flattenPasteInline(input))
         setSearchQuery(next.text)
-        setSearchCursor(next.cursor)
+        setSearchCursor(offsetOfPoint(next.text, next.cursor))
       } else if (!key.ctrl && !key.meta && !key.super && input) {
-        const next = insertAt({ text: searchQuery, cursor: searchCursor }, input)
+        const next = insertAt({ text: searchQuery, cursor: searchPoint }, input)
         setSearchQuery(next.text)
-        setSearchCursor(next.cursor)
+        setSearchCursor(offsetOfPoint(next.text, next.cursor))
       }
       event.stopImmediatePropagation()
       return
@@ -5107,7 +5121,8 @@ export function Chat({
       if (flowInput !== null) {
         const choice = flow.choices.find(candidate => candidate.id === flowInput.choiceId)
         const editor = choice?.input
-        const edited = plainReturn ? null : editOverlayField(flowInput.value, flowInput.cursor, input, key)
+        const flowPoint = pointAtOffset(flowInput.value, flowInput.cursor)
+        const edited = plainReturn ? null : editOverlayField(flowInput.value, flowPoint, input, key)
         if (plainReturn) {
           const value = flowInput.value.trim()
           if (value.length === 0) {
@@ -5116,16 +5131,16 @@ export function Chat({
             runWorkspaceFlowAction(signal => editor.submit(value, signal))
           }
         } else if (edited !== null) {
-          dispatchOverlay({ type: 'flow-input-edit', value: edited.text, cursor: edited.cursor })
+          dispatchOverlay({ type: 'flow-input-edit', value: edited.text, cursor: offsetOfPoint(edited.text, edited.point) })
         } else if (key.backspace) {
-          const next = backspaceAt({ text: flowInput.value, cursor: flowInput.cursor })
+          const next = backspaceAt({ text: flowInput.value, cursor: flowPoint })
           if (next.text !== flowInput.value) {
-            dispatchOverlay({ type: 'flow-input-edit', value: next.text, cursor: next.cursor })
+            dispatchOverlay({ type: 'flow-input-edit', value: next.text, cursor: offsetOfPoint(next.text, next.cursor) })
           }
         } else if (key.delete) {
-          const next = deleteAt({ text: flowInput.value, cursor: flowInput.cursor })
+          const next = deleteAt({ text: flowInput.value, cursor: flowPoint })
           if (next.text !== flowInput.value) {
-            dispatchOverlay({ type: 'flow-input-edit', value: next.text, cursor: next.cursor })
+            dispatchOverlay({ type: 'flow-input-edit', value: next.text, cursor: offsetOfPoint(next.text, next.cursor) })
           }
         } else if (key.leftArrow) {
           dispatchOverlay({ type: 'flow-input-edit', value: flowInput.value, cursor: previousPoint(flowInput.value, flowInput.cursor) })
@@ -5133,8 +5148,8 @@ export function Chat({
           dispatchOverlay({ type: 'flow-input-edit', value: flowInput.value, cursor: nextPoint(flowInput.value, flowInput.cursor) })
         } else if (input.length > 0 && !key.ctrl && !key.meta && !key.super && !key.tab) {
           const chunk = key.isPasted === true ? flattenPasteInline(input) : input
-          const next = insertAt({ text: flowInput.value, cursor: flowInput.cursor }, chunk)
-          dispatchOverlay({ type: 'flow-input-edit', value: next.text, cursor: next.cursor })
+          const next = insertAt({ text: flowInput.value, cursor: flowPoint }, chunk)
+          dispatchOverlay({ type: 'flow-input-edit', value: next.text, cursor: offsetOfPoint(next.text, next.cursor) })
         }
         return
       }
@@ -5547,9 +5562,10 @@ export function Chat({
     }
     if (overlay.kind === 'history') {
       const { query, cursor, focus } = overlay
+      const historyPoint = pointAtOffset(query, cursor)
       const edited = key.escape || (key.ctrl && (input === 'c' || input === 'd')) || plainReturn
         ? null
-        : editOverlayField(query, cursor, input, key)
+        : editOverlayField(query, historyPoint, input, key)
       if (key.escape) {
         dispatchOverlay({ type: 'close' })
       } else if (key.ctrl && (input === 'c' || input === 'd')) {
@@ -5573,18 +5589,18 @@ export function Chat({
           dispatchOverlay({ type: 'move', delta: 1, count: historyMatches.length })
         }
       } else if (edited !== null) {
-        dispatchOverlay({ type: 'history-edit', query: edited.text, cursor: edited.cursor, focus: 0 })
+        dispatchOverlay({ type: 'history-edit', query: edited.text, cursor: offsetOfPoint(edited.text, edited.point), focus: 0 })
       } else if (key.backspace) {
         // Code-point stepping (shared answer-field core): deleting one
         // UTF-16 unit would split an emoji into lone surrogates.
-        const next = backspaceAt({ text: query, cursor })
+        const next = backspaceAt({ text: query, cursor: historyPoint })
         if (next.text !== query) {
-          dispatchOverlay({ type: 'history-edit', query: next.text, cursor: next.cursor, focus: 0 })
+          dispatchOverlay({ type: 'history-edit', query: next.text, cursor: offsetOfPoint(next.text, next.cursor), focus: 0 })
         }
       } else if (key.delete) {
-        const next = deleteAt({ text: query, cursor })
+        const next = deleteAt({ text: query, cursor: historyPoint })
         if (next.text !== query) {
-          dispatchOverlay({ type: 'history-edit', query: next.text, cursor: next.cursor, focus: 0 })
+          dispatchOverlay({ type: 'history-edit', query: next.text, cursor: offsetOfPoint(next.text, next.cursor), focus: 0 })
         }
       } else if (key.leftArrow) {
         const at = previousPoint(query, cursor)
@@ -5597,11 +5613,11 @@ export function Chat({
       } else if (key.end) {
         dispatchOverlay({ type: 'history-edit', cursor: query.length })
       } else if (key.isPasted === true && input) {
-        const next = insertAt({ text: query, cursor }, flattenPasteInline(input))
-        dispatchOverlay({ type: 'history-edit', query: next.text, cursor: next.cursor, focus: 0 })
+        const next = insertAt({ text: query, cursor: historyPoint }, flattenPasteInline(input))
+        dispatchOverlay({ type: 'history-edit', query: next.text, cursor: offsetOfPoint(next.text, next.cursor), focus: 0 })
       } else if (!key.ctrl && !key.meta && !key.super && input) {
-        const next = insertAt({ text: query, cursor }, input)
-        dispatchOverlay({ type: 'history-edit', query: next.text, cursor: next.cursor, focus: 0 })
+        const next = insertAt({ text: query, cursor: historyPoint }, input)
+        dispatchOverlay({ type: 'history-edit', query: next.text, cursor: offsetOfPoint(next.text, next.cursor), focus: 0 })
       }
       return
     }
