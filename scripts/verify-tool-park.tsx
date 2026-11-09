@@ -6,14 +6,9 @@
  * per-call ticket on `globalThis`); this suite pins the TUI half of the
  * contract with the seam stubbed:
  *
- *  - a running terminal card is the target, and the key sends exactly its call
- *    id to `jobControl.park`;
- *  - the oldest running card wins when several are in flight (the one that has
- *    been holding the turn);
- *  - a refused park says so and still swallows the key — the press must not
- *    silently become a panel toggle;
- *  - without a running shell call, or on a backend with no park seam, the key
- *    keeps its panel job and nothing is parked;
+ *  - the key asks the harness to park, and the toast names the parked
+ *    command; a key with nothing waiting falls through to the panel;
+ *  - a backend with no park seam keeps the panel key and says nothing;
  *  - the running card carries the hint, a settled one does not.
  *
  * Runs the real Chat useInput path over fake stdin; assertions read the
@@ -46,7 +41,7 @@ function check(name: string, ok: boolean, extra = ''): void {
 
 const T0 = 1_700_000_000_000
 const CTRL_B = '\x02'
-const HINT = t('tool-running-park-hint', { key: comboDisplay(primaryComboString('sidePanel')) })
+const HINT = t('tool-running-park-hint', { key: comboDisplay(primaryComboString('sidePanel'), true) })
 
 /** One tool row, in the shape the projector publishes. */
 function toolRow(overrides: Record<string, unknown>): Record<string, unknown> {
@@ -165,11 +160,11 @@ async function mount(harness: ReturnType<typeof makeHarness>, channel: Record<st
 let notices: string[] = []
 
 /** Mount one transcript state, press Ctrl+B once, report what the key did. */
-async function press(rows: readonly unknown[], jobControl: unknown, parkResult = true) {
+async function press(rows: readonly unknown[], jobControl: unknown, parked: { callId: string; command: string } | null = { callId: 'call-1', command: 'bats suite.bats' }) {
   notices = []
-  const parks: string[] = []
+  const parks: Array<{ callId: string; command: string } | null> = []
   const control = jobControl === 'passthrough'
-    ? { kill: () => false, park: (callId: string) => { parks.push(callId); return parkResult } }
+    ? { kill: () => false, parkAny: () => { parks.push(parked); return parked } }
     : jobControl
   const harness = makeHarness(100, 30)
   const instance = await mount(harness, makeChannel(rows, control))
@@ -197,40 +192,31 @@ const BACKGROUND_CARD = toolRow({
 // ── a running shell card is the target ─────────────────────────────────────
 {
   const { after, parks, notices } = await press([RUNNING], 'passthrough')
-  check('Ctrl+B parks the running call it sees', parks.length === 1 && parks[0] === 'call-1', JSON.stringify(parks))
+  check('Ctrl+B asks the harness to park one call', parks.length === 1, JSON.stringify(parks))
   check('the toast names the command', notices.some(text => text.includes('bats suite.bats')), JSON.stringify(notices))
   check('the running card advertises the key', after.includes(HINT), after.split('\n').find(line => line.includes('Running')) ?? '')
 }
 
-// ── a refused park is reported, and still owns the key ─────────────────────
+// ── nothing waits: the key keeps its panel job ─────────────────────────────
 {
-  const { parks, notices } = await press([RUNNING], 'passthrough', false)
-  check('a refused park still reaches the seam once', parks.length === 1, JSON.stringify(parks))
-  check('the refusal is a warning, not a silent panel toggle', notices.includes(t('tool-park-failed')), JSON.stringify(notices))
+  const { parks, notices } = await press([RUNNING], 'passthrough', null)
+  check('a key with nothing waiting still asks the harness', parks.length === 1, JSON.stringify(parks))
+  check('nothing waiting raises no toast', notices.length === 0, JSON.stringify(notices))
 }
 
-// ── several running calls: the oldest holds the turn ───────────────────────
+// ── a settled card carries no hint ─────────────────────────────────────────
 {
-  const second = toolRow({ id: 2, callId: 'call-2', startedAt: T0 + 1000, callView: { card: 'terminal', title: 'tail -f log', description: 'Follow the log' } })
-  const { parks } = await press([RUNNING, second], 'passthrough')
-  check('the oldest running card is the one moved', parks[0] === 'call-1', JSON.stringify(parks))
-}
-
-// ── no running shell call: the key keeps its panel job ─────────────────────
-{
-  const { parks, notices, after } = await press([SETTLED], 'passthrough')
-  check('a settled call is never parked', parks.length === 0, JSON.stringify(parks))
-  check('a settled call raises no toast', notices.length === 0, JSON.stringify(notices))
+  const { after } = await press([SETTLED], 'passthrough', null)
   check('a settled card drops the hint', !after.includes(HINT))
 }
 
-// ── a background job card is not a park target ────────────────────────────
+// ── a run_in_background card carries no hint either ────────────────────────
 {
-  const { parks } = await press([BACKGROUND_CARD], 'passthrough')
-  check('a run_in_background card is not parked again', parks.length === 0, JSON.stringify(parks))
+  const { after } = await press([BACKGROUND_CARD], 'passthrough', null)
+  check('a background job card advertises nothing to park', !after.includes(HINT))
 }
 
-// ── a backend without the seam ────────────────────────────────────────────
+// ── a backend without the seam keeps the panel key ────────────────────────
 {
   const { parks, notices } = await press([RUNNING], { kill: () => false })
   check('a backend without park is left alone', parks.length === 0, JSON.stringify(parks))

@@ -318,12 +318,17 @@ const COMBO_MODIFIER_LABELS: Readonly<Record<string, string>> = {
   super: 'Super',
 }
 
-/** One combo in display capitalization ('ctrl+k' → 'Ctrl+K'). */
-export function comboDisplay(raw: string): string {
+/**
+ * One combo in display capitalization ('ctrl+k' → 'Ctrl+K').
+ * @param literalPrimary - spell the primary modifier out as `Ctrl` instead of
+ *   the macOS ⌘ alias. The matcher accepts both, but a hint for a chord the
+ *   docs call `Ctrl+B` must not rename it to a key the user does not press.
+ */
+export function comboDisplay(raw: string, literalPrimary = false): string {
   return raw.split('+').map(token => {
     const lower = token.toLowerCase()
     // Local: the primary modifier reads ⌘ on macOS (the matcher accepts it).
-    const mod = lower === 'ctrl' && isMac ? '⌘' : COMBO_MODIFIER_LABELS[lower]
+    const mod = lower === 'ctrl' && isMac && !literalPrimary ? '⌘' : COMBO_MODIFIER_LABELS[lower]
     if (mod !== undefined) return mod
     return token.length === 1 ? token.toUpperCase() : token[0].toUpperCase() + token.slice(1)
   }).join('+')

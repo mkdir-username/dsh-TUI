@@ -852,7 +852,7 @@ export function AssistantToolUseMessage({
     // card itself, where the wait is visible, instead of leaving the key to a
     // README. The combo follows a remap of the panel action.
     if (isRunning && tool.callView?.card === 'terminal') {
-      body.push(dim(t('tool-running-park-hint', { key: comboDisplay(primaryComboString('sidePanel')) })))
+      body.push(dim(t('tool-running-park-hint', { key: comboDisplay(primaryComboString('sidePanel'), true) })))
     }
   }
   const cap = view?.card === 'diff' ? DIFF_BODY_MAX_LINES : TEXT_BODY_MAX_LINES

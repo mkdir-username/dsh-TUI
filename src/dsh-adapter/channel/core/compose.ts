@@ -35,6 +35,7 @@ import { logForDebugging } from '../../../utils/debug.js'
 import { DEFAULT_SESSION_MODES } from '../../../sessionModes.js'
 import { resolveContextBreakdown, resolveContextOccupancy } from '../../context-occupancy.js'
 import { IdeChannel, ideLockDir, type SelectionSnapshot } from '../../ide-channel.js'
+import { parkAnyToolCall } from '../../tool-park.js'
 import { createChannelActionMethods, createChannelActionReadiness, type ChannelActionDelegates } from '../action-readiness.js'
 import { createAttachedContextRegistry } from '../attached-context.js'
 import { createChannelBinding, type ChannelBinding } from '../binding.js'
@@ -682,6 +683,10 @@ export function createCoreChannel(
         })
         return true
       },
+      // The DSH extension swaps this object for the job projection's control;
+      // a channel still on the default (a placeholder, a session shape the
+      // extension did not attach to) parks the same foreground call.
+      parkAny: () => parkAnyToolCall(),
       watchOutput: id => activity.watchOutput(id),
     },
     stagedImageGeneration: composer.stagedImageGeneration,

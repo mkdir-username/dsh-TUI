@@ -6,8 +6,12 @@
  * wait horizon expires, so the call returns a `promoted` result and the
  * command keeps running as a job. `ctx.jobs` offers no detach, so a local
  * core patch (`patch-dsh-tool-park.mjs`) publishes the rendezvous below on
- * `globalThis`: one ticket per tool-call id, attached exactly while that call
- * waits, asked once by this module.
+ * `globalThis`: one ticket per waiting call, asked once by this module.
+ *
+ * The request names no call. There is normally exactly one foreground call
+ * holding the turn, and the harness — not the transcript — knows which one is
+ * waiting; matching a row's card shape here would tie the key to a
+ * presentation detail that drifts.
  *
  * A global symbol rather than a Cordis service: both sides already share this
  * process, the patched package must not import this one, and a
@@ -16,24 +20,30 @@
  */
 export const TOOL_PARK = Symbol.for('dsh.tool-park')
 
-/** Hub the core patch installs; `request` is the only method used here. */
+/** One parked call: the ticket's id and the command it was handed. */
+export interface ParkedToolCall {
+  readonly callId: string
+  readonly command: string
+}
+
+/** Hub the core patch installs; `requestAny` is the only method used here. */
 interface ToolParkHub {
-  request?: (callId: string) => unknown
+  requestAny?: () => { callId?: unknown; command?: unknown } | null | undefined
 }
 
 /**
- * Move one in-flight tool call to the background.
- * @param callId - the call whose card is on screen, as the transcript names it.
- * @returns true when a waiting call took the request; false when nothing waits
- *   (no patch, an unknown call, or a process that has not spawned yet).
+ * Move the oldest in-flight foreground tool call to the background.
+ * @returns the parked call (its id and the command it runs), or null when
+ *   nothing waits: no core patch, or a process that has not spawned yet.
  */
-export function parkToolCall(callId: string): boolean {
-  if (callId === '') return false
+export function parkAnyToolCall(): ParkedToolCall | null {
   const hub = Reflect.get(globalThis, TOOL_PARK) as ToolParkHub | undefined
-  if (hub === undefined || typeof hub.request !== 'function') return false
+  if (hub === undefined || typeof hub.requestAny !== 'function') return null
   try {
-    return hub.request(callId) === true
+    const parked = hub.requestAny()
+    if (parked == null || typeof parked.callId !== 'string') return null
+    return { callId: parked.callId, command: typeof parked.command === 'string' ? parked.command : '' }
   } catch {
-    return false
+    return null
   }
 }
