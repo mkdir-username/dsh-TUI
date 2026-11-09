@@ -20,6 +20,8 @@
  *
  * 运行：node --import tsx/esm scripts/verify-compaction-progress.tsx
  */
+import './lib/fake-home.mjs'
+
 process.env.DSH_TUI_LANG = 'zh'
 
 const [{ createChannel }, { settled, viewportLines }, { Writable, PassThrough }, React, { Terminal: XTerm }, ui, { CompactionStatusRow }, { t }, { Chat }, { QuestionStore }, { default: instances }, { FRAME_PRESETS }, { ActivityStore }] =
@@ -89,7 +91,9 @@ function makeCompaction(kind) {
   return {
     calls,
     async compactNow(agent, signal) {
-      const call = { agentId: agent.id, abortedAt: undefined }
+      let finish
+      const completion = new Promise(resolve => { finish = resolve })
+      const call = { agentId: agent.id, abortedAt: undefined, finish }
       calls.push(call)
       if (kind === 'resolve') {
         await sleep(20) // 固定窗:pacing 桩内模拟压缩耗时，不是在等可观测状态
@@ -100,18 +104,19 @@ function makeCompaction(kind) {
           call.abortedAt = Date.now()
           reject(signal.reason instanceof Error ? signal.reason : new Error('aborted'))
         }
+        void completion.then(() => { signal.removeEventListener('abort', onAbort); resolve() })
         if (signal.aborted) onAbort()
         else signal.addEventListener('abort', onAbort, { once: true })
       })
-      return undefined
+      return { shadowedSeqs: [1, 2] }
     },
   }
 }
 
-function assemble(kind = 'hang-until-abort', extra = []) {
+function assemble(kind = 'hang-until-abort', extra = [], subagents) {
   seq = 0
   const compaction = makeCompaction(kind)
-  const services = { compaction, llm: { listProviders: () => [], listModels: async () => [] } }
+  const services = { compaction, subagents, llm: { listProviders: () => [], listModels: async () => [] } }
   const handlers = new Map()
   const listeners = new Map()
   const ctx = {
@@ -152,17 +157,18 @@ function assemble(kind = 'hang-until-abort', extra = []) {
   // refresh first so this window contains exactly the row-open bump.
   await sleep(50) // 固定窗:pacing 桩内等构造期后台刷新落定，不是在等可观测状态
   const bumps = []
-  const unsubscribe = channel.subscribe(() => bumps.push({ version: channel.version, row: channel.compaction !== undefined }))
-  channel.compact()
+  const unsubscribe = channel.subscribe(() => bumps.push({
+    row: channel.compaction !== undefined,
+    stage: channel.manualCompactionStage?.phase,
+  }))
+  channel.compact('--pure')
   const opened = await settle(() => channel.compaction !== undefined)
   check('scene1: /compact opens the status row', opened)
-  check(
-    'scene1: opening the row wakes the renderer with it',
-    // 首个 bump 必须带行（行开即重绘）；窗口内后续 bump（负载下迟到的后台
-    // 刷新）合法，但没有哪个 bump 应当丢行。
-    bumps.length >= 1 && bumps[0].row === true && bumps.every(bump => bump.row === true),
-    JSON.stringify(bumps),
-  )
+  const firstRow = bumps.findIndex(bump => bump.row)
+  check('scene1: the pure command publishes checking before prefill',
+    firstRow >= 0 && bumps.slice(0, firstRow).some(bump => bump.stage === 'checking'), JSON.stringify(bumps))
+  check('scene1: opening the row wakes the renderer and keeps it open',
+    firstRow >= 0 && bumps.slice(firstRow).every(bump => bump.row), JSON.stringify(bumps))
   unsubscribe()
   const row = channel.compaction
   check(
@@ -178,7 +184,7 @@ function assemble(kind = 'hang-until-abort', extra = []) {
 // ==== 场景 2：llm/stream 观测器只认本会话的压缩调用，其余原样透传 ============
 {
   const { channel, handlers } = assemble()
-  channel.compact()
+  channel.compact('--pure')
   await settle(() => channel.compaction !== undefined)
   const listener = handlers.get('llm/stream')
   check('scene2: llm/stream listener is registered', typeof listener === 'function')
@@ -206,7 +212,7 @@ function assemble(kind = 'hang-until-abort', extra = []) {
 // ==== 场景 3：cancelCompact 中止在飞事务，报「已取消」而不是「失败」=========
 {
   const { channel, compaction } = assemble()
-  channel.compact()
+  channel.compact('--pure')
   await settle(() => channel.compaction !== undefined)
   channel.cancelCompact()
   const aborted = await settle(() => compaction.calls[0]?.abortedAt !== undefined)
@@ -242,7 +248,7 @@ function assemble(kind = 'hang-until-abort', extra = []) {
   channel.releaseContributions()
 
   const second = assemble()
-  second.channel.compact()
+  second.channel.compact('--pure')
   await settle(() => second.channel.compaction !== undefined)
   second.handlers.get('session/event')(second.agent.session, { seq: 902, time: Date.now(), type: 'compaction/start', data: {} })
   check(
@@ -589,6 +595,148 @@ async function mountChat(channel, cols = 100, rows = 30, activityStore) {
     activityLineRow(),
   )
   await lineChat.instance.unmount()
+}
+
+function holdRestructPlan() {
+  let finish
+  const result = new Promise(resolve => { finish = resolve })
+  const requests = []
+  return {
+    finish,
+    requests,
+    service: {
+      getProvider: name => name === 'fork' ? {} : undefined,
+      async startActivation(request) {
+        requests.push(request)
+        return { result }
+      },
+    },
+  }
+}
+
+const rpLabel = '正在运行 restruct-plan…'
+const waitingLabel = '等待当前回合结束…'
+const finalizingLabel = '正在完成压缩…'
+const rpDone = { stopReason: 'completed', output: [{ type: 'text', text: 'RP_SKIP demo' }] }
+
+function statusAbovePrompt(chat, label, matches = () => true) {
+  const lines = chat.screen().split('\n')
+  const prompt = lines.findLastIndex(line => line.includes('⌸ ❯'))
+  const status = lines.findIndex(line => line.includes(label) && matches(line))
+  return status >= 0 && status < prompt
+}
+
+async function typeCompact(chat) {
+  await settle(() => chat.screen().includes('⌸ ❯'))
+  chat.stdin.write('/compact')
+  if (!await settle(() => chat.screen().includes('❯ /compact'))) return false
+  chat.stdin.write('\r')
+  return true
+}
+
+function screenBottom(chat) {
+  return chat.screen().trim().split('\n').slice(-8).join(' | ')
+}
+
+// ==== The real /compact command shows progress before the summary service starts ====
+{
+  const fork = holdRestructPlan()
+  const { channel, compaction, agent, handlers } = assemble('hang-until-abort', [], fork.service)
+  const chat = await mountChat(channel)
+  try {
+    check('manual: command reached the composer', await typeCompact(chat))
+    check('manual: /compact starts one fork without starting the summary',
+      await settle(() => fork.requests.length === 1) && compaction.calls.length === 0, toasts(channel))
+    const forkStartedAt = Date.now()
+    check('manual: restruct-plan has a status above the prompt as soon as the fork starts',
+      await settle(() => statusAbovePrompt(chat, rpLabel), 2000), screenBottom(chat))
+    // 固定窗:墙钟 Cross the lifetime of the old six-second toast while the fork is held.
+    await sleep(Math.max(0, forkStartedAt + 6200 - Date.now()))
+    check('manual: restruct-plan status remains above the prompt past six seconds',
+      statusAbovePrompt(chat, rpLabel) && !chat.screen().includes('compact-rp: restruct-plan в форке'), screenBottom(chat))
+
+    check('manual: duplicate command reached the composer', await typeCompact(chat))
+    check('manual: duplicate shows a toast and starts no second fork',
+      await settle(() => chat.screen().includes('/compact уже выполняется')) && fork.requests.length === 1, screenBottom(chat))
+    check('manual: duplicate leaves the running status visible', statusAbovePrompt(chat, rpLabel), screenBottom(chat))
+
+    fork.finish(rpDone)
+    check('manual: prefill replaces the restruct-plan status above the prompt',
+      await settle(() => !chat.screen().includes(rpLabel) && statusAbovePrompt(chat, t('compact-phase-prefill'))), screenBottom(chat))
+    const stream = handlers.get('llm/stream')(
+      { purpose: 'compaction', sessionId: agent.session.id },
+      async function* () { yield { type: 'text-delta', text: 'x'.repeat(4_800) } },
+    )
+    for await (const _chunk of stream) {}
+    check('manual: streamed summary updates the same status area',
+      await settle(() => statusAbovePrompt(chat, t('compact-working'), line => line.includes('1.2k tokens'))), screenBottom(chat))
+
+    handlers.get('session/event')(agent.session, ev('compaction/end', {}))
+    check('manual: host end changes the status to finalizing while the service still runs',
+      await settle(() => statusAbovePrompt(chat, finalizingLabel)), screenBottom(chat))
+    compaction.calls[0]?.finish()
+    check('manual: completion clears the status and keeps the success toast',
+      await settle(() => chat.screen().includes(t('compact-done')) &&
+        !chat.screen().includes(finalizingLabel) && !statusAbovePrompt(chat, t('compact-working'))), screenBottom(chat))
+  } finally {
+    fork.finish(rpDone)
+    channel.releaseContributions()
+    await chat.instance.unmount()
+  }
+}
+
+{
+  const fork = holdRestructPlan()
+  const { channel, compaction, agent, handlers } = assemble('hang-until-abort', [], fork.service)
+  const chat = await mountChat(channel, 44)
+  try {
+    check('wait-idle: narrow composer accepts /compact', await typeCompact(chat))
+    check('wait-idle: the fork begins', await settle(() => fork.requests.length === 1))
+    const onEvent = handlers.get('session/event')
+    agent.status = 'running'
+    onEvent(agent.session, ev('turn/start', { turn: 2 }))
+    check('wait-idle: the bound channel observes the running turn', await settle(() => channel.working))
+    fork.finish(rpDone)
+    check('wait-idle: the waiting status fits on one line above the narrow composer',
+      await settle(() => statusAbovePrompt(chat, waitingLabel)) && compaction.calls.length === 0, screenBottom(chat))
+
+    onEvent(agent.session, ev('compaction/start', {}))
+    check('wait-idle: automatic compaction keeps its own row state',
+      channel.compaction?.cancellable === false && channel.manualCompactionStage?.phase === 'wait-idle')
+    onEvent(agent.session, ev('compaction/end', {}))
+    check('wait-idle: the automatic end leaves the waiting stage visible',
+      channel.compaction === undefined && channel.manualCompactionStage?.phase === 'wait-idle' &&
+        statusAbovePrompt(chat, waitingLabel), screenBottom(chat))
+
+    agent.status = 'idle'
+    onEvent(agent.session, ev('turn/end', { turn: 2, reason: { kind: 'completed' } }))
+    check('wait-idle: summary starts when the turn ends',
+      await settle(() => compaction.calls.length === 1 &&
+        statusAbovePrompt(chat, t('compact-working')) && !chat.screen().includes(waitingLabel)), screenBottom(chat))
+  } finally {
+    fork.finish(rpDone)
+    channel.releaseContributions()
+    await chat.instance.unmount()
+  }
+}
+
+{
+  const fork = holdRestructPlan()
+  const { channel, compaction } = assemble('hang-until-abort', [], fork.service)
+  const chat = await mountChat(channel)
+  try {
+    check('preflight failure: command reached the composer', await typeCompact(chat))
+    check('preflight failure: the fork status is visible before its verdict',
+      await settle(() => statusAbovePrompt(chat, rpLabel)), screenBottom(chat))
+    fork.finish({ stopReason: 'error', diagnostic: 'controlled fork failure' })
+    check('preflight failure: the error clears status without starting a summary',
+      await settle(() => chat.screen().includes('controlled fork failure') && !chat.screen().includes(rpLabel)) &&
+        compaction.calls.length === 0, screenBottom(chat))
+  } finally {
+    fork.finish(rpDone)
+    channel.releaseContributions()
+    await chat.instance.unmount()
+  }
 }
 
 console.log(failed === 0 ? '\nOK: compaction progress row' : `\n${failed} FAILED`)

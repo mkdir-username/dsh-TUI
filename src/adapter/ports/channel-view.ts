@@ -578,6 +578,12 @@ export interface NotificationItem {
   timeoutMs: number
 }
 
+/** Manual /compact work outside the host's compaction bracket. */
+export interface ManualCompactionStage {
+  readonly phase: 'restruct-plan' | 'wait-idle' | 'checking' | 'finalizing'
+  readonly startedAt: number
+}
+
 /**
  * The session's in-flight compaction (`/compact`, or the automatic pressure
  * compaction at a turn boundary), as the status row above the prompt renders

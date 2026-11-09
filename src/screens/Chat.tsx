@@ -5872,6 +5872,11 @@ export function Chat({
   // the slot shows as a badge instead of a second row (the spinner's timer is
   // the turn's, not the compaction's).
   const compactionBadge = channel.compaction === undefined ? undefined : t('compact-badge')
+  const manualCompactionStage = channel.manualCompactionStage
+  // The host closes its bracket before the manual command finishes flushing.
+  const compactionStatus = manualCompactionStage?.phase === 'finalizing' && channel.compaction?.cancellable === true
+    ? channel.compaction
+    : manualCompactionStage ?? (channel.working ? undefined : channel.compaction)
 
   // ── Interrupt lane ─────────────────────────────────────────────────────
   // The approval and ask_user_question panels park the agent until the user
@@ -7193,11 +7198,9 @@ export function Chat({
                 suffix={compactionBadge}
               />
             ))}
-        {!channel.working && channel.compaction !== undefined && (
-          // Manual `/compact` runs while the session is idle: the row takes the
-          // spinner slot so the screen never looks frozen for its ~25-70s.
+        {compactionStatus !== undefined && (
           <CompactionStatusRow
-            compaction={channel.compaction}
+            compaction={compactionStatus}
             activityPreset={activitySlot ? channel.activityFrames : undefined}
           />
         )}

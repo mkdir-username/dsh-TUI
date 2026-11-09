@@ -133,7 +133,10 @@ function makeCompaction(script: Script) {
 }
 
 // ---- 组装 ctx：source snapshot / agents.create 记录调用顺序 -----------------
-function assemble(script: Script) {
+function assemble(script: Script, subagents?: {
+  getProvider(name: string): unknown
+  startActivation(request: { signal: AbortSignal }): Promise<{ result: Promise<unknown> }>
+}) {
   // Each assembly is an independent session: restart the event sequence so the
   // log's `seq` stays index-aligned (makeAgent publishes `seq: events.length`)
   // and rewind boundaries computed from a row's `seq` resolve inside it.
@@ -171,6 +174,7 @@ function assemble(script: Script) {
       listModels: async () => [{ provider: 'fake-provider', id: 'model-b', name: 'Model B' }],
     },
     compaction,
+    subagents,
   }
   const ctx = {
     on(event: string, handler: Handler) {
@@ -213,7 +217,7 @@ const toasts = (channel: { notifications: readonly { text: string }[] }) =>
 // ==== 场景 1：压缩进行中 /model —— 只换路由，不取消压缩 =====================
 {
   const { order, stamps, compaction, channel } = assemble({ kind: 'hang-until-abort' })
-  channel.compact()
+  channel.compact('--pure')
   const started = await settle(() => compaction.calls.length === 1)
   check('scene1: compactNow invoked', started)
 
@@ -234,7 +238,7 @@ const toasts = (channel: { notifications: readonly { text: string }[] }) =>
 // ==== 场景 2：/fork —— 取消必须先于快照 ======================================
 {
   const { order, stamps, compaction, channel } = assemble({ kind: 'hang-until-abort' })
-  channel.compact()
+  channel.compact('--pure')
   const started = await settle(() => compaction.calls.length === 1)
   check('scene2: compactNow invoked before /fork', started)
   // createChannel 的启动回放也读取一次日志；只观测本次 /fork 的 source
@@ -254,7 +258,7 @@ const toasts = (channel: { notifications: readonly { text: string }[] }) =>
 // ==== 场景 3：逐行 rewind —— 取消必须先于快照 ================================
 {
   const { order, stamps, compaction, channel } = assemble({ kind: 'hang-until-abort' })
-  channel.compact()
+  channel.compact('--pure')
   const started = await settle(() => compaction.calls.length === 1)
   check('scene3: compactNow invoked before row rewind', started)
   // 同上：只观测本次逐行 rewind 的 source snapshot。
@@ -273,28 +277,26 @@ const toasts = (channel: { notifications: readonly { text: string }[] }) =>
 // ==== 场景 4：persistence 分类提示 ============================================
 {
   const { channel } = assemble({ kind: 'reject', code: 'persistence', message: 'flush io error' })
-  channel.compact()
-  await settle(() => channel.notifications.length >= 2)
+  channel.compact('--pure')
+  check('scene4: flush-failed toast distinguishes committed state',
+    await settle(() => toasts(channel).includes('压缩已生效') && toasts(channel).includes('落盘')), toasts(channel))
   await sleep(150) // 固定窗:探针 抑制闩：观察窗内不得再追加通用「压缩失败」提示
   const text = toasts(channel)
-  check('scene4: flush-failed toast distinguishes committed state', text.includes('压缩已生效') && text.includes('落盘'), text)
   check('scene4: not the generic failure line', !/压缩失败 ·/.test(text), text)
 }
 
 // ==== 场景 5：通用失败仍走原提示 ==============================================
 {
   const { channel } = assemble({ kind: 'reject', message: 'Codex error: usage limit' })
-  channel.compact()
-  await settle(() => channel.notifications.length >= 2)
-  await sleep(150) // 固定窗:探针 观察窗内提示不得被后续通用失败覆盖
-  const text = toasts(channel)
-  check('scene5: generic failure toast keeps the error', /压缩失败 ·.*usage limit/.test(text), text)
+  channel.compact('--pure')
+  check('scene5: generic failure toast keeps the error',
+    await settle(() => /压缩失败 ·.*usage limit/.test(toasts(channel))), toasts(channel))
 }
 
 // ==== 场景 6：owner 回收中止压缩，晚完成不通知 =================================
 {
   const { compaction, channel } = assemble({ kind: 'hang-until-abort' })
-  channel.compact()
+  channel.compact('--pure')
   const started = await settle(() => compaction.calls.length === 1)
   check('scene6: compactNow invoked before owner disposal', started)
   channel.releaseContributions()
@@ -308,7 +310,7 @@ const toasts = (channel: { notifications: readonly { text: string }[] }) =>
 // ==== 场景 7：压缩已落定后切换不触发取消 ======================================
 {
   const { order, compaction, channel } = assemble({ kind: 'resolve' })
-  channel.compact()
+  channel.compact('--pure')
   const done = await settle(() => channel.notifications.some(item => item.text.includes('已压缩')))
   check('scene7: compaction completed', done, toasts(channel))
   const switchResult = await channel.switchModel('fake-provider', 'model-b')
@@ -321,7 +323,7 @@ const toasts = (channel: { notifications: readonly { text: string }[] }) =>
 // ==== 场景 8：/bg 后 Esc 返回的 resumeTo 不得中止原会话压缩 =================
 {
   const { channel, agent, compaction, stream } = assemble({ kind: 'hang-until-abort' })
-  channel.compact()
+  channel.compact('--pure')
   check('scene8: manual compaction started', await settle(() => compaction.calls.length === 1))
   const startedAt = channel.compaction?.startedAt
   const summary = stream(agent.session.id)
@@ -349,12 +351,12 @@ const toasts = (channel: { notifications: readonly { text: string }[] }) =>
 // ==== 场景 9：后台完成不得清掉另一个会话的新压缩 ============================
 {
   const { channel, agent, compaction } = assemble({ kind: 'hang-until-abort' })
-  channel.compact()
+  channel.compact('--pure')
   await settle(() => compaction.calls.length === 1)
   await channel.backgroundCurrent()
   channel.cancelCompact()
   check('scene9: cancelling an idle foreground leaves the background request alone', compaction.calls[0]?.abortedAt === undefined)
-  channel.compact()
+  channel.compact('--pure')
   check('scene9: another live agent can compact independently', await settle(() => compaction.calls.length === 2))
   const foregroundRow = channel.compaction
   const notices = channel.notifications.length
@@ -373,14 +375,14 @@ const toasts = (channel: { notifications: readonly { text: string }[] }) =>
 // ==== 场景 10：离开压缩中的会话落定它，回到它则保留 =========================
 {
   const { channel, agent, compaction, handlers, live } = assemble({ kind: 'hang-until-abort' })
-  channel.compact()
+  channel.compact('--pure')
   await settle(() => compaction.calls.length === 1)
   await channel.backgroundCurrent()
   // A real compaction has conversation content to summarize; empty fresh
   // sessions are intentionally retired by live adoption instead of parked.
   const freshId = channel.agentId
   appendLiveEvents(live.get(freshId)!.session, makeEvents())
-  channel.compact()
+  channel.compact('--pure')
   await settle(() => compaction.calls.length === 2)
   // Returning to the compacting session: what settles is the transaction of
   // the session being LEFT (the fresh foreground), never the target's.
@@ -400,7 +402,7 @@ const toasts = (channel: { notifications: readonly { text: string }[] }) =>
   // have nothing left to abort. Park a NEW one and let disposal be the only
   // thing that can end it.
   await channel.resumeTo(agent.session.id)
-  channel.compact()
+  channel.compact('--pure')
   await settle(() => compaction.calls.length === 3)
   await channel.backgroundCurrent()
   check('scene10: the parked request is still running before disposal',
@@ -415,7 +417,7 @@ const toasts = (channel: { notifications: readonly { text: string }[] }) =>
 // ==== 场景 11：停止后台 Agent 会中止它的手动压缩 =============================
 {
   const { channel, agent, compaction } = assemble({ kind: 'hang-until-abort' })
-  channel.compact()
+  channel.compact('--pure')
   await settle(() => compaction.calls.length === 1)
   await channel.backgroundCurrent()
   check('scene11: background stop succeeds', await channel.stopBackgroundAgent(agent.session.id))
@@ -442,11 +444,11 @@ const toasts = (channel: { notifications: readonly { text: string }[] }) =>
 // ==== 场景 13：/fork 只落定来源会话的压缩 ===================================
 {
   const { channel, compaction, live } = assemble({ kind: 'hang-until-abort' })
-  channel.compact()
+  channel.compact('--pure')
   await settle(() => compaction.calls.length === 1)
   await channel.backgroundCurrent()
   appendLiveEvents(live.get(channel.agentId)!.session, makeEvents())
-  channel.compact()
+  channel.compact('--pure')
   await settle(() => compaction.calls.length === 2)
   const forked = await channel.forkSession()
   check('scene13: /fork succeeds', forked === true, toasts(channel))
@@ -460,7 +462,7 @@ const toasts = (channel: { notifications: readonly { text: string }[] }) =>
 // ==== 场景 14：宿主只发出 legacy compaction/end 时也要清掉手动行 ===========
 {
   const { channel, agent, compaction, handlers } = assemble({ kind: 'hang-until-abort' })
-  channel.compact()
+  channel.compact('--pure')
   await settle(() => compaction.calls.length === 1)
   check('scene14: the manual row is open', await settle(() => channel.compaction?.cancellable === true))
   // On a host whose translator accepts the bracket the projector folds the
@@ -472,6 +474,76 @@ const toasts = (channel: { notifications: readonly { text: string }[] }) =>
   check('scene14: the legacy end bracket clears the manual row', await settle(() => channel.compaction === undefined))
   check('scene14: the bracket does not cancel the request', compaction.calls[0]?.abortedAt === undefined)
   channel.releaseContributions()
+}
+
+// ==== Rewind retires the old preflight before adopting a new binding ====
+{
+  let finishFork!: (result: unknown) => void
+  const result = new Promise(resolve => { finishFork = resolve })
+  let forkSignal: AbortSignal | undefined
+  const { channel, compaction, agent } = assemble({ kind: 'hang-until-abort' }, {
+    getProvider: name => name === 'fork' ? {} : undefined,
+    async startActivation({ signal }) {
+      forkSignal = signal
+      return { result }
+    },
+  })
+  const rpDone = { stopReason: 'completed', output: [{ type: 'text', text: 'RP_SKIP original fork' }] }
+  try {
+    channel.compact()
+    check('scene15: /compact opens preflight on the original session',
+      await settle(() => forkSignal !== undefined && channel.manualCompactionStage?.phase === 'restruct-plan'))
+    const rewound = await channel.rewindTo({ seq: 5, text: '回答 1' })
+    check('scene15: rewind adopts a replacement session', rewound === '回答 1' && channel.agentId !== agent.id, toasts(channel))
+    check('scene15: replacement starts without progress from the old session',
+      channel.manualCompactionStage === undefined && channel.compaction === undefined)
+    check('scene15: rewinding aborts the old preparation', forkSignal?.aborted === true)
+    channel.compact('--pure')
+    check('scene15: the replacement can begin compaction before the old fork responds',
+      await settle(() => compaction.calls.length === 1 && compaction.calls[0].agentId === channel.agentId))
+    channel.submit('queued for the replacement')
+    const isHeld = () => channel.pending.some(item => item.heldCompact && item.text === 'queued for the replacement')
+    check('scene15: replacement holds input while compacting', await settle(isHeld))
+    const row = channel.compaction
+    finishFork(rpDone)
+    await sleep(150) // 固定窗:探针 Allow the retired fork to report its late result.
+    check('scene15: late preflight does not change the replacement progress',
+      row !== undefined && channel.compaction === row && compaction.calls.length === 1)
+    check('scene15: late preflight cannot release the replacement hold', isHeld())
+    compaction.calls[0]?.finish()
+    check('scene15: replacement releases its input after compaction', await settle(() => !isHeld()))
+  } finally {
+    finishFork(rpDone)
+    channel.releaseContributions()
+  }
+}
+
+// ==== Returning to a preparing session holds new input in its new binding ====
+{
+  let finishFork!: (result: unknown) => void
+  const result = new Promise(resolve => { finishFork = resolve })
+  const rpDone = { stopReason: 'completed', output: [{ type: 'text', text: 'RP_SKIP resumed fork' }] }
+  const { channel, agent, compaction } = assemble({ kind: 'hang-until-abort' }, {
+    getProvider: () => ({}),
+    async startActivation() { return { result } },
+  })
+  try {
+    channel.compact()
+    await channel.backgroundCurrent()
+    const returned = await channel.resumeTo(agent.session.id)
+    check('scene16: background return restores the original preparation',
+      returned.ok && channel.manualCompactionStage?.phase === 'restruct-plan')
+    channel.submit('queued after return')
+    const isHeld = () => channel.pending.some(item => item.heldCompact && item.text === 'queued after return')
+    check('scene16: restored preparation holds new input', await settle(isHeld))
+    finishFork(rpDone)
+    await settle(() => compaction.calls.length === 1)
+    compaction.calls[0]?.finish()
+    check('scene16: restored cycle releases input only after compaction', await settle(() => !isHeld()))
+  } finally {
+    finishFork(rpDone)
+    channel.releaseContributions()
+  }
 }
 
 process.exit(failed)

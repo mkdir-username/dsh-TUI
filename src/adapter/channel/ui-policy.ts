@@ -187,6 +187,7 @@ export const CHANNEL_UI_PROPERTIES = [
   'gitBranch',
   'working',
   'compaction',
+  'manualCompactionStage',
   'cancelPending',
   'spinnerMode',
   'responseChars',
