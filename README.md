@@ -422,6 +422,8 @@ In both the launchpad and chat, `Alt/Option+←/→` moves by whitespace-delimit
 
 The questionnaire's answer field is the same kind of editor: `Alt/Option+←/→` and `Ctrl+←/→` jump by words, `Ctrl+A/E` and `Home`/`End` go to the line edge, `Ctrl+W` and `Alt/Option+Backspace` delete the previous word, `Ctrl+U` deletes to the line start and `Ctrl+↑/↓` move the caret between lines. `Shift+Enter`, `Option+Enter` or `Ctrl+J` insert a line break, so an answer may span several lines; a bare `Enter` still submits and pasted text stays folded to one line.
 
+The plan-review feedback row is the same editor: the same keys move the caret and edit it, and `Shift+Enter`, `Option+Enter` or `Ctrl+J` insert a line break there too.
+
 Use `Alt+Up` / `Alt+Down` to page through question text and details, or approval previews on very short terminals, without moving the choice focus; these keys are remappable in `/settings` → `Shortcuts`. Fullscreen also supports the wheel over the preview. Complete OAuth links remain readable when browser and clipboard helpers are unavailable. Fixed-action permission questions offer only the caller's choices; ordinary questionnaires still accept free text.
 
 Text, cursor position and staged image attachments on the launchpad or in chat while the backend starts are preserved when the session becomes ready. Press `Enter` after it is ready to send; an earlier `Enter` preserves the draft without queuing it. Opening a new session while startup is pending clears the previous draft and its images.
