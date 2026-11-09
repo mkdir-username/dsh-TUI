@@ -4,8 +4,8 @@
  * backend's open settles.
  *
  * It serves nothing: no capabilities, an empty history, no events, and a
- * submit that is never delivered (the composer refuses to send while the
- * channel is not ready, so this is only a backstop).
+ * submit that is never delivered (the channel defers typed input until
+ * it adopts the real session).
  */
 import type { AgentSessionRef } from './refs.js'
 import type { AgentSession, AgentSessionStatus } from './session.js'

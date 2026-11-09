@@ -168,6 +168,10 @@ export interface ChannelLaunchOptions {
    * rejection stays on the placeholder and `/new` retries. `route`/`agentPreset` override the construction options.
    */
   startup?: Promise<ChannelStartup>
+  /** The host may begin exiting before it releases the channel. */
+  canAdoptStartup?: () => boolean
+  /** Runs after the original startup binds and before typed input is sent. */
+  onStartupAdopted?: () => void
   /** How a user re-enters a session of this backend from a shell (the
    *  `/fork` notice); absent → the in-TUI `/resume` hint. */
   resumeCommand?: (sessionId: string) => string

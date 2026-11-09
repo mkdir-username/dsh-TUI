@@ -52,7 +52,7 @@ import { unavailablePermissionPresetSnapshot } from '../permissions.js'
 import { createPreferences } from '../preferences.js'
 import { createSettingsHosts } from '../settings-host.js'
 import { StartupOpenError, createInitialChannelView, type ChannelLaunchOptions, type ChannelStartup } from '../state.js'
-import type { ChannelState, SubagentTranscriptView } from '../types.js'
+import type { ChannelState, ComposerSubmission, SubagentTranscriptView } from '../types.js'
 import { createCapabilityDelegates, installChannelActions } from './actions.js'
 import { createBindingFeed, type BindingFeedHooks } from './binding-feed.js'
 import { createCoreFiles, NO_COMPLETION_CATALOG, type CompletionCatalog } from './files.js'
@@ -320,7 +320,9 @@ export function createCoreChannel(
     (...args) => notify(...args), trackPending, untrackPending, composer,
     () => currentSelection, (messageId, info) => selectionAttachments.remember(messageId, info),
     files.fallbackFs, localImages, () => contextRegistry.consume())
-  const { dispatchUserText, withDecisionPending, clearStagedImages } = inputDelivery
+  const { dispatchUserText, withDecisionPending } = inputDelivery
+  const startupInputs: ComposerSubmission[] = []
+  owner.own(() => { startupInputs.length = 0 })
   /** Monotonic token: only the latest `interruptAndDeliver` re-queues, so a
    *  second interrupt while the abort settles cannot double-deliver. */
   const inputConvergence: InputConvergence = { interruptSeq: 0, cancelInFlight: false, cancelCause: undefined }
@@ -434,12 +436,23 @@ export function createCoreChannel(
     }
   }
 
+  const inputActions = createInputActions(() => state, () => binding.session, owner, inputConvergence,
+    composer,
+    (text, placement, images, attach, contexts) => {
+      if (options.startup !== undefined && !state.ready && state.startupFailure === undefined) {
+        startupInputs.push({
+          text,
+          images: composer.captureDraftImages(text, images ?? []),
+          contexts: contextRegistry.consume(),
+        })
+        return
+      }
+      dispatchUserText(text, placement, images, attach, contexts)
+    },
+    (command, includeInContext) => getReadyActions().runLocalCommand(command, includeInContext),
+    sessionId => { if (sessionId !== '') extension.touchSession?.(sessionId) })
   const state: ChannelState = {
-    ...createInputActions(() => state, () => binding.session, owner, inputConvergence,
-      composer,
-      (text, placement, images, attach, contexts) => dispatchUserText(text, placement, images, attach, contexts),
-      (command, includeInContext) => getReadyActions().runLocalCommand(command, includeInContext),
-      sessionId => { extension.touchSession?.(sessionId) }),
+    ...inputActions,
     subscribe: emitter.subscribe,
     emit: emitter.emit,
     emitStream: emitter.emitStream,
@@ -855,7 +868,10 @@ export function createCoreChannel(
     conversationKey: session => extension.conversationKey?.(session) ?? session,
     describeWorkspace: cwd => host.workspaceService.describe(cwd),
     resetIdeSelection,
-    clearStagedImages,
+    clearStagedImages: () => {
+      startupInputs.length = 0
+      inputDelivery.clearStagedImages()
+    },
     opener: () => extension.newSession ?? defaultOpeners?.create,
     resumeOpener: () => extension.resumeSession ?? defaultOpeners?.resume,
     activity: () => {
@@ -949,7 +965,7 @@ export function createCoreChannel(
       // Released, or a `/new` / `/resume` replaced the placeholder first.
       // A tail throw released the channel (binding.adopt's rollback), so it
       // takes this same early exit.
-      if (!owner.current() || binding.session !== adoption.session) return
+      if (!owner.current() || binding.session !== adoption.session || options.canAdoptStartup?.() === false) return
       logForDebugging(`channel: startup session failed to open (${error instanceof Error ? error.message : String(error)})`)
       // A notice is one line: the reason's first line, and the way out on a
       // row of its own so a long reason cannot crowd it out.
@@ -957,7 +973,7 @@ export function createCoreChannel(
       state.startupFailure = reason
       state.rows.push({ id: rowIds.value++, kind: 'notice', text: t('startup-open-failed', { backend, err: reason }) })
       state.rows.push({ id: rowIds.value++, kind: 'notice', text: error instanceof StartupOpenError ? error.hint : t('startup-open-failed-hint') })
-      state.emit()
+      if (inputActions.holdInputs(startupInputs.splice(0)) === 0) state.emit()
     }
     void binding.prepare(adoption, async () => {
       const opened = await startup
@@ -967,6 +983,11 @@ export function createCoreChannel(
       return opened.session
     }).then(async candidate => {
       try {
+        if (options.canAdoptStartup?.() === false) {
+          startupInputs.length = 0
+          await binding.abandon(candidate)
+          return
+        }
         const previousCwd = state.cwd
         binding.adopt(candidate, adoption, (_previous, disposePrevious) => {
           feed.resetProjection()
@@ -996,6 +1017,12 @@ export function createCoreChannel(
           state.emit()
         })
         if (state.cwd !== previousCwd) resetIdeSelection()
+        options.onStartupAdopted?.()
+        // Bind typed input to this adopted session only after its commit.
+        for (const input of startupInputs.splice(0)) {
+          extension.touchSession?.(state.agentId)
+          dispatchUserText(input.text, 'followup', input.images, undefined, input.contexts, false)
+        }
         refreshGitBranch()
         scheduleSessionPreload()
         markBoot('startup-adopted')

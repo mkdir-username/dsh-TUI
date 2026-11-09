@@ -126,6 +126,10 @@ if (probeMode) {
     },
     sessionCwd: process.cwd(),
     shadow: false,
+    exited: false,
+    deferredStartup: false,
+    startupAdopted: false,
+    submitStartupPrompt: undefined,
     backendStart: undefined,
     // The profile path opens the session before the mount: ready at once.
     channel: { ready: true, submit: text => submitted.push(text) },
@@ -187,7 +191,7 @@ if (probeMode) {
     scope.backendStart = await openBackendStartup(ctx, backend, scope.backendInput.input)
   }
   runInContext([
-    ...resolution, submit,
+    ...resolution, submit, submit,
     `globalThis.targets = { backend: backendChoice, session: ${target} ?? null, workspace: requestedWorkspace ?? null }`,
   ].join('\n'), context)
   report('profile', { ...scope.targets, submitted, ...(warnings.length > 0 ? { warnings } : {}) })

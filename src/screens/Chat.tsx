@@ -974,6 +974,7 @@ export function Chat({
    * to carry.
    */
   const [launchpadDraft, setLaunchpadDraft] = React.useState('')
+  const launchpadSubmittedRef = React.useRef(false)
   const [launchpadCaret, setLaunchpadCaret] = React.useState(0)
   const [launchpadFocus, setLaunchpadFocus] = React.useState(-1)
   const launchpadImagesRef = React.useRef(new Map<string, string>())
@@ -2835,10 +2836,12 @@ export function Chat({
    * does on submit) so the launchpad's first line is reachable with ↑ later.
    */
   const submitLaunchpad = (submit: string): string | void => {
+    if (launchpadSubmittedRef.current) return
     const text = submit.trim()
     const parsed = text.startsWith('/') ? parseCommandName(text) : undefined
-    // Refused BEFORE the page closes, so the draft stays on it.
-    if (text !== '' && refusedAtStartup(parsed?.name)) return
+    // Commands and a failed startup leave the draft in place.
+    if (text !== '' && (text.startsWith('/') || text.startsWith('!') || channel.startupFailure !== undefined)
+      && refusedAtStartup(parsed?.name)) return
     const images = composerImageRefsForText(text, launchpadImagesRef.current)
     const command = parsed === undefined ? undefined : channel.commandList.find(entry => entry.name === parsed.name)
     const knownCommand = parsed !== undefined && (
@@ -2892,6 +2895,7 @@ export function Chat({
     // 直接发送：与 composer 回车同一条提交路径。发出去之后输入框是空的
     // （内容已作为首轮发出，绝不"既发了又留在框里"），也没有交接提示——
     // 没有草稿要交，一句"已放进输入框"的 toast 反而是假的。
+    launchpadSubmittedRef.current = true
     setLaunchpadOpen(false)
     channel.submit(text, images)
   }

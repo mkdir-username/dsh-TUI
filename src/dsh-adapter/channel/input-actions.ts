@@ -31,7 +31,7 @@ export interface InputConvergence {
   provisionalDockIds?: string[]
 }
 export function createInputActions(
-  getState: () => Pick<ChannelState, 'agentId' | 'pending' | 'cancelPending' | 'emit' | 'notify' | 'backendCapabilities' | 'status'>,
+  getState: () => Pick<ChannelState, 'agentId' | 'pending' | 'cancelPending' | 'emit' | 'notify' | 'backendCapabilities' | 'status' | 'ready'>,
   getSession: () => AgentSession,
   owner: { assertActive(): void },
   input: InputConvergence,
@@ -267,6 +267,7 @@ export function createInputActions(
     deliverDocked(): number {
       owner.assertActive()
       const state = getState()
+      if (!state.ready) return 0
       const held = (id: string): boolean => input.provisionalDockIds?.includes(id) === true
       const heldForCompact = state.pending.filter(item => item.docked === true && item.heldCompact === true)
       const docked = state.pending.filter(item => item.docked === true && item.heldCompact !== true)

@@ -196,14 +196,19 @@ const notices = (channel: { rows: readonly { kind: string; text: string }[] }): 
 {
   const open = deferred()
   const channel = createChannel(ctx, createStartingSession('claude', LAUNCH), launch(open.promise))
+  channel.submit('held after failure')
   open.reject(new Error('handshake refused'))
   check('a failed open leaves a notice naming the error', await settled(() => notices(channel).some(text => text.includes('handshake refused'))), JSON.stringify(notices(channel)))
   check('and a notice of its own naming /new', notices(channel).some(text => text.startsWith('/new')), JSON.stringify(notices(channel)))
   check('still not ready after the failure', channel.ready === false && channel.agentId === '')
+  check('the queued text is recoverable and waits for a working session', channel.pending.some(row => row.text === 'held after failure' && row.docked) && channel.deliverDocked() === 0)
   const before = opened.length
   const ok = await channel.newSession()
   check('/new retries through openSession', ok && opened.length === before + 1)
   check('ready after /new', channel.ready && channel.agentId === opened[before]!.ref.sessionId)
+  check('retry keeps the text held until the user sends it', opened[before]!.submits.length === 0 && channel.pending.some(row => row.text === 'held after failure' && row.docked))
+  channel.deliverDocked()
+  check('the user can send the held text after retry', await settled(() => opened[before]!.submits.some(item => item.input.text === 'held after failure')))
   check('the subagent control follows the /new session', channel.subagentControl.history !== undefined)
   channel.releaseContributions()
 }
@@ -239,19 +244,40 @@ const notices = (channel: { rows: readonly { kind: string; text: string }[] }): 
 {
   const open = deferred()
   const channel = createChannel(ctx, createStartingSession('claude', LAUNCH), launch(open.promise))
+  channel.submit('must not send after release')
   channel.releaseContributions()
   const late = fakeSession('55555555-5555-4555-8555-555555555555', LAUNCH)
   open.resolve({ session: late, history: [] })
   check('a session arriving after release is closed', await settled(() => late.disposed))
   check('it was never subscribed', late.listenerCount() === 0)
+  check('it never receives the queued input', late.submits.length === 0)
+}
+
+// The exit funnel claims shutdown before the terminal and channel are released.
+{
+  const open = deferred()
+  let exiting = false
+  const channel = createChannel(ctx, createStartingSession('claude', LAUNCH), {
+    ...launch(open.promise), canAdoptStartup: () => !exiting,
+  })
+  channel.submit('must not send while exiting')
+  exiting = true
+  const late = fakeSession('55555555-5555-4555-8555-555555555556', LAUNCH)
+  open.resolve({ session: late, history: [] })
+  check('shutdown closes a startup session that arrived during terminal cleanup', await settled(() => late.disposed))
+  check('shutdown prevents adoption and input delivery', !channel.ready && late.submits.length === 0 && late.listenerCount() === 0)
+  channel.releaseContributions()
 }
 
 // ── /new while the open is still going ────────────────────────────────
 {
   const open = deferred()
-  const channel = createChannel(ctx, createStartingSession('claude', LAUNCH), launch(open.promise))
+  const channel = createChannel(ctx, createStartingSession('claude', LAUNCH), {
+    ...launch(open.promise), onStartupAdopted: () => channel.submit('argv prompt must not follow replacement'),
+  })
   const generation = channel.stagedImageGeneration()
   const handle = await channel.stageComposerImage({ data: png, mediaType: 'image/png' }, generation)
+  channel.submit('must not send after explicit replacement')
   const before = opened.length
   check('/new while starting opens its own session', await channel.newSession() && channel.agentId === opened[before]!.ref.sessionId && channel.ready)
   check('/new while starting revokes the replaced draft image', !channel.hasStagedImage(handle.stageId) && channel.stagedImageGeneration() > generation)
@@ -259,6 +285,7 @@ const notices = (channel: { rows: readonly { kind: string; text: string }[] }): 
   open.resolve({ session: late, history: [] })
   check('the startup session arriving later is closed', await settled(() => late.disposed))
   check('the /new session stays bound', channel.agentId === opened[before]!.ref.sessionId && late.listenerCount() === 0)
+  check('neither session receives the superseded input', late.submits.length === 0 && opened[before]!.submits.length === 0)
   check('no failure notice for a superseded open', !notices(channel).some(text => text.includes('failed to open')))
   channel.releaseContributions()
 }
@@ -273,10 +300,13 @@ class FakeStdin extends PassThrough {
   ref() { return this }
   unref() { return this }
 }
-async function screenCase(surface: 'composer' | 'launchpad' | 'launchpad-failed', sessionId: string, fullscreen = false, columns = 100, covered = false, outcome: 'adoption' | 'new' = 'adoption'): Promise<void> {
+async function screenCase(surface: 'composer' | 'launchpad' | 'launchpad-failed', sessionId: string, fullscreen = false, columns = 100, covered = false, outcome: 'adoption' | 'new' | 'queued' = 'adoption'): Promise<void> {
   const label = (text: string): string => `${surface}${covered ? ' covered' : ''}${outcome === 'new' ? ' /new' : ''} ${fullscreen ? 'fullscreen' : 'inline'} ${columns} cols: ${text}`
   const open = deferred()
-  const channel = createChannel(ctx, createStartingSession('claude', process.cwd()), { ...launch(open.promise), cwd: process.cwd() })
+  const channel = createChannel(ctx, createStartingSession('claude', process.cwd()), {
+    ...launch(open.promise), cwd: process.cwd(),
+    ...(outcome === 'queued' ? { onStartupAdopted: () => channel.submit('argv prompt') } : {}),
+  })
   const COLS = columns
   const ROWS = 30
   const term = new XTerm({ cols: COLS, rows: ROWS, scrollback: 200, allowProposedApi: true })
@@ -308,7 +338,6 @@ async function screenCase(surface: 'composer' | 'launchpad' | 'launchpad-failed'
     { stdout: stdout as never, stdin: stdin as never, stderr: stdout as never, exitOnCtrlC: false, patchConsole: false },
   )
   for (const value of instances.values()) instances.set(process.stdout, value)
-  const toasts = (): string => channel.notifications.map(item => item.text).join(' | ')
   const notReadyCount = (): number => channel.notifications.filter(item => item.text === notReady).length
   const typeLine = async (text: string): Promise<void> => {
     for (const char of text) stdin.write(char)
@@ -329,6 +358,21 @@ async function screenCase(surface: 'composer' | 'launchpad' | 'launchpad-failed'
   try {
     // 固定窗:pacing the key handlers attach after the first frame.
     await sleep(300)
+    if (outcome === 'queued') {
+      await typeLine('!must-not-run')
+      const beforeShell = notReadyCount()
+      stdin.write('\r')
+      check(label('a shell command stays in the draft'), await settled(() => notReadyCount() > beforeShell) && screen().includes('!must-not-run'), screen())
+      await clearLine()
+      await typeLine('hello early')
+      stdin.write('\r\x1b[13u')
+      check(label('Enter accepts the line while startup is still pending'), await settled(() => controllerRef.current?.text?.() === ''), screen())
+      check(label('nothing reaches the backend before adoption'), real.submits.length === 0)
+      open.resolve({ session: real, history: [] })
+      check(label('the early Enter submits after adoption'), await settled(() => real.submits.length >= 2), JSON.stringify(real.submits))
+      check(label('argv comes first and typed input follows exactly once'), JSON.stringify(real.submits.map(item => item.input.text)) === JSON.stringify(['argv prompt', 'hello early']), JSON.stringify(real.submits))
+      return
+    }
     if (surface === 'launchpad-failed') {
       // A failed open closes the landing page: the failure row and its /new
       // hint are in the transcript it covered; the draft moves along.
@@ -339,14 +383,6 @@ async function screenCase(surface: 'composer' | 'launchpad' | 'launchpad-failed'
       check(label('still not ready'), !channel.ready)
       return
     }
-    await typeLine('hello early')
-    stdin.write('\r')
-    check(label('Enter while starting says the backend is still starting'), await settled(() => toasts().includes(notReady)), toasts())
-    // The landing page has no toast area: the notice takes its Tips row.
-    check(label('the notice is on screen'), await settled(() => screen().includes(notReady.slice(0, 30))), screen())
-    check(label('the draft stays in place'), screen().includes('hello early'), screen())
-    check(label('nothing was submitted'), real.submits.length === 0)
-    await clearLine()
     await typeLine('/status')
     const beforeStatus = notReadyCount()
     stdin.write('\r')
@@ -409,8 +445,6 @@ async function screenCase(surface: 'composer' | 'launchpad' | 'launchpad-failed'
     await typeLine('hello ready')
     stdin.write('\r')
     check(label('after the adoption Enter sends to the real session'), await settled(() => real.submits.some(item => item.input.text === 'hello ready')), JSON.stringify(real.submits.map(item => item.input.text)))
-    // A refused line must not be queued and forwarded once the session opens.
-    check(label('the refused early line never reaches the session'), !real.submits.some(item => item.input.text === 'hello early'), JSON.stringify(real.submits.map(item => item.input.text)))
     await typeLine('old session draft')
     check(label('a draft in the ready session is visible'), await settled(() => screen().includes('old session draft')), screen())
     check(label('/new replaces the real session'), await channel.newSession())
@@ -420,6 +454,8 @@ async function screenCase(surface: 'composer' | 'launchpad' | 'launchpad-failed'
     channel.releaseContributions()
   }
 }
+await screenCase('composer', '77777777-7777-4777-8777-777777777777', false, 100, false, 'queued')
+await screenCase('launchpad', '88888888-8888-4888-8888-888888888888', true, 42, false, 'queued')
 for (const fullscreen of [false, true]) {
   for (const columns of [100, 42]) {
     await screenCase('composer', '77777777-7777-4777-8777-777777777777', fullscreen, columns)

@@ -1788,6 +1788,10 @@ export function PromptInput({
   const submitText = (text: string, notice?: string) => {
     const trimmed = text.trim()
     if (!trimmed) return
+    if (channel.ready === false && (channel.startupFailure !== undefined || trimmed.startsWith('/') || trimmed.startsWith('!'))) {
+      notifyNotReady()
+      return
+    }
     const images = imageRefsFor(trimmed)
     if (shellImagesUnsupported(trimmed, images)) return
     rememberHistory(trimmed, images)
@@ -2259,10 +2263,9 @@ export function PromptInput({
         return
       }
     }
-    // Not ready: refuse before any path that clears the draft.
+    // While starting, only an explicit text submit may wait for adoption.
     if (channel.ready === false && value.trim() !== '') {
-      if (tryRunCommand(value)) return
-      notifyNotReady()
+      if (!tryRunCommand(value.trim())) submitText(value)
       return
     }
     // A docked queue (Esc parked it) owns a bare Enter on an EMPTY draft
@@ -2897,10 +2900,6 @@ export function PromptInput({
         }
       }
       if (tryRunCommand(line)) return
-      if (channel.ready === false) {
-        notifyNotReady()
-        return
-      }
       submitText(line)
       return
     }

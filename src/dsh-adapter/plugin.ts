@@ -206,10 +206,10 @@ import { StartupOpenError, type ChannelStartup } from './channel/state.js'
 let lastBootedFullscreen: boolean | undefined
 // Image preferences also stay fixed across host recomposes until /restart.
 let lastBootedTerminalImages: boolean | undefined
-// A replacement's first process already sent the launch prompt. Read once per
-// process (a recompose must not resend it) and dropped from the environment,
+// A replacement's first process already sent the launch prompt. Keep the
+// claim across recomposes and remove the inherited flag from the environment,
 // so a `dsh-tui "prompt"` run from inside the session keeps its own prompt.
-const launchPromptSent = process.env[LAUNCH_PROMPT_SENT_ENV] === '1'
+let launchPromptSent = process.env[LAUNCH_PROMPT_SENT_ENV] === '1'
 delete process.env[LAUNCH_PROMPT_SENT_ENV]
 
 // Kept importable from here: the startup parser moved to its own dependency-free
@@ -590,6 +590,7 @@ export async function apply(ctx: Context, runtimeConfig: RuntimeConfig<Config>, 
   // needs DSH's services runs later, in `attachDsh`.
   const entrySlot = runtimeOptions.entrySlot
   const dshInEntry = entrySlot?.dsh === true
+  let exited = false
 
   // Modern hosts own a declarative registry; old hosts discover directories.
   // A modern bundle failure must not silently fall back to obsolete files.
@@ -1048,13 +1049,9 @@ export async function apply(ctx: Context, runtimeConfig: RuntimeConfig<Config>, 
   /** The in-process DSH kernel's startup session: settled by `attachDsh`
    *  (the profile's dsh-tui row) or by a failed composition. */
   let settleDshStartup: { resolve(startup: ChannelStartup): void; reject(error: unknown): void } | undefined
-  let dshStartupSettled = false
   const dshStartup = dshInEntry
     ? new Promise<ChannelStartup>((resolve, reject) => {
-      settleDshStartup = {
-        resolve: startup => { dshStartupSettled = true; resolve(startup) },
-        reject: error => { dshStartupSettled = true; reject(error) },
-      }
+      settleDshStartup = { resolve, reject }
     })
     : undefined
   // A boot that fails before the channel holds the startup must not leak an
@@ -1220,11 +1217,28 @@ export async function apply(ctx: Context, runtimeConfig: RuntimeConfig<Config>, 
    */
   let openDshSession: ((cwd: string) => Promise<AgentSession>) | undefined
   let compositionFailed = false
-  /** How the in-process DSH kernel's composition ended: a failing startup open
-   *  waits for it, so a failed composition (the root cause) is reported. */
+  /** The row can open in parallel with the audit, but admission waits for it. */
   let settleComposition: (ok: boolean) => void = () => undefined
   const compositionSettled = new Promise<boolean>(resolve => { settleComposition = resolve })
+  let compositionFailure: StartupOpenError | undefined
+  const auditedDshStartup = dshStartup?.then(async opened => {
+    if (await compositionSettled) return opened
+    await opened.session.dispose().catch(() => undefined)
+    throw compositionFailure ?? new Error('dsh-tui: startup stopped')
+  })
+  auditedDshStartup?.catch(() => undefined)
+  ctx.effect(() => () => settleComposition(false), 'dsh-tui startup composition')
+  const deferredStartup = backendStartup !== undefined || auditedDshStartup !== undefined
+  let startupAdopted = false
+  let submitStartupPrompt: (() => void) | undefined
   const rawChannel = createChannel(ctx, startupSession, {
+    canAdoptStartup: () => !exited,
+    onStartupAdopted: () => {
+      startupAdopted = true
+      const submit = submitStartupPrompt
+      submitStartupPrompt = undefined
+      submit?.()
+    },
     // A replacement process (`/restart`, `restart_session`) continues the session
     // it resumed: the turn its teardown cancelled is not a stopped session.
     restartResume: process.env.DSH_TUI_RESTART_CHILD === '1'
@@ -1252,11 +1266,13 @@ export async function apply(ctx: Context, runtimeConfig: RuntimeConfig<Config>, 
       ...(backendStartup === undefined ? {} : { startup: backendStartup }),
     }),
     // The in-process DSH kernel: a DSH placeholder until the row's session.
-    ...(dshStartup === undefined ? {} : {
+    ...(auditedDshStartup === undefined ? {} : {
       backendLabel: backendLabel('dsh'),
-      startup: dshStartup,
+      startup: auditedDshStartup,
       openSession: async target => {
-        if (target.kind !== 'create' || openDshSession === undefined) throw new Error(t('new-session-unavailable'))
+        if (target.kind !== 'create' || !await compositionSettled || exited || openDshSession === undefined) {
+          throw new Error(t('new-session-unavailable'))
+        }
         return await openDshSession(target.cwd)
       },
     }),
@@ -1394,7 +1410,9 @@ export async function apply(ctx: Context, runtimeConfig: RuntimeConfig<Config>, 
     notifyChannel(t('host-dsh-unavailable', { reason: hostNotice }), { color: 'warning', timeoutMs: 10000 })
   }
   const submitChannel: typeof channel.submit = text => {
-    if (!shadow) channel.submit(text)
+    if (shadow || exited || launchPromptSent) return
+    channel.submit(text)
+    launchPromptSent = true
   }
   ctx.effect(() => () => { uiMount.dispose() })
   // Root page-margin store: the PageMargin inset box sits ABOVE Chat, so
@@ -2336,9 +2354,8 @@ export async function apply(ctx: Context, runtimeConfig: RuntimeConfig<Config>, 
   // `dsh-tui "run the tests"` forwards positionals through the dsh CLI,
   // which mounts them as ctx.cmdlineArgs. Reuse the snapshot read for resume
   // selection above, supporting both `{ get() }` and legacy `{ args }` hosts.
-  // Submit once the channel exists; delivery goes through the normal pending/inbox
-  // chain, so no special timing is needed. The parser separates startup flags
-  // from literal prompt text.
+  // Delivery goes through the normal pending/inbox chain. The parser separates
+  // startup flags from literal prompt text.
   // The standalone entry has no `ctx.cmdlineArgs` (its argv is the app's); a
   // replacement keeps the arguments but the first process sent their prompt.
   const initialPrompt = launchPromptSent ? '' : initialPromptFromCmdlineArgs(cmdlineArgs ?? process.argv.slice(2))
@@ -2346,18 +2363,8 @@ export async function apply(ctx: Context, runtimeConfig: RuntimeConfig<Config>, 
   const stopHeldInputs = adoptHeldInputs(channel)
   if (stopHeldInputs !== undefined) ctx.effect(() => stopHeldInputs, 'dsh-tui held inputs after startup')
   if (initialPrompt) {
-    // A placeholder session refuses sends and nothing replays them after
-    // adoption: hold the prompt until the channel is ready.
-    if (channel.ready) {
-      submitChannel(initialPrompt)
-    } else {
-      const unsubscribe = channel.subscribe(() => {
-        if (!channel.ready) return
-        unsubscribe()
-        submitChannel(initialPrompt)
-      })
-      ctx.effect(() => unsubscribe, 'dsh-tui initial prompt after startup')
-    }
+    if (!deferredStartup || startupAdopted) submitChannel(initialPrompt)
+    else submitStartupPrompt = () => submitChannel(initialPrompt)
   }
   // The /update that restarted into this process skipped the engine. Its own
   // screen was torn down in the same tick, so the guidance lands here, on the
@@ -2390,7 +2397,6 @@ export async function apply(ctx: Context, runtimeConfig: RuntimeConfig<Config>, 
   // terminal (cursor, raw mode, mouse tracking) and the explicit newlines
   // keep the shell prompt from overlapping the TUI's last line.
   let instance: Awaited<ReturnType<typeof render>> | undefined
-  let exited = false
   let updateRequested = false
   /** The preflight plan for /update (TUI + engine + launcher, #1844). */
   let updatePlan: UpdatePlan | undefined
@@ -2426,6 +2432,7 @@ export async function apply(ctx: Context, runtimeConfig: RuntimeConfig<Config>, 
       // Mirror the funnel's internal exited flag for the /update and
       // background-check guards that still read the outer one.
       exited = true
+      settleComposition(false)
       if (error !== undefined) {
         // runCrashExit keeps the diagnostics apart from the resume markers
         // and the terminal cleanup, so a throw while describing the error
@@ -3119,24 +3126,15 @@ export async function apply(ctx: Context, runtimeConfig: RuntimeConfig<Config>, 
   if (entrySlot?.dsh === true) {
     entrySlot.composeSucceeded = () => { settleComposition(true) }
     entrySlot.composeFailed = (error, logPath) => {
-      settleComposition(false)
       const reason = error instanceof Error ? error.message : String(error)
       logForDebugging(`dsh-tui: host composition failed (${reason})${logPath === undefined ? '' : ` — startup report: ${logPath}`}`)
       compositionFailed = true
       openDshSession = undefined
       // No DSH to open on: the failure row names the report and the ways out.
       const hint = logPath === undefined ? t('startup-compose-failed-hint') : t('startup-compose-failed-hint-log', { path: logPath })
-      if (!dshStartupSettled) {
-        settleDshStartup?.reject(new StartupOpenError(reason.split('\n')[0] ?? reason, hint, { cause: error }))
-        return
-      }
-      if (exited) return
-      // The session may already be adopted (the audit runs after the tree
-      // settled): a row that stays, not a toast.
-      try {
-        channel.pushLocal(t('startup-open-failed', { backend: backendLabel('dsh'), err: reason.split('\n')[0] ?? reason }), [hint])
-      } catch {
-      }
+      compositionFailure = new StartupOpenError(reason.split('\n')[0] ?? reason, hint, { cause: error })
+      settleComposition(false)
+      settleDshStartup?.reject(compositionFailure)
     }
     // The row's seams (presets, ask_user, approvals, the assembly filters)
     // live on the row and unload with it: a row that comes back mounts them again.
@@ -3215,7 +3213,7 @@ export async function apply(ctx: Context, runtimeConfig: RuntimeConfig<Config>, 
         const opened = await openOnRow(rowSessionId, startupMeta)
         const session = createDshSession(dshCtx, { agent: opened.agent, handle: opened.handle }, { screenOutlivesContext: true })
         // The composition failed while this opened: close the unadoptable session.
-        if (compositionFailed) {
+        if (compositionFailed || exited) {
           await session.dispose().catch(() => undefined)
           return
         }

@@ -156,7 +156,7 @@ export function createInputDelivery(
    *  while the user /new's away — capturing the agent at run time would
    *  adopt the NEW session as this text's origin and deliver the old
    *  conversation's words into it. */
-  const captureOrigin = (): UserTextOrigin => {
+  const captureOrigin = (consumeContexts: boolean): UserTextOrigin => {
     const local = localImages?.()
     return {
     session: binding.session,
@@ -172,7 +172,7 @@ export function createInputDelivery(
     // Consumed (not merely read): the snapshot and the clear are one step, so
     // the chips leave with the submission that owns them and a second,
     // faster-typed message can never re-attach the same context.
-    attachedContexts: consumeAttachedContexts?.() ?? [],
+    attachedContexts: consumeContexts ? consumeAttachedContexts?.() ?? [] : [],
     }
   }
 
@@ -439,8 +439,9 @@ export function createInputDelivery(
     images: readonly ComposerImageRef[] = [],
     attach?: UserMessage,
     contexts?: readonly AttachedContext[],
+    consumeContexts = true,
   ): void => {
-    const captured = captureOrigin()
+    const captured = captureOrigin(consumeContexts)
     // A dock re-send carries the contexts the row saved: the live chips were
     // consumed by the submission that was refused (#1651). `captureOrigin`
     // already took whatever the user staged since, so merge — never replace —
