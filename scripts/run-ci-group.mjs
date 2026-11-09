@@ -526,6 +526,10 @@ const GROUPS = {
 // `[<35;10`、Esc 后接 `[` 必须原样通过）与 hold 上界/到期释放（>1000ms 或 >64B
 // 必须把持有字节按普通键回放，不丢字节、不重复）。
     ["verify-mouse-report-fragments", ['node', '--import', 'tsx/esm', 'scripts/verify-mouse-report-fragments.tsx']],
+// Chat 覆盖层搜索框编辑回归（Ctrl+R 历史搜索、转录模式 `/` 搜索）：与共享
+// answer-field 核心同一套码点步进——⌫/Del/←/→ 不得把 emoji 拆成孤立代理项
+// （查询会渲染成替换符且再也匹配不上），括号粘贴压平且不提交。
+    ["verify-chat-search-editing", ['node', '--import', 'tsx/esm', 'scripts/verify-chat-search-editing.tsx']],
 // 注：verify-permission-modes 不在此登记。该脚本在基线（dd413712）上本就有
 // 22 处失败（Shift+Tab 循环相关的动态 preset / 官方命令路径整段未过），
 // 与本次改动无关；把它放进阻塞组会直接红掉 input-terminal。等脚本自身修好

@@ -80,6 +80,8 @@ import { normalizeScrollGutter } from '../tuiDisplayPrefs.js'
 import { OverlayAbove } from '../components/OverlayAbove.js'
 import { TooltipLayer } from '../components/Tooltip.js'
 import { PromptInput, composerImageRefsForText, type PromptController } from '../components/PromptInput.js'
+import { backspaceAt, deleteAt, insertAt, nextPoint, previousPoint } from '../components/questions/answerField.js'
+import { flattenPasteInline } from '../channel/sanitize.js'
 import { turnUsageParts } from '../components/TurnUsageRow.js'
 import { AgentTranscriptScene } from './AgentTranscriptScene.js'
 import { agentViewStore } from '../components/sidePanel/agentViewStore.js'
@@ -4971,26 +4973,32 @@ export function Chat({
         if (searchCount === 0) setSearchQuery('')
         dispatchOverlay({ type: 'close' })
       } else if (key.backspace) {
-        if (searchCursor > 0) {
-          setSearchQuery(searchQuery.slice(0, searchCursor - 1) + searchQuery.slice(searchCursor))
-          setSearchCursor(searchCursor - 1)
-        }
+        // Code-point stepping (shared answer-field core): a ⌫ that removed
+        // one UTF-16 unit would leave a lone surrogate in the query.
+        const next = backspaceAt({ text: searchQuery, cursor: searchCursor })
+        setSearchQuery(next.text)
+        setSearchCursor(next.cursor)
       } else if (key.delete) {
-        if (searchCursor < searchQuery.length) {
-          setSearchQuery(searchQuery.slice(0, searchCursor) + searchQuery.slice(searchCursor + 1))
-        }
+        const next = deleteAt({ text: searchQuery, cursor: searchCursor })
+        setSearchQuery(next.text)
+        setSearchCursor(next.cursor)
       } else if (key.leftArrow) {
-        setSearchCursor(c => Math.max(0, c - 1))
+        setSearchCursor(c => previousPoint(searchQuery, c))
       } else if (key.rightArrow) {
-        setSearchCursor(c => Math.min(searchQuery.length, c + 1))
+        setSearchCursor(c => nextPoint(searchQuery, c))
       } else if (key.home) {
         setSearchCursor(0)
       } else if (key.end) {
         setSearchCursor(searchQuery.length)
+      } else if (key.isPasted === true && input) {
+        // A bracketed paste is text: flatten its breaks, never submit.
+        const next = insertAt({ text: searchQuery, cursor: searchCursor }, flattenPasteInline(input))
+        setSearchQuery(next.text)
+        setSearchCursor(next.cursor)
       } else if (!key.ctrl && !key.meta && !key.super && input) {
-        const next = searchQuery.slice(0, searchCursor) + input + searchQuery.slice(searchCursor)
-        setSearchQuery(next)
-        setSearchCursor(searchCursor + input.length)
+        const next = insertAt({ text: searchQuery, cursor: searchCursor }, input)
+        setSearchQuery(next.text)
+        setSearchCursor(next.cursor)
       }
       event.stopImmediatePropagation()
       return
@@ -5066,36 +5074,24 @@ export function Chat({
           } else if (editor !== undefined) {
             runWorkspaceFlowAction(signal => editor.submit(value, signal))
           }
-        } else if (key.backspace && flowInput.cursor > 0) {
-          dispatchOverlay({
-            type: 'flow-input-edit',
-            value: flowInput.value.slice(0, flowInput.cursor - 1) + flowInput.value.slice(flowInput.cursor),
-            cursor: flowInput.cursor - 1,
-          })
-        } else if (key.delete && flowInput.cursor < flowInput.value.length) {
-          dispatchOverlay({
-            type: 'flow-input-edit',
-            value: flowInput.value.slice(0, flowInput.cursor) + flowInput.value.slice(flowInput.cursor + 1),
-            cursor: flowInput.cursor,
-          })
+        } else if (key.backspace) {
+          const next = backspaceAt({ text: flowInput.value, cursor: flowInput.cursor })
+          if (next.text !== flowInput.value) {
+            dispatchOverlay({ type: 'flow-input-edit', value: next.text, cursor: next.cursor })
+          }
+        } else if (key.delete) {
+          const next = deleteAt({ text: flowInput.value, cursor: flowInput.cursor })
+          if (next.text !== flowInput.value) {
+            dispatchOverlay({ type: 'flow-input-edit', value: next.text, cursor: next.cursor })
+          }
         } else if (key.leftArrow) {
-          dispatchOverlay({
-            type: 'flow-input-edit',
-            value: flowInput.value,
-            cursor: Math.max(0, flowInput.cursor - 1),
-          })
+          dispatchOverlay({ type: 'flow-input-edit', value: flowInput.value, cursor: previousPoint(flowInput.value, flowInput.cursor) })
         } else if (key.rightArrow) {
-          dispatchOverlay({
-            type: 'flow-input-edit',
-            value: flowInput.value,
-            cursor: Math.min(flowInput.value.length, flowInput.cursor + 1),
-          })
+          dispatchOverlay({ type: 'flow-input-edit', value: flowInput.value, cursor: nextPoint(flowInput.value, flowInput.cursor) })
         } else if (input.length > 0 && !key.ctrl && !key.meta && !key.super && !key.tab) {
-          dispatchOverlay({
-            type: 'flow-input-edit',
-            value: flowInput.value.slice(0, flowInput.cursor) + input + flowInput.value.slice(flowInput.cursor),
-            cursor: flowInput.cursor + input.length,
-          })
+          const chunk = key.isPasted === true ? flattenPasteInline(input) : input
+          const next = insertAt({ text: flowInput.value, cursor: flowInput.cursor }, chunk)
+          dispatchOverlay({ type: 'flow-input-edit', value: next.text, cursor: next.cursor })
         }
         return
       }
@@ -5531,45 +5527,33 @@ export function Chat({
           dispatchOverlay({ type: 'move', delta: 1, count: historyMatches.length })
         }
       } else if (key.backspace) {
-        if (cursor > 0) {
-          dispatchOverlay({
-            type: 'history-edit',
-            query: query.slice(0, cursor - 1) + query.slice(cursor),
-            cursor: cursor - 1,
-            focus: 0,
-          })
+        // Code-point stepping (shared answer-field core): deleting one
+        // UTF-16 unit would split an emoji into lone surrogates.
+        const next = backspaceAt({ text: query, cursor })
+        if (next.text !== query) {
+          dispatchOverlay({ type: 'history-edit', query: next.text, cursor: next.cursor, focus: 0 })
         }
       } else if (key.delete) {
-        if (cursor < query.length) {
-          dispatchOverlay({
-            type: 'history-edit',
-            query: query.slice(0, cursor) + query.slice(cursor + 1),
-            focus: 0,
-          })
+        const next = deleteAt({ text: query, cursor })
+        if (next.text !== query) {
+          dispatchOverlay({ type: 'history-edit', query: next.text, cursor: next.cursor, focus: 0 })
         }
       } else if (key.leftArrow) {
-        // Step by code point, not UTF-16 unit: an emoji is two units, and
-        // a mid-pair caret offset would split it in the SearchBox render.
-        if (cursor > 0) {
-          const ch = [...query.slice(0, cursor)].pop()!
-          dispatchOverlay({ type: 'history-edit', cursor: cursor - ch.length })
-        }
+        const at = previousPoint(query, cursor)
+        if (at !== cursor) dispatchOverlay({ type: 'history-edit', cursor: at })
       } else if (key.rightArrow) {
-        if (cursor < query.length) {
-          const ch = [...query.slice(cursor)][0]!
-          dispatchOverlay({ type: 'history-edit', cursor: cursor + ch.length })
-        }
+        const at = nextPoint(query, cursor)
+        if (at !== cursor) dispatchOverlay({ type: 'history-edit', cursor: at })
       } else if (key.home) {
         dispatchOverlay({ type: 'history-edit', cursor: 0 })
       } else if (key.end) {
         dispatchOverlay({ type: 'history-edit', cursor: query.length })
+      } else if (key.isPasted === true && input) {
+        const next = insertAt({ text: query, cursor }, flattenPasteInline(input))
+        dispatchOverlay({ type: 'history-edit', query: next.text, cursor: next.cursor, focus: 0 })
       } else if (!key.ctrl && !key.meta && !key.super && input) {
-        dispatchOverlay({
-          type: 'history-edit',
-          query: query.slice(0, cursor) + input + query.slice(cursor),
-          cursor: cursor + input.length,
-          focus: 0,
-        })
+        const next = insertAt({ text: query, cursor }, input)
+        dispatchOverlay({ type: 'history-edit', query: next.text, cursor: next.cursor, focus: 0 })
       }
       return
     }

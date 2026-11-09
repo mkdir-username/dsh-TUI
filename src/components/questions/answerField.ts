@@ -60,6 +60,19 @@ export function insertNewlineAt(value: AnswerValue): AnswerValue {
   return insertAt(value, '\n')
 }
 
+/** The code-point start before `cursor` (readline ←). */
+export function previousPoint(text: string, cursor: number): number {
+  if (cursor <= 0) return 0
+  const before = [...text.slice(0, cursor)]
+  return cursor - (before[before.length - 1]?.length ?? 1)
+}
+
+/** The code-point start after `cursor` (readline →). */
+export function nextPoint(text: string, cursor: number): number {
+  if (cursor >= text.length) return text.length
+  return cursor + ([...text.slice(cursor)][0]?.length ?? 1)
+}
+
 export function caretTo(value: AnswerValue, next: number): AnswerValue {
   const length = pointsOf(value.text).length
   return { text: value.text, cursor: Math.max(0, Math.min(length, next)) }
