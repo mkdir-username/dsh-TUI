@@ -453,12 +453,14 @@ export function StatusLine({
   }
 
   let tpsPart: FieldPart | undefined
-  if (statusBar.tps && channel.tps !== undefined) {
-    // Averages over the last completed turns instead of the live per-chunk
-    // estimate: the instantaneous number jumps between 80 and 400 on the same
-    // answer, which reads as noise. Falls back to the live value only before
-    // the first completed turn has a sample.
-    const steadyTps = tpsRecentAverage(channel.tpsSamples) ?? channel.tps
+  // The chip follows the running turn: the projector publishes the live rate
+  // while the answer streams and corrects it to that turn's exact average when
+  // the turn closes, so the digit moves during an answer and does not jump at
+  // its end. A session restored from history has the samples but no live value;
+  // its recent average stands in rather than hiding the chip. Stubbed channels
+  // in the verify harnesses predate the samples field, hence the empty default.
+  const steadyTps = channel.tps ?? tpsRecentAverage(channel.tpsSamples ?? [])
+  if (statusBar.tps && steadyTps !== undefined) {
     tpsPart = {
       key: 'tps',
       id: 'tps',

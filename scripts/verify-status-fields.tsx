@@ -561,21 +561,36 @@ try {
       JSON.stringify(row))
   }
 
-  // R2b — the tps chip carries a number, not a sparkline, and that number is
-  // the average over past turns: a live per-chunk estimate jumps between 80 and
-  // 400 on one answer, so the footer used to twitch on every frame.
+  // R2b — the chip follows the running turn: while an answer streams the live
+  // rate is what the footer shows, so consecutive frames carry different
+  // numbers. The past-turn average is NOT the reading — it stays frozen for the
+  // whole turn, which made the digit look dead.
   {
-    const lines = await capture(100, {}, channelWith({ tps: true }, {
+    const channel = channelWith({ tps: true }, {
+      working: true,
       tps: 40,
       tpsSamples: [{ tps: 100, at: 0 }, { tps: 200, at: 1 }],
-    }))
-    const row = statusRow(lines)
-    check('R2b tps chip is an average without sparkline glyphs',
-      row.includes('150 tps')
+    })
+    const first = statusRow(await capture(100, {}, channel))
+    check('R2b tps chip shows the live rate without sparkline glyphs',
+      first.includes('40 tps')
+      && !first.includes('150 tps')
       // No gauge/sparkline blocks anywhere on the footer row: the glyphs lived
       // in front of the number and made the chip twice as wide.
-      && !/[▁▂▃▄▅▆▇█▏▕]/u.test(row),
-      JSON.stringify(row))
+      && !/[▁▂▃▄▅▆▇█▏▕]/u.test(first),
+      JSON.stringify(first))
+    const second = statusRow(await capture(100, {}, { ...channel, tps: 120 }))
+    check('R2b tps chip moves while a turn streams', second.includes('120 tps'), JSON.stringify(second))
+  }
+
+  // R2c — a restored session carries samples but no live value; the recent
+  // average keeps the chip filled instead of hiding it.
+  {
+    const row = statusRow(await capture(100, {}, channelWith({ tps: true }, {
+      tps: undefined,
+      tpsSamples: [{ tps: 100, at: 0 }, { tps: 200, at: 1 }],
+    })))
+    check('R2c restored session falls back to the recent average', row.includes('150 tps'), JSON.stringify(row))
   }
 
   // R3 — right-head before the host right group, right-tail after it. The
