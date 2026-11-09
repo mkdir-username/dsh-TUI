@@ -1507,6 +1507,10 @@ const GROUPS = {
 // （选项列表与提示行不被挤出屏）、保密题掩码保留换行，以及 plain ↑/↓ 选行、
 // 行首 ← 换题、Ctrl+K 折叠等既有契约不回归。
     ["verify-question-editing", ['node', '--import', 'tsx/esm', 'scripts/verify-question-editing.tsx']],
+// 回答字段的共享契约（纯码点数学，无 xterm）：按词/按行跳转、±1 行卡雷特、
+// 粘贴压平与上限、多行窗口、卡雷特单元格切分——问卷与计划评审共用的
+// answerField 模块的唯一事实源。
+    ["verify-answer-field", ['node', '--import', 'tsx/esm', 'scripts/verify-answer-field.ts']],
 // Ctrl+B 在运行中的 shell 卡片上把该调用转入后台，而不是打开侧栏：目标是最早
 // 开始的 running 卡片（多于一个时），park 被拒会给出提示并仍然吃掉按键；没有
 // 运行中的调用、或后端没有 park 时按键仍归侧栏。按键提示画在卡片自身，settled
@@ -1532,6 +1536,12 @@ const GROUPS = {
 // 长 plan-review 正文回归（issue #413）：24 行终端里 40 段 plan 不得把
 // Approve/反馈顶出屏外；滚轮必须滚 plan body（直接面板 + 挂进 Chat）。
     ["verify-plan-review-scroll", ['node', '--import', 'tsx/esm', 'scripts/verify-plan-review-scroll.tsx']],
+// plan-review 反馈行编辑回归：与问卷回答行同一套共享编辑器——macOS/readline
+// 键位（Alt/Ctrl+←/→、Ctrl+A/E/W/U、Option+Backspace）、Shift+Enter/Option+Enter/
+// Ctrl+J 换行不提交、多行反馈的卡雷特窗口（24 行终端里决策行与提示行不被挤出）、
+// 码点安全，以及两个协议边界：Enter 把反馈作为「继续规划」提交、带反馈时 Approve
+// 必须拒绝，而不是发出会被 plan-mode 读成「继续规划」的 custom。
+    ["verify-plan-review-editing", ['node', '--import', 'tsx/esm', 'scripts/verify-plan-review-editing.tsx']],
 // 插件场景渲染崩溃边界：Thrower 场景必须被 PluginSceneBoundary 接住——
 // onError 精确一次、崩溃场景停止绘制、进程存活；健康场景不受影响。
     ["verify-plugin-scene-boundary", ['node', '--import', 'tsx/esm', 'scripts/verify-plugin-scene-boundary.tsx']],
