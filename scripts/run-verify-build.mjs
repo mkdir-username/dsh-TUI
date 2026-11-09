@@ -142,6 +142,7 @@ const GATES = [
   'verify:preset-patch',
   'verify:session-mounts',
   'verify:handoff-stdin',
+  'verify:controller-marker-click',
   'verify:status-fields',
   'verify:plugin-field-order',
   'verify:plugin-field-picker',
