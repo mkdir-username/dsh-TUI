@@ -75,7 +75,7 @@ pnpm smoke                      # 通用无头屏幕组装冒烟
 - **双语文档同步**：行为、配置、快捷键与限制在 `README.md`（英文默认）与 `README_ZH.md`（中文）两版同步。插件配置、slash 命令、主题、渲染器、技能发现的跨文件同步清单见 [docs/contributing.md](docs/contributing.md)。
 - **密钥**：交互启动读取 `DEEPSEEK_API_KEY`；诊断只能报告是否已设置，绝不泄露完整值。
 - **PR**：创建或更新 PR（包括改写描述）一律使用 `.agents/skills/pr`。
-- **Git 安全**：只暂存显式路径，不用 `git add .`/`git add -A`；不运行破坏性清理命令；未经要求不 commit、不打 tag、不 push、不发布。发布由 `v*` tag 驱动且必须与 `package.json` 版本完全一致。
+- **Git 安全**：只暂存显式路径，不用 `git add .`/`git add -A`；不运行破坏性清理命令。这是个人 fork：agent 自己的改动由 agent 原子提交并推送，不等用户要求，也不把 commit/push 交回用户——验证通过后按 `type(scope): 描述`（中文过去时、无 AI 署名）提交，紧接着 `git push mine main`（`origin` 只读；推送被拒就报告，绝不 force）。tag、发布与 `npm publish` 仍只在明确要求时执行，发布由 `v*` tag 驱动且必须与 `package.json` 版本完全一致。
 
 ## 代码审查原则
 
