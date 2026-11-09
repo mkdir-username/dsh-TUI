@@ -18,7 +18,7 @@ import type { ClickEvent } from '../../ink/events/click-event.js'
 import { revealLinesOf, scopeRevealKey, snapReveal } from '../smoothReveal.js'
 import { useRevealScope } from '../revealScope.js'
 import { useRevealVersion } from '../../hooks/useRevealVersion.js'
-import { primaryComboString } from '../../utils/keymap.js'
+import { comboDisplay, primaryComboString } from '../../utils/keymap.js'
 import { agentMessageStateColor, agentMessageStateText } from './TranscriptLeaves.js'
 import type { AgentMessageState } from './agentTeam.js'
 import { liveOutputMaxLines, liveOutputView } from './liveOutputLines.js'
@@ -847,6 +847,12 @@ export function AssistantToolUseMessage({
     }
     if (isRunning && body.length === 0) {
       body = [dim(t('tool-running-elapsed', { duration: formatDuration(Math.max(0, Date.now() - (tool.startedAt ?? Date.now()))) }))]
+    }
+    // A shell card is the one thing the background key can move: say so on the
+    // card itself, where the wait is visible, instead of leaving the key to a
+    // README. The combo follows a remap of the panel action.
+    if (isRunning && tool.callView?.card === 'terminal') {
+      body.push(dim(t('tool-running-park-hint', { key: comboDisplay(primaryComboString('sidePanel')) })))
     }
   }
   const cap = view?.card === 'diff' ? DIFF_BODY_MAX_LINES : TEXT_BODY_MAX_LINES

@@ -4905,6 +4905,28 @@ export function Chat({
     // 最先，其次是侧栏全局快捷键（Ctrl+B / Alt+Z，两种焦点都生效），
     // 然后焦点在右栏时一切按键归侧栏——活动面板的业务键优先，宿主
     // 回退键（←/→ 切面板、z、+/-、Esc 回聊天）兜底。
+    //
+    // Ctrl+B на запущенном shell-вызове переводит его в фон (ключ Claude CLI):
+    // ядро перестаёт ждать команду, она живёт задачей, ход идёт дальше. Самая
+    // давняя такая карточка — та, что дольше всех держит ход. Нет запущенного
+    // вызова или бэкенд не умеет park — ключ остаётся за панелью (ниже).
+    if (actionMatches('sidePanel', input, key)) {
+      const park = channel.jobControl?.park
+      const running = park === undefined
+        ? undefined
+        : channel.rows.find(row => row.kind === 'tool' && row.tool?.status === 'running' && row.tool.callView?.card === 'terminal')?.tool
+      if (park !== undefined && running !== undefined) {
+        const parked = park.call(channel.jobControl, running.callId)
+        channel.notify(
+          parked
+            ? t('tool-park-started', { command: running.callView?.card === 'terminal' ? running.callView.title : '' })
+            : t('tool-park-failed'),
+          { color: parked ? 'success' : 'warning', timeoutMs: 5000 },
+        )
+        event.stopImmediatePropagation()
+        return
+      }
+    }
     if (sidePanel.handleKey(input, key, event)) return
     const returnCandidate = isPlainReturnInput(input, key)
     const returnNow = Date.now()

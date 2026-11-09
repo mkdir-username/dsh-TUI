@@ -1499,6 +1499,11 @@ const GROUPS = {
 // （选项列表与提示行不被挤出屏）、保密题掩码保留换行，以及 plain ↑/↓ 选行、
 // 行首 ← 换题、Ctrl+K 折叠等既有契约不回归。
     ["verify-question-editing", ['node', '--import', 'tsx/esm', 'scripts/verify-question-editing.tsx']],
+// Ctrl+B 在运行中的 shell 卡片上把该调用转入后台，而不是打开侧栏：目标是最早
+// 开始的 running 卡片（多于一个时），park 被拒会给出提示并仍然吃掉按键；没有
+// 运行中的调用、或后端没有 park 时按键仍归侧栏。按键提示画在卡片自身，settled
+// 后消失。
+    ["verify-tool-park", ['node', '--import', 'tsx/esm', 'scripts/verify-tool-park.tsx']],
 // 问卷折叠：真实 Chat + stores 验证审批/对话框优先、整屏中断层恢复、
 // abort 后 FIFO 请求身份隔离，以及改键和草稿保持（inline/fullscreen）。
     ["verify-question-fold", ['node', '--import', 'tsx/esm', 'scripts/verify-question-fold.tsx']],

@@ -906,6 +906,14 @@ export interface BackgroundJobState {
 export interface JobControl {
   kill(id: string): boolean
   /**
+   * Move an in-flight foreground call to the background: the command keeps
+   * running as a job while the turn moves on. Returns false when this backend
+   * has no such seam, the call is unknown, or its process has not spawned yet
+   * — a second press lands after the spawn. Absent for backends that can only
+   * read and kill jobs.
+   */
+  park?(callId: string): boolean
+  /**
    * The job's card or panel entry is on screen: keep its output tail fresh
    * (a backend whose output is read on demand polls at most once a second
    * while watched). Returns the unwatch; absent = the output is pushed.
