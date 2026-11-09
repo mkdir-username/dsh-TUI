@@ -157,6 +157,7 @@ for (const p of tricky) {
 check('scheme prefix', fileLinkUrl('x.ts').startsWith(FILE_LINK_SCHEME), fileLinkUrl('x.ts'))
 check('parse rejects non-scheme', parseFileLinkUrl('https://x.com/a') === undefined, '')
 check('parse rejects malformed encoding', parseFileLinkUrl(FILE_LINK_SCHEME + '%E0%A4%A') === undefined, '')
+check('parse accepts an upper-case scheme', parseFileLinkUrl('DSH-FILE:%2Ftmp%2Fx') === '/tmp/x', '')
 
 // ── 4. resolveTargetPath ────────────────────────────────────────────────
 check(

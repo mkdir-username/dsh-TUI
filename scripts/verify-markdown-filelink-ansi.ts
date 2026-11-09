@@ -121,6 +121,15 @@ try {
       withPainted.includes('src/dsh-adapter/plugin.ts'),
     JSON.stringify(withPainted),
   )
+  const smuggled = createHyperlink('https://ok.example', 'A\u001b]8;;https://evil\u0007B', {
+    supportsHyperlinks: true,
+    style: (text: string) => text,
+  })
+  check(
+    'content 里的完整 OSC 8 序列整体剥除，不留可见残尾',
+    !smuggled.includes('https://evil') && smuggled.includes('AB'),
+    JSON.stringify(smuggled),
+  )
   const withStyle = createHyperlink('dsh-file:///x', 'src/dsh-adapter/plugin.ts', {
     supportsHyperlinks: true,
     style: paint,

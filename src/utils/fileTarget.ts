@@ -34,7 +34,7 @@ export function fileLinkUrl(path: string): string {
  * undefined for anything that is not a well-formed dsh-file URL.
  */
 export function parseFileLinkUrl(url: string): string | undefined {
-  if (!url.startsWith(FILE_LINK_SCHEME)) return undefined
+  if (url.slice(0, FILE_LINK_SCHEME.length).toLowerCase() !== FILE_LINK_SCHEME) return undefined
   try {
     return decodeURIComponent(url.slice(FILE_LINK_SCHEME.length))
   } catch {

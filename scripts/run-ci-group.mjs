@@ -198,6 +198,9 @@ const GROUPS = {
 // createHyperlink 时，防注入消毒会剥掉合法 \x1b、SGR 参数文本上屏
 // （[38;2;…m 残片）；链接标签的样式序列同样不得残留裸参数。
     ["verify-markdown-filelink-ansi", ['node', '--import', 'tsx/esm', 'scripts/verify-markdown-filelink-ansi.ts']],
+// 全屏点击 URL 的边界回归：反斜杠是 shell 转义、不是 URL 的一部分，
+// 扫描不得把它带进打开目标（`https://x/y\` 只到 `/y`）；普通路径不受影响。
+    ["verify-fullscreen-url", ['node', '--import', 'tsx/esm', 'scripts/verify-fullscreen-url.ts']],
 // 全屏 resize 空白回归：宽度变化清空行高缓存 → scrollHeight 估算塌缩，
 // shrunk 帧冻结的旧 scrollTop 与失准的 clamp 边界越过内容底，整屏裁剪
 // 成"只剩输入框"（Orca pane 宽度抖动的现场取证复现）。

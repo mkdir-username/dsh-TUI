@@ -449,7 +449,8 @@ export function selectWordAt(
 // Printable ASCII minus terminal URL delimiters. Restricting to single-
 // codeunit ASCII keeps cell-count === string-index, so the column-span
 // check below is exact (no wide-char/grapheme drift).
-const URL_BOUNDARY = new Set([...'<>"\'` '])
+// A backslash starts a shell escape; it is not part of a literal URL.
+const URL_BOUNDARY = new Set([...'<>"\'` \\'])
 function isUrlChar(c: string): boolean {
   if (c.length !== 1) return false
   const code = c.charCodeAt(0)
