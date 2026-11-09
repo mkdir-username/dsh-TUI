@@ -5,6 +5,9 @@
  *
  * 键处理是纯函数 btwComposerKey，面板（usePanelInput 分发）与全屏场景
  * （useInput）共用；组件本身受控渲染（text 在 store，caret 是各处自己的）。
+ * 草稿归线程 store（面板与全屏共享），所以这里用共享编辑器 answerField.ts
+ * 的纯核心而不是 useAnswerField（那个 hook 拥有本地状态）：键位契约
+ * （按词/按行、Ctrl+A/E/W/U、码点步进）与其余输入框是同一份。
  */
 import React from 'react'
 import { Box, Text, InputCaret, useTerminalSize } from '../../../ui.js'
@@ -14,7 +17,20 @@ import { flattenInline, flattenPasteInline } from '../../../channel/sanitize.js'
 import { stringWidth } from '../../../ink/stringWidth.js'
 import { getGraphemeSegmenter } from '../../../utils/intl.js'
 import type { SidePanelKeyFlags } from '../types.js'
-import { nextCodePoint, previousCodePoint } from '../../AgentMessageComposer.js'
+import { isMod } from '../../../utils/modifiers.js'
+import {
+  backspaceAt,
+  deleteAt,
+  deleteRange,
+  insertAt,
+  lineEnd,
+  lineStart,
+  nextPoint,
+  pointsOf,
+  previousPoint,
+  wordEnd,
+  wordStart,
+} from '../../questions/answerField.js'
 
 /** 编辑态（text 来自线程 store；caret 属于当前 surface）。 */
 export interface BtwComposerState {
@@ -79,33 +95,67 @@ export function btwComposerKey(state: BtwComposerState, input: string, key: BtwK
   // ↑ 也从编辑层上到列表：光标落在本轮标题上（列表形态默认选中最后一条）。
   if (key.upArrow === true) return { exitFocus: true }
   if (key.downArrow === true) return {}
-  if (key.backspace === true || key.delete === true) {
-    if (caret <= 0) return { state: { ...state, caret } }
-    const at = previousCodePoint(state.text, caret)
-    return { state: { text: state.text.slice(0, at) + state.text.slice(caret), caret: at } }
+  // 编辑操作走共享核心：码点步进、按词/按行、删词/删行都是同一份实现。
+  // 但 btw 的 caret 是 UTF-16 偏移（线程 store 与 composerWindow 共用），
+  // 而共享核心的 cursor 是码点索引——在边界处换算，别把两种索引混用。
+  const pointCaret = pointsOf(state.text.slice(0, caret)).length
+  const value = { text: state.text, cursor: pointCaret }
+  const toCaret = (text: string, pointIndex: number): number =>
+    pointsOf(text).slice(0, pointIndex).join('').length
+  /** 消费了但什么都没变：空结果（消费 ≠ 有动作）。 */
+  const apply = (next: { text: string; cursor: number }): BtwComposerKeyResult =>
+    next.text === state.text && next.cursor === pointCaret
+      ? {}
+      : { state: { text: next.text, caret: toCaret(next.text, next.cursor) } }
+
+  // 删词先于普通 Backspace：Option+Backspace 不能退化成删一个字符。
+  if ((isMod(key) && input === 'w') || (key.meta === true && key.backspace === true)) {
+    return apply(deleteRange(value, wordStart(state.text, pointCaret), pointCaret))
   }
+  if (isMod(key) && input === 'u') {
+    return apply(deleteRange(value, lineStart(state.text, pointCaret), pointCaret))
+  }
+  if (key.backspace === true) return apply(backspaceAt(value))
+  if (key.delete === true) return apply(deleteAt(value))
+
   // Shift+←/→ 不归编辑层：返回未消费，面板形态下落宿主切面板（宿主的
   // leftArrow 判定不看 shift）——编辑中途也能一键换面板，不必先 Esc 收起。
   if ((key.leftArrow === true || key.rightArrow === true) && key.shift === true) return null
+
+  // 按词跳转：Alt/Option+←/→、Ctrl+←/→，以及 Ghostty 的 ESC b / ESC f。
+  const escapeJump = key.meta === true && key.ctrl !== true && (input === 'b' || input === 'f')
+  if (escapeJump || ((isMod(key) || key.meta === true) && (key.leftArrow === true || key.rightArrow === true))) {
+    const back = escapeJump ? input === 'b' : key.leftArrow === true
+    const at = back ? wordStart(state.text, pointCaret) : wordEnd(state.text, pointCaret)
+    return { state: { text: state.text, caret: toCaret(state.text, at) } }
+  }
+
+  // 行首/行尾：Ctrl+A/E（单行里与 Home/End 同义）。
+  if (isMod(key) && input === 'a') return { state: { text: state.text, caret: toCaret(state.text, lineStart(state.text, pointCaret)) } }
+  if (isMod(key) && input === 'e') return { state: { text: state.text, caret: toCaret(state.text, lineEnd(state.text, pointCaret)) } }
+
   // 光标先走、到头让位：还能移就移一格，已经贴着行首/行尾则返回未消费——
   // 面板形态下落宿主切面板，底栏「←/→ 切换」因此在编辑层同样成立；场景
   // 形态下无人接管，等于空操作。
   if (key.leftArrow === true) {
-    const previous = previousCodePoint(state.text, caret)
-    return previous === caret ? null : { state: { ...state, caret: previous } }
+    const previous = previousPoint(state.text, pointCaret)
+    return previous === pointCaret ? null : { state: { text: state.text, caret: toCaret(state.text, previous) } }
   }
   if (key.rightArrow === true) {
-    const next = nextCodePoint(state.text, caret)
-    return next === caret ? null : { state: { ...state, caret: next } }
+    const next = nextPoint(state.text, pointCaret)
+    return next === pointCaret ? null : { state: { text: state.text, caret: toCaret(state.text, next) } }
   }
   if (key.home === true) return { state: { ...state, caret: 0 } }
   if (key.end === true) return { state: { ...state, caret: state.text.length } }
-  if (input !== '' && key.ctrl !== true && key.meta !== true) {
+  if (input !== '' && key.ctrl !== true && key.meta !== true && key.super !== true) {
     // 整块文本不一定带 isPasted：忽略 bracketed paste 的终端会把换行原样
     // 送进这里，而单行窗口的 Text 会按 LF 折出第二行（被 overflow 裁掉、
     // caret 与可见文本脱节）。等长压平后再插，caret 偏移保持不变。
     const typed = flattenInline(input)
-    return { state: { text: state.text.slice(0, caret) + typed + state.text.slice(caret), caret: caret + typed.length } }
+    // 纯控制字符的块（Shift+Enter 的 CR 回退）是按键回退，不是文本。
+    if (typed.trim() === '' && typed !== input) return {}
+    const next = insertAt(value, typed)
+    return { state: { text: next.text, caret: next.cursor } }
   }
   return null
 }
