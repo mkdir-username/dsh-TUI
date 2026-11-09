@@ -2844,7 +2844,11 @@ export function Chat({
     const knownCommand = parsed !== undefined && (
       isLocalCommandName(parsed.name) || isHiddenCommandName(parsed.name) || command !== undefined
     )
-    const modelRoutedSkill = command?.skill === true && command.external !== true
+    // Same rule as the composer's `tryRunCommand`: an image-bearing skill
+    // gesture rides the model message (the body is injected by the skill
+    // seam), while a completion-only skill already took that route and an
+    // imageless registry skill keeps its command lifecycle.
+    const modelRoutedSkill = command?.skill === true && (command.external !== true || images.length > 0)
     // Match the composer's image admission before consuming the draft.
     if (knownCommand && images.length > 0 && !modelRoutedSkill && command?.acceptsImages !== true) {
       return t('command-images-unsupported', { name: parsed.name })

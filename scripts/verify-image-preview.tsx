@@ -1556,9 +1556,24 @@ for (const columns of [32, 80]) {
   const submitted: string[] = []
   const discarded: string[] = []
   let localCommandCalls = 0
+  let externalCommandCalls = 0
+  const submittedImageIds: string[] = []
   const channel = makeChannel()
   channel.stagedImageGeneration = () => generation
-  channel.submit = (text: string) => { submitted.push(text) }
+  channel.commandList = [
+    ...LOCAL_COMMANDS,
+    // dsh-tui registers every user-invocable skill as a registry command:
+    // the image must still ride the model message, never the registry route.
+    { name: 'vision-skill', description: 'Fixture registered skill', external: true, skill: true },
+  ] as never
+  channel.runExternalCommandOutcome = async () => {
+    externalCommandCalls += 1
+    return { kind: 'success', text: '', consumeDraft: true }
+  }
+  channel.submit = (text: string, images: readonly { stageId: string }[] = []) => {
+    submitted.push(text)
+    submittedImageIds.push(images.map(image => image.stageId).join(','))
+  }
   channel.stageComposerImage = () => new Promise(resolve => {
     stageCalls += 1
     stageResolvers.push(resolve)
@@ -1673,6 +1688,25 @@ for (const columns of [32, 80]) {
     && screen.text().includes('[Image #2]')
     && !discarded.includes('command-image-stage'),
     screen.text())
+
+  // The same staged image under a SKILL name takes the model route (no
+  // registry dispatch, no local-command run) and carries the attachment.
+  stdin.write('\x1b[H') // Home: caret before "/status"
+  await sleep(120) // 固定窗:pacing 光标移动不可观测，为后续删除排序
+  stdin.write('\x1b[3~'.repeat('/status'.length)) // drop the command prefix, keep the token
+  await sleep(200) // 固定窗:pacing 删除分批送达，等草稿可见再改名
+  stdin.write('/vision-skill ')
+  check('chat: a skill line accepts the same staged image',
+    await settled(() => screen.text().includes('/vision-skill') && screen.text().includes('[Image #2]')),
+    screen.text())
+  stdin.write('\r')
+  check('chat: an image-bearing skill goes to the model, not the registry',
+    await settled(() => submitted.at(-1)?.includes('/vision-skill') === true
+      && submitted.at(-1)?.includes('[Image #2]') === true
+      && submittedImageIds.at(-1) === 'command-image-stage'
+      && externalCommandCalls === 0
+      && localCommandCalls === 0),
+    JSON.stringify({ submitted, submittedImageIds, externalCommandCalls, localCommandCalls }))
 
   stdin.write('\x1b')
   await settled(() => !screen.text().includes('/status'))

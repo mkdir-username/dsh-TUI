@@ -2076,12 +2076,17 @@ export function PromptInput({
     }
     if (pendingCommandRef.current !== null) pendingCommandRef.current = null
     const images = imageRefsFor(text)
-    // Commands are an explicit non-model route. Unless their registry
+    // A skill gesture is a MODEL message (the agent's skill seam injects the
+    // body), so composer images ride the ordinary submit/steer route. Its
+    // registry handler only forwards the line and never declares attachments,
+    // so dispatching it here would refuse the image — returning false hands
+    // the line to the caller's submit path instead. Applies to every skill,
+    // whichever way it entered the merged catalog.
+    if (images.length > 0 && command?.skill === true) return false
+    // Every other command is an explicit non-model route. Unless its registry
     // descriptor opted into composer images, refuse before dispatch and keep
     // the exact draft/capabilities so the user can edit or send them normally.
-    // Completion-only filesystem skills still fall through to the model.
-    const modelRoutedSkill = command?.skill === true && command.external !== true
-    if (images.length > 0 && !modelRoutedSkill && command?.acceptsImages !== true) {
+    if (images.length > 0 && command?.acceptsImages !== true) {
       channel.notify(t('command-images-unsupported', { name: parsed.name }), {
         color: 'warning',
         timeoutMs: 4000,

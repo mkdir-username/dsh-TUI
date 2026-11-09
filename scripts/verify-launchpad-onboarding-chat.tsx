@@ -2013,12 +2013,17 @@ const AC4_CUT_PRESET = 'Standard (Git Bash'
       }
     } finally { await chat.unmount() }
   }
-  for (const route of ['external', 'skill', 'unknown']) {
+  for (const route of ['external', 'skill', 'registered-skill', 'unknown']) {
     const fixture = imageHarness()
     const commandCalls: { name: string; input: string; images: readonly ComposerImageRef[] }[] = []
     const descriptor = route === 'external'
       ? { name: 'vision', description: 'Fixture image command', external: true, acceptsImages: true }
-      : { name: 'vision', description: 'Fixture model skill', skill: true }
+      : route === 'registered-skill'
+        // A skill that ALSO has a registry handler (dsh-tui registers every
+        // user-invocable skill as a command): the image must still ride the
+        // model message, never the registry route.
+        ? { name: 'vision', description: 'Fixture registered skill', external: true, skill: true }
+        : { name: 'vision', description: 'Fixture model skill', skill: true }
     const chat = await mountChat({ launchpadOnBoot: true }, {
       ...fixture.patch,
       commandList: route === 'unknown' ? LOCAL_COMMANDS : [...LOCAL_COMMANDS, descriptor],
