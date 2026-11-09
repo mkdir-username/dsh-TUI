@@ -17,20 +17,22 @@
  * - Esc / Ctrl+C: the store rejects with ASK_CANCELLED, which plan-mode
  *   reads as "the user dismissed the review to speak instead".
  *
- * Paste works on the feedback row like the composer: Ctrl+V/Alt+V (the
- * keymap `paste` binding) reads the system clipboard, and a bracketed
- * paste inserts its chunk — newlines/control chars flatten to spaces, and
- * pasted content NEVER picks an option or approves (a pasted digit or a
- * chunk of line breaks is text, not a quick-pick or an Enter). Editing
- * state (value + caret) lives in refs mutated synchronously per event —
- * one stdin chunk is one React batch, and the clipboard read resolves
- * asynchronously — with the caret counting code points so an emoji can
- * never be split by ←/→/⌫/Del (same contract as the plugin InputDialog).
+ * The feedback row is the questionnaire's answer field: the SAME shared
+ * editor (useAnswerField) owns text, caret, the clipboard transport and the
+ * key dispatch, so the macOS/readline keys and the multi-line input can
+ * never drift between the two panels again. Paste works like the composer:
+ * Ctrl+V/Alt+V (the keymap `paste` binding) reads the system clipboard, and
+ * a bracketed paste inserts its chunk — newlines/control chars flatten to
+ * spaces, and pasted content NEVER picks an option or approves (a pasted
+ * digit or a chunk of line breaks is text, not a quick-pick or an Enter).
+ * The caret counts code points, so an emoji can never be split by
+ * ←/→/⌫/Del, and a multi-line answer paints a caret-anchored window.
  */
 
 import React from 'react'
 import { t } from '../../i18n.js'
 import { Box, Text, useInput, ScrollBox, useTerminalSize, type ScrollBoxHandle } from '../../ui.js'
+import wrapText from '../../ink/wrap-text.js'
 import { useDeclaredCursor, useNativeCursor } from '../../ink/hooks/use-declared-cursor.js'
 import { Divider } from '../design-system/Divider.js'
 import { Markdown } from '../Markdown.js'
@@ -38,19 +40,21 @@ import { POINTER } from '../../terminal-utils/figures.js'
 import type { QuestionIntentView, QuestionSelection } from '../../channel/questions.js'
 import { isPlainReturnInput } from '../../utils/modifiers.js'
 import { actionMatches, comboDisplay, primaryComboString } from '../../utils/keymap.js'
-import { flattenPasteInline } from '../../dsh-adapter/sanitize.js'
-import { readClipboard, type ClipboardRead } from '../../utils/clipboard.js'
+import type { ClipboardRead } from '../../utils/clipboard.js'
+import { ANSWER_PASTE_MAX_POINTS, answerWindow, caretSplit } from './answerField.js'
+import { useAnswerField } from './useAnswerField.js'
 
 const PENCIL = '✎'
 
 /**
- * Paste cap for the feedback field, in code points — twin constant of
- * AskUserQuestionPanel's ANSWER_PASTE_MAX_POINTS (same input contract):
- * typing is naturally bounded, but a stray Ctrl+V of a file/log must not
- * inflate the feedback row or ship a megabyte `custom`. Generous on
- * purpose; the inline error names the bound.
+ * Visible-height cap for a multi-line feedback, in logical lines — twin of
+ * AskUserQuestionPanel's ANSWER_FIELD_MAX_LINES: the field paints a
+ * caret-anchored window of this many lines and charges the real row count
+ * to the layout budget below, so a long answer can never push the decision
+ * rows off screen. Shrinks further on short terminals through
+ * `answerMaxLines`.
  */
-const ANSWER_PASTE_MAX_POINTS = 8000
+const ANSWER_FIELD_MAX_LINES = 6
 
 export type PlanReviewPanelProps = {
   /** The plan-review question (intent.kind === 'plan-review'). */
@@ -85,41 +89,42 @@ export function PlanReviewPanel({
   /** Rows: the asker's options plus the feedback input row at the tail. */
   const rowCount = options.length + 1
   const [focusIndex, setFocusIndex] = React.useState(0)
-  const [feedback, setFeedback] = React.useState('')
-  const [cursor, setCursor] = React.useState(0)
+  const inputFocused = focusIndex === options.length
   const [error, setError] = React.useState<string | null>(null)
-  // Synchronous source of truth for the handlers (see the module header):
-  // one stdin chunk is one React batch, and the clipboard read resolves
-  // asynchronously — the state mirrors exist only to re-render.
-  const textRef = React.useRef('')
-  const cursorRef = React.useRef(0)
-  /** Single choke point for every text/caret mutation: refs first, then the
-   *  state mirrors so the render sees the committed value. */
-  const applyFeedback = (nextText: string, nextCursor: number): void => {
-    textRef.current = nextText
-    cursorRef.current = nextCursor
-    setFeedback(nextText)
-    setCursor(nextCursor)
-  }
-  /** True while the component is mounted (async clipboard continuation
-   *  guard: the panel can unmount when the user answers first). */
-  const mountedRef = React.useRef(true)
-  React.useEffect(() => () => { mountedRef.current = false }, [])
-  /** True while a clipboard read is in flight (ignore repeat Ctrl+V). */
-  const pasteBusyRef = React.useRef(false)
-  const clipboardReader = readClipboardOverride ?? readClipboard
-  const { rows: terminalRows } = useTerminalSize()
+  // The feedback row's editing contract is shared with the questionnaire's
+  // answer field (see useAnswerField): refs mutated synchronously per stdin
+  // event, code-point caret, clipboard transport.
+  const field = useAnswerField('', { readClipboard: readClipboardOverride })
+  const { columns: terminalColumns, rows: terminalRows } = useTerminalSize()
   // Chat chrome (status line) + panel scaffolding (divider, question,
   // spacings, hint) consume twelve rows before the plan body — same
   // constant as AskUserQuestionPanel. Option/feedback/error rows are
   // charged on top so a long markdown detail cannot push them off-screen.
   // A definite `height` (not just maxHeight) is required: otherwise the
   // ScrollBox grows with the markdown and scrollBy is a no-op.
-  const optionRows = options.reduce(
+  const contentCells = Math.max(8, terminalColumns - 4)
+  // Pointer + pencil + margin: the feedback text starts three cells in.
+  const answerFieldCells = Math.max(8, contentCells - 3)
+  const baseOptionRows = options.reduce(
     (sum, option) => sum + (option.description === undefined ? 1 : 2),
     0,
-  ) + 1 /* extra gap on the focused option */ + 1 /* feedback row */
-  const reservedRows = 12 + optionRows + (error === null ? 0 : 2)
+  ) + 1 /* extra gap on the focused row */ + 1 /* feedback row */
+  const baseReserved = 12 + baseOptionRows + (error === null ? 0 : 2)
+  // A short terminal keeps a one-line field: the window may only grow when
+  // the rows exist for it (the questionnaire's rule, same editor).
+  const answerMaxLines = Math.max(1, Math.min(ANSWER_FIELD_MAX_LINES, terminalRows - baseReserved))
+  const answerPoints = [...field.text]
+  const answerWin = answerWindow(answerPoints, field.cursor, answerMaxLines)
+  const answerPainted = answerPoints.slice(answerWin.start, answerWin.end)
+  const answerSplit = caretSplit(answerPainted, answerWin.caret, inputFocused)
+  // Honest height: the painted window — not a constant `1` — is what the
+  // plan-body viewport has to leave room for.
+  const answerRows = Math.max(1, wrapText(
+    answerPainted.length === 0 ? ' ' : answerPainted.join(''),
+    answerFieldCells,
+    'wrap',
+  ).split('\n').length)
+  const reservedRows = baseReserved + (answerRows - 1)
   // Floor at zero, not four: on a short terminal the decision rows fill the
   // budget and no plan-body rows remain. Forcing four here would re-inflate
   // the panel past the viewport and push the controls off-screen again — the
@@ -128,8 +133,6 @@ export function PlanReviewPanel({
   // readable nor a useful wheel target).
   const detailMax = Math.max(0, terminalRows - reservedRows)
   const detailScrollRef = React.useRef<ScrollBoxHandle | null>(null)
-
-  const inputFocused = focusIndex === options.length
 
   // Park the native terminal cursor on the feedback caret so IME preedit
   // (pinyin) renders inline at the input instead of the screen's bottom row
@@ -146,81 +149,9 @@ export function PlanReviewPanel({
     setError(null)
   }
 
-  /** Typing anywhere appends to the feedback buffer and focuses the input
-   *  row — plan review has no "attach" semantics: approve must be clean. */
-  const appendFeedback = (text: string): void => {
-    applyFeedback(textRef.current + text, cursorRef.current + [...text].length)
+  /** A tail paste mirrors option-row typing: the input row takes focus. */
+  const focusAfterPaste = (): void => {
     setFocusIndex(options.length)
-    setError(null)
-  }
-
-  const backspaceFeedback = (): void => {
-    const points = [...textRef.current]
-    const at = cursorRef.current
-    if (at <= 0) return
-    points.splice(at - 1, 1)
-    applyFeedback(points.join(''), at - 1)
-  }
-
-  /**
-   * Paste-path entry shared by both transports (bracketed-paste chunk and
-   * the async clipboard read). Newlines/control chars flatten to spaces; a
-   * chunk with nothing visible inserts nothing, and one past the cap is
-   * refused (never truncated). Where the text lands mirrors plain typing:
-   * at the caret while the feedback row is focused, otherwise appended at
-   * the tail with the input row focused (typing on an option row behaves
-   * exactly that way). NEVER a quick-pick or submit.
-   * @returns 'ok' | 'empty' (nothing visible to insert) | 'too-long'
-   */
-  const insertPastedFeedback = (raw: string, atCaret: boolean): 'ok' | 'empty' | 'too-long' => {
-    const text = flattenPasteInline(raw)
-    if (text.trim() === '') return 'empty'
-    if ([...text].length > ANSWER_PASTE_MAX_POINTS) return 'too-long'
-    const points = [...textRef.current]
-    const at = atCaret ? cursorRef.current : points.length
-    points.splice(at, 0, ...text)
-    applyFeedback(points.join(''), at + [...text].length)
-    if (!atCaret) setFocusIndex(options.length)
-    return 'ok'
-  }
-
-  /** Inline error for an over-cap paste (shared by both transports). */
-  const pasteTooLongError = (): string =>
-    t('question-paste-too-long', { n: ANSWER_PASTE_MAX_POINTS })
-
-  /** Ctrl+V/Alt+V arm: read the system clipboard and insert its text. */
-  const pasteFromClipboard = (): void => {
-    if (pasteBusyRef.current) return
-    pasteBusyRef.current = true
-    // Capture which landing the keypress asked for (typing on an option
-    // row appends + focuses); the read resolves later, after the user may
-    // have moved focus or typed (the refs make either safe).
-    const atCaret = inputFocused
-    void clipboardReader()
-      .then(content => {
-        if (!mountedRef.current) return
-        if (content === null || content.kind === 'unavailable') {
-          setError(t(content === null ? 'input-clipboard-empty' : 'input-clipboard-unavailable'))
-          return
-        }
-        if (content.kind !== 'text') {
-          // File/image offers have no text form in a feedback field.
-          setError(t('question-paste-not-text'))
-          return
-        }
-        if (content.text === '') {
-          setError(t('input-clipboard-empty'))
-          return
-        }
-        const result = insertPastedFeedback(content.text, atCaret)
-        setError(result === 'too-long' ? pasteTooLongError() : null)
-      })
-      .catch(() => {
-        if (mountedRef.current) setError(t('input-clipboard-read-failed'))
-      })
-      .finally(() => {
-        pasteBusyRef.current = false
-      })
   }
 
   /** The decline answer: the other option's label when the asker named one,
@@ -232,7 +163,7 @@ export function PlanReviewPanel({
   const submitOption = (index: number): void => {
     const label = options[index]?.label
     if (label === undefined) return
-    const text = textRef.current.trim()
+    const text = field.textRef.current.trim()
     if (approves(label) && text !== '') {
       setError(t('plan-review-approve-needs-empty'))
       return
@@ -247,7 +178,7 @@ export function PlanReviewPanel({
   /** Enter on the feedback row: text routes to keep-planning-with-feedback;
    *  empty is a plain keep-planning. */
   const submitFeedback = (): void => {
-    const text = textRef.current.trim()
+    const text = field.textRef.current.trim()
     onAnswer({ selected: declineSelected(), ...(text !== '' ? { custom: text } : {}) })
   }
 
@@ -274,8 +205,8 @@ export function PlanReviewPanel({
     // a quick-pick or an Enter press (isPlainReturnInput refuses pastes).
     if (key.isPasted === true) {
       if (input !== '') {
-        const result = insertPastedFeedback(input, inputFocused)
-        setError(result === 'too-long' ? pasteTooLongError() : null)
+        const result = field.insertPasted(input, inputFocused, focusAfterPaste)
+        setError(result === 'too-long' ? t('question-paste-too-long', { n: ANSWER_PASTE_MAX_POINTS }) : null)
       }
       return
     }
@@ -283,61 +214,12 @@ export function PlanReviewPanel({
     // binding, remappable in /settings): raw mode hands the key to the
     // app, so the clipboard is read here (mirrors the composer's arm).
     if (actionMatches('paste', input, key)) {
-      pasteFromClipboard()
+      field.pasteFromClipboard(inputFocused, setError, focusAfterPaste)
       return
     }
 
     if (inputFocused) {
-      if (key.upArrow) {
-        moveFocus(-1)
-        return
-      }
-      if (key.downArrow) {
-        moveFocus(1)
-        return
-      }
-      if (isPlainReturnInput(input, key)) {
-        submitFeedback()
-        return
-      }
-      if (key.backspace) {
-        backspaceFeedback()
-        return
-      }
-      if (key.delete) {
-        const points = [...textRef.current]
-        const at = cursorRef.current
-        if (at < points.length) {
-          points.splice(at, 1)
-          applyFeedback(points.join(''), at)
-        }
-        return
-      }
-      if (key.leftArrow) {
-        applyFeedback(textRef.current, Math.max(0, cursorRef.current - 1))
-        return
-      }
-      if (key.rightArrow) {
-        applyFeedback(textRef.current, Math.min([...textRef.current].length, cursorRef.current + 1))
-        return
-      }
-      if (key.home) {
-        applyFeedback(textRef.current, 0)
-        return
-      }
-      if (key.end) {
-        applyFeedback(textRef.current, [...textRef.current].length)
-        return
-      }
-      if (!key.ctrl && !key.meta && input) {
-        // Ordinary typing at the live caret (a text run may carry several
-        // characters in one event — e.g. an unbracketed terminal paste).
-        const points = [...textRef.current]
-        const at = cursorRef.current
-        points.splice(at, 0, ...input)
-        applyFeedback(points.join(''), at + [...input].length)
-        setError(null)
-      }
+      field.handleKey(input, key, { onMoveFocus: moveFocus, onSubmit: submitFeedback })
       return
     }
 
@@ -355,26 +237,23 @@ export function PlanReviewPanel({
       return
     }
     if (key.backspace) {
-      if (textRef.current !== '') backspaceFeedback()
+      if (field.text !== '') field.backspace()
       return
     }
     if (!key.ctrl && !key.meta && input) {
       // Number quick-pick submits the option outright — but only with an
       // empty buffer; with feedback pending, digits are feedback chars.
       const digit = /^[1-9]$/.test(input) ? Number(input) : 0
-      if (textRef.current === '' && digit >= 1 && digit <= options.length) {
+      if (field.text === '' && digit >= 1 && digit <= options.length) {
         submitOption(digit - 1)
         return
       }
-      appendFeedback(input)
+      field.append(input)
+      setFocusIndex(options.length)
+      setError(null)
     }
   }, { isActive: true })
 
-  // The caret counts code points (see the module header), so the caret
-  // char and the visual split index into the point array — never raw
-  // UTF-16 offsets, which could land inside a surrogate pair.
-  const feedbackPoints = [...feedback]
-  const cursorChar = cursor < feedbackPoints.length ? feedbackPoints[cursor] : ' '
   /** Mouse: click a decision row = focus it + submit (same as Enter). */
   const [hoverIndex, setHoverIndex] = React.useState(-1)
   const clickOption = (index: number): void => {
@@ -458,7 +337,7 @@ export function PlanReviewPanel({
             <Text color={inputFocused ? 'accent' : 'suggestion'}>{PENCIL}</Text>
           </Box>
           <Box flexDirection="row" marginLeft={1}>
-            {feedback === '' && !inputFocused ? (
+            {field.text === '' && !inputFocused ? (
               // Same IME contract as AskUserQuestionPanel's input row: the
               // anchor cell must carry the plain answer-text style, because
               // the terminal renders the preedit with THAT cell's attributes.
@@ -471,11 +350,9 @@ export function PlanReviewPanel({
               </>
             ) : (
               <>
-                <Text wrap="wrap">{feedbackPoints.slice(0, cursor).join('')}</Text>
-                {inputFocused
-                  ? <Text ref={caretRef} inverse={!nativeCursor}>{cursorChar}</Text>
-                  : <Text ref={caretRef}>▏</Text>}
-                <Text wrap="wrap">{feedbackPoints.slice(inputFocused ? cursor + 1 : cursor).join('')}</Text>
+                <Text wrap="wrap">{answerSplit.head}</Text>
+                <Text ref={caretRef} inverse={!nativeCursor && inputFocused}>{answerSplit.glyph}</Text>
+                <Text wrap="wrap">{answerSplit.tail}</Text>
               </>
             )}
           </Box>
@@ -487,7 +364,10 @@ export function PlanReviewPanel({
         </Box>
       )}
       <Box marginTop={1}>
-        <Text dimColor>{t('plan-review-hint', { paste: comboDisplay(primaryComboString('paste')) })}</Text>
+        <Text dimColor>{t('plan-review-hint', {
+          paste: comboDisplay(primaryComboString('paste')),
+          newline: t('question-hint-newline'),
+        })}</Text>
       </Box>
     </Box>
   )

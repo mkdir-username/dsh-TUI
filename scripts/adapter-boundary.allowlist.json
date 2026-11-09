@@ -60,10 +60,6 @@
       "to": "dsh-adapter/sanitize.js"
     },
     {
-      "from": "components/questions/PlanReviewPanel.tsx",
-      "to": "dsh-adapter/sanitize.js"
-    },
-    {
       "from": "components/trajectory/Ledger.tsx",
       "to": "dsh-adapter/trajectory/index.js"
     },
