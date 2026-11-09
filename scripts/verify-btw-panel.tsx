@@ -96,7 +96,7 @@ function scriptedAsk() {
   }
 }
 
-/** 侧栏列需要的最小通道面（btw/todo 两个适配器读的字段）。 */
+/** 侧栏列需要的最小通道面（btw/agents 两个适配器读的字段）。 */
 function makePanelChannel(ask: ReturnType<typeof scriptedAsk>) {
   const notices: string[] = []
   const attached: { id: string; source: 'panel'; sourceId: string; title: string; content: string; chars: number; truncated: boolean }[] = []
@@ -215,10 +215,35 @@ function PanelFixture({ channel, focusPanel }: { channel: ReturnType<typeof make
   )
 }
 
+/**
+ * 夹具只许点名已注册的面板：本地分叉撤下了 todo，未知 id 会在 enabled 列表里
+ * 以占位符留下，而 PanelHost 画的是第一个**已注册**的面板——夹具就会静默地
+ * 摆出另一块面板（P3b/P11e 正是这样变空的）。先校验、再应用：拒绝时不改状态。
+ */
+function stagePanels(csv: string): void {
+  const registered = new Set(panelStore.list().map(entry => entry.definition.id))
+  for (const id of csv.split(',')) {
+    const panelId = id.trim()
+    if (panelId !== '' && !registered.has(panelId)) {
+      throw new Error('verify-btw-panel: panel "' + panelId + '" is not registered')
+    }
+  }
+  applySidePanelPanels(csv)
+}
+
+{
+  // 拒绝未知 id 且接受已注册的一个：只拒绝一切的守卫同样「通过」前半句。
+  let rejected = false
+  let accepted = false
+  try { stagePanels('no-such-panel') } catch { rejected = true }
+  try { stagePanels('btw'); accepted = true } catch { accepted = false }
+  check('P0b. 夹具只接受已注册的 panel id', rejected && accepted)
+}
+
 async function mountPanel(cols: number, panels: string, focusPanel: boolean, channel: ReturnType<typeof makePanelChannel>): Promise<Frame> {
   applySidePanelOpen(true)
   applySidePanelRatio(0.62)
-  applySidePanelPanels(panels)
+  stagePanels(panels)
   btwThreads.resetForTest()
   return mountTree(cols, <PanelFixture channel={channel} focusPanel={focusPanel} />)
 }
@@ -310,8 +335,9 @@ async function keys(frame: Frame, sequence: readonly string[]): Promise<void> {
 {
   const ask = scriptedAsk()
   const channel = makePanelChannel(ask)
-  const frame = await mountPanel(100, 'todo,btw', false, channel)
-  check('P3a. todo 为活动面板时无徽章', !frame.lines()[0].includes('?1') && panelStore.get('btw')?.badge === null)
+  // agents 已注册（todo 在本地分叉里撤下）：btw 不是活动面板 = 真正不可见。
+  const frame = await mountPanel(100, 'agents,btw', false, channel)
+  check('P3a. btw 不是活动面板时无徽章', !frame.lines()[0].includes('?1') && panelStore.get('btw')?.badge === null)
   btwThreads.submit('probe-session', 'badge question', ask.ask)
   await delay(250)
   ask.finish('badge answer')
@@ -733,7 +759,7 @@ async function mountChat(ask: ReturnType<typeof scriptedAsk>, cols = 100, fullsc
   // C1: 面板启用 → 快路由进侧栏；浮层反针不出现（单一 surface）
   applySidePanelOpen(true)
   applySidePanelRatio(0.62)
-  applySidePanelPanels('btw')
+  stagePanels('btw')
   btwThreads.resetForTest()
   const ask = scriptedAsk()
   const chat = await mountChat(ask)
@@ -771,7 +797,7 @@ async function mountChat(ask: ReturnType<typeof scriptedAsk>, cols = 100, fullsc
 {
   // C2: 面板未启用 → 浮层回退；Esc 关闭即 abort（cancelled）
   applySidePanelOpen(true)
-  applySidePanelPanels('todo,jobs,agents')
+  stagePanels('jobs,agents')
   btwThreads.resetForTest()
   const ask = scriptedAsk()
   const chat = await mountChat(ask)
@@ -800,7 +826,7 @@ async function mountChat(ask: ReturnType<typeof scriptedAsk>, cols = 100, fullsc
   // 80 列 < canSplit 阈值（CHAT_MIN 64 + PANEL_MIN 28 + DIVIDER 1 = 93）。
   // 修前：openPanel 只写了一个被 splitAvailable 掩掉的开关，屏幕不变、也
   // 没有一句提示，用户无从判断命令有没有生效。
-  applySidePanelPanels('todo,jobs,agents,info,trajectory,workspace,btw,companion')
+  stagePanels('jobs,agents,info,trajectory,workspace,btw,companion')
   applySidePanelOpen(false)
   btwThreads.resetForTest()
   const ask = scriptedAsk()
@@ -819,7 +845,7 @@ async function mountChat(ask: ReturnType<typeof scriptedAsk>, cols = 100, fullsc
 
 // ── C4: splitEnabled=false 是同一根因的另一条掩码，同样要退浮层──────
 {
-  applySidePanelPanels('todo,jobs,agents,info,trajectory,workspace,btw,companion')
+  stagePanels('jobs,agents,info,trajectory,workspace,btw,companion')
   applySidePanelSplitEnabled(false)
   applySidePanelOpen(true)
   btwThreads.resetForTest()
@@ -841,7 +867,7 @@ async function mountChat(ask: ReturnType<typeof scriptedAsk>, cols = 100, fullsc
 // 孩子），toast 也在它下面，所以这一格能保证的是「不静默丢弃」+「不挂一
 // 个既看不见又会先吃掉编辑器按键的浮层」（useInput 按挂载顺序分发）。
 {
-  applySidePanelPanels('todo,jobs,agents,info,trajectory,workspace,btw,companion')
+  stagePanels('jobs,agents,info,trajectory,workspace,btw,companion')
   applySidePanelOpen(true)
   btwThreads.resetForTest()
   const ask = scriptedAsk()
@@ -864,7 +890,7 @@ async function mountChat(ask: ReturnType<typeof scriptedAsk>, cols = 100, fullsc
 // btwOverlayOpen 仍为真又让 PromptInput 一直 suspended、Chat 的按键处理器
 // 一直让位（composer 消失、Esc/Ctrl+C 失效）────────────────────────────
 {
-  applySidePanelPanels('todo,jobs,agents,info,trajectory,workspace,btw,companion')
+  stagePanels('jobs,agents,info,trajectory,workspace,btw,companion')
   applySidePanelSplitEnabled(true)
   applySidePanelOpen(true)
   btwThreads.resetForTest()
@@ -887,7 +913,7 @@ async function mountChat(ask: ReturnType<typeof scriptedAsk>, cols = 100, fullsc
 // ── C7: 对照组——侧栏就在 btw 面板上：拉宽后浮层让位、线程进侧栏，主输入框
 // 必须回来（btwOverlayVisible=false 才让 PromptInput 与按键恢复）────────
 {
-  applySidePanelPanels('todo,jobs,agents,info,trajectory,workspace,btw,companion')
+  stagePanels('jobs,agents,info,trajectory,workspace,btw,companion')
   applySidePanelSplitEnabled(true)
   applySidePanelOpen(true)
   btwThreads.resetForTest()
@@ -932,7 +958,7 @@ async function mountChat(ask: ReturnType<typeof scriptedAsk>, cols = 100, fullsc
 // ── C8: 面板未启用 + 整屏编辑器占屏：同样只发通知。修前 `!btwPanelEnabled`
 // 会把浮层直接挂到编辑器底下——看不见却接管输入，编辑器一关才冒出来────
 {
-  applySidePanelPanels('todo,jobs,agents,info,trajectory,workspace,companion')
+  stagePanels('jobs,agents,info,trajectory,workspace,companion')
   applySidePanelOpen(true)
   btwThreads.resetForTest()
   const ask = scriptedAsk()
@@ -956,7 +982,7 @@ async function mountChat(ask: ReturnType<typeof scriptedAsk>, cols = 100, fullsc
 // ── C9: 主任务问卷到达时先接管浮层；Enter 回答问卷，不误取消侧问 ───────
 for (const fullscreen of [true, false]) {
   const mode = fullscreen ? 'fullscreen' : 'inline'
-  applySidePanelPanels('todo,jobs,agents,info,trajectory,workspace,btw,companion')
+  stagePanels('jobs,agents,info,trajectory,workspace,btw,companion')
   applySidePanelSplitEnabled(true)
   applySidePanelOpen(true)
   btwThreads.resetForTest()
@@ -992,12 +1018,12 @@ for (const fullscreen of [true, false]) {
   await chat.unmount()
 }
 
-// ── P11: 编辑层光标到头 → 让位宿主切面板（105 列，todo+btw 两面板）────
+// ── P11: 编辑层光标到头 → 让位宿主切面板（105 列，agents+btw 两面板）────
 {
   const ask = scriptedAsk()
   const channel = makePanelChannel(ask)
-  const frame = await mountPanel(105, 'todo,btw', true, channel)
-  // 活动面板是 todo（order 更小）：没有 sendToChat 能力，底栏不该广告 s。
+  const frame = await mountPanel(105, 'agents,btw', true, channel)
+  // 活动面板是 agents：没有 sendToChat 能力，底栏不该广告 s。
   check('P11a. 无 sendToChat 能力的面板不广告 s', !frame.lines().join('\n').includes('s 送聊天'), frame.lines()[ROWS - 1])
   await keys(frame, ['\x1b[C'])
   await delay(250)
@@ -1325,7 +1351,7 @@ for (const phase of ['running', 'failed', 'cancelled'] as const) {
   applySidePanelOpen(true)
   applySidePanelRatio(0.62)
   applySidePanelSplitEnabled(true)
-  applySidePanelPanels('btw')
+  stagePanels('btw')
   btwThreads.resetForTest()
   setBtwClipboardReaderForTest(() => Promise.resolve({ kind: 'text', text: 'PASTED-MARK' }))
   const ask = scriptedAsk()
@@ -1367,7 +1393,7 @@ for (const phase of ['running', 'failed', 'cancelled'] as const) {
     try {
       // btw 面板焦点：内容落 btw 草稿，主草稿保持不变。
       applySidePanelSplitEnabled(true)
-      applySidePanelPanels('btw')
+      stagePanels('btw')
       btwThreads.resetForTest()
       const chatBtw = await mountChat(ask, 120)
       chatBtw.stdin.write('真草稿')
@@ -1388,28 +1414,28 @@ for (const phase of ['running', 'failed', 'cancelled'] as const) {
         btwRows.length > 0 && btwRows.every(line => !/真草稿CLIP-STUB/u.test(line)), JSON.stringify(btwRows))
       await chatBtw.unmount()
 
-      // 活动面板不是 btw：粘贴同样被宿主吞掉，不再漏给主输入框。
+      // 活动面板是 agents（不是 btw）：粘贴同样被宿主吞掉，不再漏给主输入框。
       applySidePanelSplitEnabled(true)
-      applySidePanelPanels('todo,btw')
+      stagePanels('agents,btw')
       btwThreads.resetForTest()
-      const chatTodo = await mountChat(ask, 120)
-      chatTodo.stdin.write('真草稿二')
+      const chatOther = await mountChat(ask, 120)
+      chatOther.stdin.write('真草稿二')
       await delay(300)
-      chatTodo.stdin.write('\x1bo')
+      chatOther.stdin.write('\x1bo')
       await delay(300)
-      chatTodo.stdin.write('\x16')
+      chatOther.stdin.write('\x16')
       await delay(800)
-      chatTodo.stdin.write(ESC)
+      chatOther.stdin.write(ESC)
       await delay(400)
-      const todoRows = chatTodo.lines().filter(line => line.includes('真草稿二'))
+      const otherRows = chatOther.lines().filter(line => line.includes('真草稿二'))
       check('P20d. 真实剪贴板：非 btw 面板焦点时粘贴被吞（主草稿不变）',
-        todoRows.length > 0 && todoRows.every(line => !/真草稿二CLIP-STUB/u.test(line)), JSON.stringify(todoRows))
-      await chatTodo.unmount()
+        otherRows.length > 0 && otherRows.every(line => !/真草稿二CLIP-STUB/u.test(line)), JSON.stringify(otherRows))
+      await chatOther.unmount()
 
       // 分栏收起（Ctrl+Shift+E 展开全屏草稿编辑器令 split 不再渲染）时不能拦：
       // 此时唯一可见的输入框是编辑器，粘贴必须照旧落进去。
       applySidePanelSplitEnabled(true)
-      applySidePanelPanels('btw')
+      stagePanels('btw')
       btwThreads.resetForTest()
       const chatEditor = await mountChat(ask, 120)
       chatEditor.stdin.write('\x1bo') // 聚焦右栏（Alt+O）
