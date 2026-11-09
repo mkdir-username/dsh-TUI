@@ -1493,6 +1493,12 @@ const GROUPS = {
 // 批准、隐藏输入题粘贴惰性、超长粘贴上限报错、同 chunk 批量按键经同步
 // ref 依序编辑、emoji 码点步进。
     ["verify-question-paste", ['node', '--import', 'tsx/esm', 'scripts/verify-question-paste.tsx']],
+// 问卷回答行编辑回归：macOS/readline 键位（Alt/Option+←/→、Ghostty ESC b/f、
+// Ctrl+←/→ 按词、Ctrl+A/E/U/W、Option+Backspace 删词、Ctrl+↑/↓ 跨行）、
+// Shift+Enter/Option+Enter/Ctrl+J 换行不提交、多行答案的卡雷特跟随窗口
+// （选项列表与提示行不被挤出屏）、保密题掩码保留换行，以及 plain ↑/↓ 选行、
+// 行首 ← 换题、Ctrl+K 折叠等既有契约不回归。
+    ["verify-question-editing", ['node', '--import', 'tsx/esm', 'scripts/verify-question-editing.tsx']],
 // 问卷折叠：真实 Chat + stores 验证审批/对话框优先、整屏中断层恢复、
 // abort 后 FIFO 请求身份隔离，以及改键和草稿保持（inline/fullscreen）。
     ["verify-question-fold", ['node', '--import', 'tsx/esm', 'scripts/verify-question-fold.tsx']],

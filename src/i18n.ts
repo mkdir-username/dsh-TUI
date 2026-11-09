@@ -1863,6 +1863,7 @@ const dict = {
   'question-hint-type': { zh: '输入回答', en: 'Type answer' },
   'question-hint-paste': { zh: '{{key}} 粘贴', en: '{{key}} paste' },
   'question-hint-enter': { zh: 'Enter 提交', en: 'Enter submit' },
+  'question-hint-newline': { zh: 'Shift+Enter 换行', en: 'Shift+Enter newline' },
   'question-hint-back': { zh: '↑ 返回选项', en: '↑ back to options' },
   'question-hint-esc': { zh: 'Esc 中断', en: 'Esc cancel' },
   'question-hint-previous': { zh: 'Esc 上一题', en: 'Esc previous question' },
