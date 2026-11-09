@@ -53,6 +53,16 @@ function clip(text: string, max = 140): string {
 }
 
 /**
+ * Fold a durable value into the record's one-line contract: an answer may be
+ * multi-line (the questionnaire's answer field inserts line breaks), and a
+ * raw `\n` inside a transcript summary row would split it into two rows that
+ * copy and scroll as separate lines. Blank-line padding collapses too.
+ */
+function oneLine(value: string): string {
+  return value.replace(/\s*\n\s*/gu, ' ')
+}
+
+/**
  * Fold one answered questionnaire into its transcript record.
  *
  * Tolerant by contract: the projection calls this on durable replay data it
@@ -95,7 +105,7 @@ export function buildQuestionRecord(
               ? labels === '' ? custom : `${labels}：${custom}`
               : labels
           })()
-    return `· ${prompt} → ${clip(text)}`
+    return `· ${oneLine(prompt)} → ${clip(oneLine(text))}`
   })
   return {
     title: t('questionnaire-answered', { total: list.length }),

@@ -284,4 +284,18 @@ const otherTool = channelFixture([
 assert.equal(records(otherTool.channel.rows).length, 0, 'non-ask tools keep their card and project no questionnaire record')
 assert.equal(otherTool.channel.rows.filter(row => row.kind === 'tool').length, 1)
 
+// ── 8. the one-line contract survives multi-line durable values ────────
+// The questionnaire's answer field inserts line breaks and a durable
+// question text may wrap too: a raw `\n` inside a summary row would split
+// one `· question → answer` line into two rows that copy and scroll as
+// separate lines.
+const multiline = buildQuestionRecord(
+  [{ question: 'Steps?\n  Second line of the question' }],
+  [{ selected: [], custom: 'first\n\nsecond' }],
+)
+assert.equal(multiline.lines.length, 1, 'a multi-line answer stays one record line')
+assert.doesNotMatch(multiline.lines[0]!, /\n/u, 'the record line never carries a raw newline')
+assert.match(multiline.lines[0]!, /Steps\? Second line of the question → first second/u,
+  'both the question and its answer are folded to one line')
+
 console.log('Question transcript record regression passed')
