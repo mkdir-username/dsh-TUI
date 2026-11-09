@@ -4287,7 +4287,7 @@ export function PromptInput({
   const dockWindowRows = useOverlayListRows(
     (steerPreviewCount > 0 ? 1 + steerPreviewCount : 0)
     + (followupPreviewCount > 0 ? 1 + followupPreviewCount : 0)
-    + 1 /* dock label */ + 1 /* dock hint row */ + 1 /* Alt+↑ hint */ + 1 /* block paddingBottom */,
+    + 1 /* dock label */ + 1 /* dock hint row */ + 1 /* block paddingBottom */,
   )
   const dockFocus = dockSelected ?? Math.max(dockCount - 1, 0)
   const { start: dockStart, end: dockEnd } = listWindow(
@@ -4547,11 +4547,11 @@ export function PromptInput({
                   // 点击提示行 = 全部发送（与空输入 ⏎ 同路径）
                   onClick={() => { sendDocked() }}
                 >
-                  <Text dimColor>{' '}{dockedPending.every(item => item.heldCompact === true) ? '↑ Edit' : t(channel.status === 'disposed' ? 'input-pending-dock-hint-disposed' : channel.working ? 'input-pending-dock-hint-working' : 'input-pending-dock-hint')}</Text>
+                  {/* 一行到底：四个状态同一句，窄终端截断而不是折行——浮层高度按一行预算 */}
+                  <Text dimColor wrap="truncate">{' '}{t('input-pending-dock-hint')}</Text>
                 </Box>
               </Box>
             )}
-            <Text dimColor>Alt+↑ {t(channel.status === 'disposed' ? 'input-pending-actions-hint-disposed' : 'input-pending-actions-hint')}</Text>
           </Box>
         )}
         {fileOverlayOpen && (

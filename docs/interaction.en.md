@@ -12,7 +12,7 @@ Fullscreen text selection belongs to its starting pane (chat, sidebar or one dif
 | --- | --- |
 | `Enter` | Send while idle; run a known `/` command (with or without arguments — while a turn runs its own gate decides); steer the remaining text into the running turn at its next step boundary; confirm an open menu |
 | `Tab` | Complete a `/` command or `@` file; while the model is working, queue non-empty input as a post-turn follow-up |
-| `Ctrl+Enter` | Interrupt the running turn and process the input immediately |
+| `Ctrl+Enter` | With a draft: send it the way `Enter` does — steer the running turn at its next step boundary, no abort; on an empty draft: interrupt the running turn; in the fullscreen editor: send |
 | `Shift+Enter` / `Ctrl+J` | Insert a newline at the caret; `Ctrl+J` (LF) is the fallback when the terminal cannot report the Shift modifier; macOS Terminal.app uses `Option+Enter` |
 | `Shift+Tab` | Cycle the configured session modes (default: default → plan → full-access) |
 | `Alt/Option+Up` | Pull the latest undelivered message back into the editor |
@@ -316,7 +316,7 @@ While the model is working, three paths have different placement:
 | --- | --- |
 | `Enter` | known `/` command (with or without arguments) → run it, its own gate decides; anything else → steer: deliver to the running turn at its next step boundary |
 | `Tab` | Follow-up: wait until the current turn finishes |
-| `Ctrl+Enter` | Interrupt: stop the turn and deliver immediately |
+| `Ctrl+Enter` | With a draft: steer, the same placement as `Enter`; on an empty draft: interrupt the turn |
 
 **While a turn is running, a command is always a command; only two kinds of input steer: plain text that is not a command, and a direct skill gesture (`/skill-name …`).** The completion overlay groups commands by their impact on the current conversation: the harmless ones stay on top in their normal style, while gated, interrupting, replacing or steering commands sink to the bottom in the theme's grey (`subtle`, no header row) — where they stay selectable.
 
@@ -324,7 +324,7 @@ While the model is working, three paths have different placement:
 - `Alt/Option+Up` retrieves the latest one.
 - Pressing `Esc` while the model works interrupts the turn and holds the queued
   messages above the input instead of re-sending them; the hint row reads
-  `Press ↑ to edit queued messages, ⏎ to send now`. DSH and Claude behave the same.
+  `↑ Edit · Ctrl+Enter steer · Esc interrupts and holds the queue`. DSH and Claude behave the same.
   - With messages held and idle, `↑` on an empty input opens the queued-message
     selector: `↑`/`↓` move, `⏎` takes the selected message back into the input
     for editing, `Esc` leaves the selector. You can also click a held message
@@ -333,8 +333,9 @@ While the model is working, three paths have different placement:
   - `⏎` on an empty input sends all held messages in order, exactly once; with a
     draft in the input `⏎` sends only the draft and the held messages stay, so
     they are never bundled with it.
-  - `Ctrl+Enter` (with a draft) interrupts the turn and sends the held messages together
-    with the draft right away.
+  - `Ctrl+Enter` with a draft takes the `Enter` path: it steers the running turn
+    instead of aborting it, so the held messages stay parked; `⏎` on an empty input
+    sends them.
   - When a turn ends normally, queued messages still flow into the next turn;
     `Ctrl+C` keeps the queue.
   - On `Esc`, only messages the backend confirmed as withdrawn are held. With an older

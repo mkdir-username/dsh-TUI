@@ -813,6 +813,28 @@ const selectorHighlightVisible = (term, texts) =>
   instance.unmount()
 }
 
+{
+  // D19 — the dock paints ONE hint line: the ↑-edit affordance, Ctrl+Enter
+  // steering and the Esc fact on that same row. The compact hold (the queue
+  // parked for /compact) is the state where the old second row — "Alt+↑
+  // Retract · Esc …" — sat right under it and said the same thing twice.
+  const channel = makeUiChannel([
+    { id: 'q1', text: 'hint-row-a', placement: 'followup', docked: true, heldCompact: true },
+    { id: 'q2', text: 'hint-row-b', placement: 'followup', docked: true, heldCompact: true },
+  ])
+  const instance = await mountUI(channel)
+  check('D19 the compact dock paints its Queue label', await settled(() => findUI('Queue:') !== null))
+  const hintLines = () => termTestLib.viewportLines(termUI).filter(line => line.includes('↑ Edit'))
+  check('D19 exactly one ↑ Edit hint line', await settled(() => hintLines().length === 1), JSON.stringify(hintLines()))
+  check('D19 the hint names Ctrl+Enter steer and the Esc fact',
+    hintLines().some(line => line.includes('Ctrl+Enter steer') && line.includes('Esc interrupts and holds the queue')),
+    JSON.stringify(hintLines()))
+  check('D19 the Alt+↑ retract duplicate is gone',
+    findUI('Alt+↑') === null && findUI('Retract') === null,
+    JSON.stringify(termTestLib.viewportLines(termUI).filter(line => /Alt\+↑|Retract/.test(line))))
+  instance.unmount()
+}
+
 // ─────── Section E (R7): dock rights are HELD while the receipt is in flight
 // The blocker: rows parked by interruptAndDock were fully editable /
 // re-sendable / swappable BEFORE the cancel receipt settled. A late

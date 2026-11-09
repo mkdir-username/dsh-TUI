@@ -448,7 +448,9 @@ async function run() {
     instance.unmount()
   }
 
-  // ---- Scenario 8: Ctrl+Enter aborts the turn and sends immediately.
+  // ---- Scenario 8: Ctrl+Enter with a draft takes the Enter path (fork
+  // patch): a plain line steers the running turn, the turn is NOT aborted;
+  // only an empty draft keeps the interrupt role (verify-ctrl-enter-steer).
   {
     const { stdout, stderr, stdin } = makeStreams()
     const channel = makeChannel(true)
@@ -469,10 +471,10 @@ async function run() {
     stdin.write('\x1b[13;5u')
     await sleep(300)
     const last = toPlain(stdout.frames.at(-1) ?? '')
-    check('Ctrl+Enter cancels the running turn', channel.cancelled.length === 1)
-    check('Ctrl+Enter sends immediately', channel.submitted.length === 1 && channel.submitted[0] === 'urgent')
+    check('Ctrl+Enter does not cancel the running turn', channel.cancelled.length === 0, JSON.stringify(channel.cancelled))
+    check('Ctrl+Enter steers the draft into the running turn', channel.steered.length === 1 && channel.steered[0] === 'urgent', JSON.stringify(channel.steered))
     check('Ctrl+Enter input cleared', !/❯ urgent/.test(last))
-    check('interrupt notice shown', channel.notified.some(n => n.text.includes('已打断当前回合')), JSON.stringify(channel.notified))
+    check('steer notice shown', channel.notified.some(n => n.text.includes('已插话')), JSON.stringify(channel.notified))
     instance.unmount()
   }
 

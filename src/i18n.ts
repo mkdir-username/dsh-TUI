@@ -1050,13 +1050,11 @@ const dict = {
   'input-image-format-unsupported': { zh: '剪贴板图片格式不受支持；请使用 PNG、JPEG、WebP 或 GIF', en: 'Clipboard image format is unsupported; use PNG, JPEG, WebP, or GIF' },
   'input-pending-steer-label': { zh: '插话 · 下一步送达', en: 'Steer · delivered next' },
   'input-pending-queue-label': { zh: '排队 · 回合结束后送达', en: 'Queued · delivered after the turn' },
-  'input-pending-actions-hint': { zh: '撤回 · Esc 打断并暂存排队消息', en: 'Retract · Esc interrupts and holds the queue' },
-  'input-pending-actions-hint-disposed': { zh: '撤回', en: 'Retract' },
   'input-pending-dock-label': { zh: '已暂存 · 打断后保留，不会自动发送', en: 'Held · kept after the interrupt, not sent automatically' },
   'input-pending-orphan-label': { zh: '已暂存 · 未送达，不会自动发送', en: 'Held · not delivered, not sent automatically' },
-  'input-pending-dock-hint': { zh: '按 ↑ 编辑排队消息，⏎ 立即发送', en: 'Press ↑ to edit queued messages, ⏎ to send now' },
-  'input-pending-dock-hint-disposed': { zh: '会话已结束：/new 或 /restart 后，⏎ 发送暂存消息，↑ 编辑', en: 'Session ended: after /new or /restart, ⏎ sends the held messages and ↑ edits them' },
-  'input-pending-dock-hint-working': { zh: '按 ↑ 编辑排队消息，回合结束后 ⏎ 发送', en: 'Press ↑ to edit queued messages, ⏎ sends after the turn' },
+  // One row for every dock state: ↑ takes a row back for editing, Ctrl+Enter
+  // steers the running turn, Esc makes the queue in the first place.
+  'input-pending-dock-hint': { zh: '↑ 编辑 · Ctrl+Enter 插话 · Esc 打断并暂存排队消息', en: '↑ Edit · Ctrl+Enter steer · Esc interrupts and holds the queue' },
   'input-dock-sent': { zh: '已发送 {{n}} 条暂存消息', en: 'Sent {{n}} held message(s)' },
   'input-dock-swapped': { zh: '已交换：草稿暂存，所点消息回到输入框（Ctrl+Z 换回）', en: 'Swapped: the draft is held and the picked message is back in the input (Ctrl+Z swaps back)' },
   // No ⏎ here: whether ⏎ sends now or only after /new depends on the session,
