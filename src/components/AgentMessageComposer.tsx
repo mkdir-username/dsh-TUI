@@ -1,7 +1,9 @@
 import React from 'react'
 import { Box, Text, InputCaret, useInput } from '../ui.js'
 import { t } from '../i18n.js'
-import { isPlainReturnInput } from '../utils/modifiers.js'
+import type { Key } from '../ui.js'
+import { nextPoint } from './questions/answerField.js'
+import { useAnswerField } from './questions/useAnswerField.js'
 import { agentMessageStateColor, agentMessageStateText, agentMessageViaText } from './messages/TranscriptLeaves.js'
 import type {
   AgentComposeTarget,
@@ -72,12 +74,17 @@ type ComposerKey = {
   readonly ctrl?: boolean
   readonly meta?: boolean
   readonly shift?: boolean
+  readonly super?: boolean
+  readonly tab?: boolean
   readonly backspace?: boolean
   readonly delete?: boolean
   readonly leftArrow?: boolean
   readonly rightArrow?: boolean
+  readonly upArrow?: boolean
+  readonly downArrow?: boolean
   readonly home?: boolean
   readonly end?: boolean
+  readonly isPasted?: boolean
 }
 
 /** true = the composer consumed the key. */
@@ -103,16 +110,11 @@ export function nextCodePoint(text: string, caret: number): number {
  * to a continuable child). A failure keeps the draft and says why.
  */
 export function AgentMessageComposer({ target, control, messages, focused, onFocusChange, keyHandlerRef }: AgentMessageComposerProps): React.ReactNode {
-  // The draft lives in a ref as well as in state: keys can arrive faster
-  // than React re-renders, and a handler reading a render-time copy would
-  // overwrite the previous keystroke (or submit twice on a double Enter).
-  const draftRef = React.useRef({ text: '', caret: 0 })
-  const [draft, setDraftState] = React.useState(draftRef.current)
-  const setDraft = (next: { text: string; caret: number }): void => {
-    draftRef.current = next
-    setDraftState(next)
-  }
-  const { text, caret } = draft
+  // The draft is the shared single-line answer field: refs mutated
+  // synchronously per key (a batched chunk must compose), code-point caret,
+  // the same editing contract as every other text field.
+  const field = useAnswerField('', { multiline: false })
+  const { text, cursor: caret } = field
   const sendingRef = React.useRef(false)
   const [sending, setSending] = React.useState(false)
   const [sent, setSent] = React.useState<SentIntent | null>(null)
@@ -131,7 +133,7 @@ export function AgentMessageComposer({ target, control, messages, focused, onFoc
   }, [messages, sent])
 
   const submit = (delivery: 'queue' | 'steer'): void => {
-    const submitted = draftRef.current.text
+    const submitted = field.textRef.current
     if (target.name === undefined || sendingRef.current || submitted.trim() === '') return
     sendingRef.current = true
     setSending(true)
@@ -151,7 +153,7 @@ export function AgentMessageComposer({ target, control, messages, focused, onFoc
         // The channel mints the intent id; the receipt state is a FACT the
         // transport stated (an accepted inbox is 'queued', never more).
         // Text typed while the submit was in flight stays in the box.
-        if (draftRef.current.text === submitted) setDraft({ text: '', caret: 0 })
+        if (field.textRef.current === submitted) field.reset()
         setSent({ intentId: outcome.intentId, text: submitted, state: outcome.state })
         return
       }
@@ -172,46 +174,18 @@ export function AgentMessageComposer({ target, control, messages, focused, onFoc
       return true
     }
     const returnKey = key.return === true || key.return_ === true
-    if (isPlainReturnInput(input, { ...key, return: returnKey })) {
-      submit('queue')
-      return true
-    }
     // Ctrl+Enter steers ONLY under an explicit capability; Claude mediation
     // keeps the followup placement (never interruptAndDeliver).
     if (returnKey && key.ctrl === true) {
       submit(control.steer === true ? 'steer' : 'queue')
       return true
     }
-    const current = draftRef.current
-    if (key.backspace === true || key.delete === true) {
-      if (current.caret > 0) {
-        const at = previousCodePoint(current.text, current.caret)
-        setDraft({ text: current.text.slice(0, at) + current.text.slice(current.caret), caret: at })
-      }
-      return true
-    }
-    if (key.leftArrow === true) {
-      setDraft({ ...current, caret: previousCodePoint(current.text, current.caret) })
-      return true
-    }
-    if (key.rightArrow === true) {
-      setDraft({ ...current, caret: nextCodePoint(current.text, current.caret) })
-      return true
-    }
-    if (key.home === true || (key.ctrl === true && input === 'a')) {
-      setDraft({ ...current, caret: 0 })
-      return true
-    }
-    if (key.end === true || (key.ctrl === true && input === 'e')) {
-      setDraft({ ...current, caret: current.text.length })
-      return true
-    }
-    if (input !== '' && key.ctrl !== true && key.meta !== true) {
-      setDraft({ text: current.text.slice(0, current.caret) + input + current.text.slice(current.caret), caret: current.caret + input.length })
-      setNotice(null)
-      return true
-    }
-    return false
+    // ↑/↓ belong to the scene (the panel scrolls its list), not the field.
+    if (key.upArrow === true || key.downArrow === true) return false
+    // Everything else is the shared field: plain Enter submits, the rest is
+    // the macOS/readline editing contract (word jumps, Ctrl+A/E/W/U, …).
+    field.handleKey(input, key as unknown as Key, { onSubmit: () => submit('queue') })
+    return true
   }
   if (keyHandlerRef !== undefined) keyHandlerRef.current = focused ? handleKey : null
   useInput((input, key, event) => {
@@ -219,7 +193,7 @@ export function AgentMessageComposer({ target, control, messages, focused, onFoc
   }, { isActive: focused && keyHandlerRef === undefined })
 
   const viaLabel = agentMessageViaText(control.via)
-  const afterCaret = nextCodePoint(text, caret)
+  const afterCaret = nextPoint(text, caret)
   return (
     <Box flexDirection="column">
       <Box flexDirection="row">

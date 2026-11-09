@@ -13,6 +13,8 @@ import type { Key } from '../../ui.js'
 import { t } from '../../i18n.js'
 import { isMod, isPlainReturnInput } from '../../utils/modifiers.js'
 import { readClipboard, type ClipboardRead } from '../../utils/clipboard.js'
+import { stringWidth } from '../../ink/stringWidth.js'
+import { capCells, flattenInline } from '../../channel/sanitize.js'
 import {
   ANSWER_PASTE_MAX_POINTS,
   appendAtTail,
@@ -59,6 +61,8 @@ export interface AnswerField {
   backspace(): void
   /** Every key the field owns; the caller's row branch consumes them all. */
   handleKey(input: string, key: Key, host: AnswerFieldHost): void
+  /** Clear the buffer (a successful send leaves nothing behind). */
+  reset(): void
   insertPasted(raw: string, atCaret: boolean, onAppended?: () => void): PasteOutcome
   pasteFromClipboard(
     atCaret: boolean,
@@ -72,7 +76,17 @@ const changed = (before: AnswerValue, next: AnswerValue): boolean =>
 
 export function useAnswerField(
   initialText: string,
-  options: { readonly readClipboard?: () => Promise<ClipboardRead> } = {},
+  options: {
+    readonly readClipboard?: () => Promise<ClipboardRead>
+    /** Multi-line keys (Shift+Enter / Option+Enter / Ctrl+J) and the
+     *  line-scoped Ctrl+↑/↓. Default true; single-line fields pass false and
+     *  a control-only chunk (a terminal's Shift+Enter fallback) inserts
+     *  nothing instead of a stray CR. */
+    readonly multiline?: boolean
+    /** Display-cell cap for a single-line field: typing past it is ignored,
+     *  paste past it is truncated (the plugin dialog's INPUT_CELLS rule). */
+    readonly maxCells?: number
+  } = {},
 ): AnswerField {
   const [text, setText] = React.useState(initialText)
   const [cursor, setCursor] = React.useState(() => pointsOf(initialText).length)
@@ -85,6 +99,18 @@ export function useAnswerField(
   /** True while a clipboard read is in flight (ignore repeat Ctrl+V). */
   const pasteBusyRef = React.useRef(false)
   const clipboardReader = options.readClipboard ?? readClipboard
+  const multiline = options.multiline !== false
+  const maxCells = options.maxCells
+
+  /** Enforce the optional display-cell cap. Typing past it is refused
+   *  (null); paste past it is truncated, never dropped. */
+  const capped = (next: AnswerValue, mayCap: boolean): AnswerValue | null => {
+    if (maxCells === undefined) return next
+    if (stringWidth(next.text) <= maxCells) return next
+    if (!mayCap) return null
+    const text = capCells(next.text, maxCells)
+    return { text, cursor: Math.min(next.cursor, pointsOf(text).length) }
+  }
 
   /** Single choke point: refs first (the next key of the same stdin batch
    *  must see them), then the state mirrors so the render sees the value. */
@@ -115,9 +141,15 @@ export function useAnswerField(
   const insertPasted = (raw: string, atCaret: boolean, onAppended?: () => void): PasteOutcome => {
     const result = pasteInto({ text: textRef.current, cursor: cursorRef.current }, raw, atCaret)
     if (result.outcome !== 'ok') return result.outcome
-    commit(result.value)
+    const next = capped(result.value, true)
+    if (next === null) return 'too-long'
+    commit(next)
     if (!atCaret) onAppended?.()
     return 'ok'
+  }
+
+  const reset = (): void => {
+    commit({ text: '', cursor: 0 })
   }
 
   const pasteFromClipboard = (
@@ -158,12 +190,12 @@ export function useAnswerField(
     const value = (): AnswerValue => ({ text: textRef.current, cursor: cursorRef.current })
     // Shift+Enter / Option+Enter / Ctrl+J break the answer into a new line
     // and never submit it. A bare Enter still submits below.
-    if (key.return && (key.shift || key.meta)) {
+    if (multiline && key.return && (key.shift || key.meta)) {
       const before = value()
       edit(before, insertNewlineAt(before), host)
       return
     }
-    if (key.ctrl && !key.shift && !key.meta && !key.super && input === 'j') {
+    if (multiline && key.ctrl && !key.shift && !key.meta && !key.super && input === 'j') {
       const before = value()
       edit(before, insertNewlineAt(before), host)
       return
@@ -202,7 +234,7 @@ export function useAnswerField(
       return
     }
     // Caret motion between lines is Ctrl+↑/↓: plain ↑/↓ navigate the rows.
-    if (isMod(key) && (key.upArrow || key.downArrow)) {
+    if (multiline && isMod(key) && (key.upArrow || key.downArrow)) {
       const before = value()
       commit(caretTo(before, lineStep(before.text, before.cursor, key.upArrow ? -1 : 1)))
       return
@@ -261,10 +293,15 @@ export function useAnswerField(
     if (!key.ctrl && !key.meta && !key.super && input) {
       // Ordinary typing at the live caret (a text run may carry several
       // characters in one event — e.g. an unbracketed terminal paste).
+      // A single-line field flattens controls (an unbracketed paste may carry
+      // newlines) and a control-only chunk is a key fallback, not text.
+      const typed = multiline ? input : flattenInline(input)
+      if (!multiline && typed !== input && typed.trim() === '') return
       const before = value()
-      edit(before, insertAt(before, input), host)
+      const next = capped(insertAt(before, typed), false)
+      if (next !== null) edit(before, next, host)
     }
   }
 
-  return { text, cursor, textRef, cursorRef, append, backspace, handleKey, insertPasted, pasteFromClipboard }
+  return { text, cursor, textRef, cursorRef, append, backspace, handleKey, insertPasted, pasteFromClipboard, reset }
 }
