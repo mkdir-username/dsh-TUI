@@ -2,7 +2,6 @@ import React from 'react'
 import { Box, Text, InputCaret, useInput } from '../ui.js'
 import { t } from '../i18n.js'
 import type { Key } from '../ui.js'
-import { nextPoint } from './questions/answerField.js'
 import { useAnswerField } from './questions/useAnswerField.js'
 import { agentMessageStateColor, agentMessageStateText, agentMessageViaText } from './messages/TranscriptLeaves.js'
 import type {
@@ -193,7 +192,10 @@ export function AgentMessageComposer({ target, control, messages, focused, onFoc
   }, { isActive: focused && keyHandlerRef === undefined })
 
   const viaLabel = agentMessageViaText(control.via)
-  const afterCaret = nextPoint(text, caret)
+  // The field's caret counts code points; `text.slice` counts UTF-16 units.
+  // Slicing by the raw caret splits an emoji and paints nothing at all.
+  const caretOffset = [...text].slice(0, caret).join('').length
+  const afterCaret = nextCodePoint(text, caretOffset)
   return (
     <Box flexDirection="column">
       <Box flexDirection="row">
@@ -208,8 +210,8 @@ export function AgentMessageComposer({ target, control, messages, focused, onFoc
         <Text color="warning">{t('agent-message-target-nameless')}</Text>
       )}
       <Box flexDirection="row">
-        <Text>{text.slice(0, caret)}</Text>
-        <InputCaret active={focused}>{text.slice(caret, afterCaret) || ' '}</InputCaret>
+        <Text>{text.slice(0, caretOffset)}</Text>
+        <InputCaret active={focused}>{text.slice(caretOffset, afterCaret) || ' '}</InputCaret>
         <Text>{text.slice(afterCaret)}</Text>
       </Box>
       {notice !== null && (

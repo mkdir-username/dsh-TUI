@@ -180,6 +180,14 @@ await type('draft')
 await feed('\x1b')
 check('8: Esc returns focus to the scene', focusCalls.includes(false))
 
+// ── 9. An emoji draft is painted whole ──────────────────────────────
+// The caret counts code points, the render must slice by them too: a
+// UTF-16 slice splits the pair and the row paints nothing at all.
+await mount()
+await type('👍')
+const painted = await settled(() => screen().includes('👍'))
+check('9: an emoji draft is painted in the box', painted, screen())
+
 await app?.unmount()
 console.log(results.join('\n'))
 term.dispose()
