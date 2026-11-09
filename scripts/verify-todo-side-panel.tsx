@@ -46,6 +46,23 @@ const [{ renderToScreen }, { cellAt }, { TerminalSizeContext }, { SidePanelLayou
   import('../src/ink/instances.js'),
 ])
 
+// В этом форке todo-панель в сайдбар не регистрируется (builtinPanels.tsx:
+// «Local: no Todo panel» — todo_write вырезан из пресета, задачи живут в /goal
+// и .dev/). Скрипт проверяет именно панель, поэтому при её отсутствии он ничего
+// не докажет: пропуск с явной причиной, чтобы зелёный гейт не врал. Вернётся
+// регистрация — вернётся и прогон.
+{
+  const [{ registerBuiltinPanels }, { panelStore }] = await Promise.all([
+    import('../src/components/sidePanel/builtinPanels.js'),
+    import('../src/components/sidePanel/PanelStore.js'),
+  ])
+  registerBuiltinPanels()
+  if (panelStore.get('todo') === undefined) {
+    console.log('SKIP: todo-панель не регистрируется в этом форке (Local: no Todo panel) — проверять нечего')
+    process.exit(0)
+  }
+}
+
 const COLS = 110
 const ROWS = 22
 

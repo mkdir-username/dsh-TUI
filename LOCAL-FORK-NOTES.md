@@ -149,10 +149,12 @@ pnpm smoke                         # прочие гейты: boundary, source-h
   появления плагина, вызов падает с «dshRestart service is missing» — нужен один
   человеческий `/restart`, дальше перезапуски агент делает сам.
 
-## Известная краснота гейтов (не наша)
+## Гейт todo-панели: почему был красным
 
-- `scripts/verify-todo-side-panel.tsx`: 43 проверки красные и на этом же дереве без правок
-  (`git show HEAD:src/components/GoalTodoPanel.tsx` → 43 фейла: секции `copy:` и
-  `status:` — пустой выделенный текст / не находится строка статуса). С правкой goal-строки
-  набор фейлов совпадает построчно. Разбирать отдельно: место правки — копирование через
-  `noSelect`-забор панели, не хром.
+`scripts/verify-todo-side-panel.tsx` проверяет todo-панель сайдбара, которой в этом
+форке нет: `src/components/sidePanel/builtinPanels.tsx` регистрирует jobs/agents/info/
+trajectory/workspace/btw/companion и не регистрирует `todo` («Local: no Todo panel» —
+todo_write вырезан из пресета). Поэтому 43 проверки падали не из-за копирования, а
+потому что активной панелью всегда оказывался `jobs`, а `openPanel('todo')` ничего не
+делал (id не в enabled). Скрипт теперь сам это проверяет через `panelStore.get('todo')`
+и выходит с `SKIP` — вернётся регистрация панели, вернётся и прогон.
