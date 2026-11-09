@@ -1026,7 +1026,7 @@ const dict = {
   // ── components/PromptInput.tsx ──────────────────────────────────────
   'input-sent-after-turn': { zh: '已发送，当前回合结束后处理', en: 'Sent, processed after the current turn' },
   'input-injected': { zh: '已从编辑器发送', en: 'Sent from editor' },
-  'input-interrupted-next': { zh: '已插话 · 下一步立即处理', en: 'Steered · processed next' },
+  'input-interrupted-next': { zh: '已请求插话 · 等待下一步', en: 'Steer requested · waiting for next step' },
   'input-steer-pending': { zh: '已插话；中断尚未生效，等待回合恢复后再处理', en: 'Steered; the interrupt has not taken effect — held until the turn can advance' },
   'input-queued-after-turn': { zh: '已排队 · 回合结束后处理', en: 'Queued · processed after the turn' },
   'input-cannot-retract': { zh: '无法撤回：消息可能已被处理，或当前版本不支持', en: 'Cannot retract: the message may already be processed, or this version doesn\'t support it' },
@@ -1048,7 +1048,7 @@ const dict = {
   'input-image-paste-failed': { zh: '粘贴图片失败：{{err}}', en: 'Could not paste image: {{err}}' },
   'input-image-paste-limit': { zh: '图片数量超过当前配置的单条消息上限', en: 'Image count exceeds the per-message limit for this profile' },
   'input-image-format-unsupported': { zh: '剪贴板图片格式不受支持；请使用 PNG、JPEG、WebP 或 GIF', en: 'Clipboard image format is unsupported; use PNG, JPEG, WebP, or GIF' },
-  'input-pending-steer-label': { zh: '插话 · 下一步送达', en: 'Steer · delivered next' },
+  'input-pending-steer-label': { zh: '插话 · 等待下一步', en: 'Steer · waiting for next step' },
   'input-pending-queue-label': { zh: '排队 · 回合结束后送达', en: 'Queued · delivered after the turn' },
   'input-pending-dock-label': { zh: '已暂存 · 打断后保留，不会自动发送', en: 'Held · kept after the interrupt, not sent automatically' },
   'input-pending-orphan-label': { zh: '已暂存 · 未送达，不会自动发送', en: 'Held · not delivered, not sent automatically' },
