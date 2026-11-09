@@ -66,6 +66,13 @@ export interface ChannelProjectionDeps {
   rowIds: { value: number }
   /** Display name of the bound backend; absent keeps the legacy DSH wording. */
   backendLabel?: () => string | undefined
+  /**
+   * This boot resumed the session after a TUI restart. The turn the teardown
+   * cancelled then reads as "restarted" rather than as a stopped session: the
+   * process came back and continues, nothing ended. A crash resume (no
+   * restart) keeps the honest "Session stopped".
+   */
+  restartResume?: boolean
   resetContextWarning(): void
   checkContextWarning(): void
   notify: ChannelUi['notify']
@@ -100,6 +107,10 @@ export interface ChannelProjectionDeps {
    */
   pricingWindow?: (time: number) => PricingWindow
 }
+
+/** A disposed turn this fresh at boot is the one the restart itself cancelled;
+ *  an older one is a crash resume and keeps the stopped wording. */
+const RESTART_RESUME_WINDOW_MS = 10 * 60 * 1000
 
 const NO_IMAGES: readonly ImageRef[] = []
 
@@ -475,6 +486,8 @@ export function createChannelProjection(state: ProjectionState, deps: ChannelPro
 
   /** Replay paints settled history without the live smooth-reveal animation. */
   let replaying = false
+  /** The trailing turn a restart teardown cancelled (set once, on the boot replay). */
+  let restartedTurn: number | undefined
 
   type Delta = AgentEventOf<'assistant.delta'>['delta']
   /** Whether one delta advances the first-token/decode boundary. */
@@ -1152,7 +1165,7 @@ export function createChannelProjection(state: ProjectionState, deps: ChannelPro
       return
     }
     if (reason.kind === 'aborted' && reason.cause === 'disposed') {
-      appendRow({ id: deps.rowIds.value, kind: 'notice', text: t('session-stopped') })
+      appendRow({ id: deps.rowIds.value, kind: 'notice', text: t(event.turn === restartedTurn ? 'session-restarted' : 'session-stopped') })
       deps.rowIds.value += 1
       emitTurnSummary()
       return
@@ -1626,6 +1639,15 @@ export function createChannelProjection(state: ProjectionState, deps: ChannelPro
     if (!meta.replay) {
       for (const event of events) applyEvent(event)
       return
+    }
+    // The boot replay names the turn the restart teardown cancelled: it is the
+    // last recorded event, and later replays must keep the same wording even
+    // though new events have followed it by then.
+    if (restartedTurn === undefined && deps.restartResume === true) {
+      const last = events.at(-1)
+      if (last !== undefined && last.type === 'turn.end'
+        && last.reason.kind === 'aborted' && last.reason.cause === 'disposed'
+        && Date.now() - last.time <= RESTART_RESUME_WINDOW_MS) restartedTurn = last.turn
     }
     handledAssistantMessages.clear()
     handledUsage.clear()

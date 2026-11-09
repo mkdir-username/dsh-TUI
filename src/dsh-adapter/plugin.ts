@@ -1225,6 +1225,10 @@ export async function apply(ctx: Context, runtimeConfig: RuntimeConfig<Config>, 
   let settleComposition: (ok: boolean) => void = () => undefined
   const compositionSettled = new Promise<boolean>(resolve => { settleComposition = resolve })
   const rawChannel = createChannel(ctx, startupSession, {
+    // A replacement process (`/restart`, `restart_session`) continues the session
+    // it resumed: the turn its teardown cancelled is not a stopped session.
+    restartResume: process.env.DSH_TUI_RESTART_CHILD === '1'
+      && (process.env.DSH_TUI_RESUME_SESSION ?? '') !== '',
     // The namespace this boot actually registered the settings section under
     // (the Config owner's Loader id; custom ids are supported). Chat and the
     // channel's own settings reads look the section up by it.

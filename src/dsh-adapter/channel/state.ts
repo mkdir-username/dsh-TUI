@@ -41,6 +41,12 @@ export class StartupOpenError extends Error {
 export interface ChannelLaunchOptions {
   /** Host notification effect with the last settled reply's preview, when present. */
   onTaskComplete?: (preview?: string) => void
+  /**
+   * This boot resumed the session after a TUI restart (`/restart`,
+   * `restart_session`). The turn the teardown cancelled then reads as
+   * "Session restarted": the process came back and continues, it did not end.
+   */
+  restartResume?: boolean
   model: string
   cwd: string
   provider: string

@@ -785,6 +785,7 @@ export function createCoreChannel(
       activity: { apply: (event, replaying) => { if (activityOwned()) activity.apply(event, replaying) } },
       trajectory: { observe: (event, replaying) => { if (trajectoryOwned()) agentTrajectory.observe(event, replaying) } },
       checkContextWarning, notify: (...args) => notify(...args),
+      restartResume: options.restartResume === true,
       // Read per event (late row).
       get renderer() { return host.rendererRuntime },
       selectionAttached: messageId => selectionAttachments.take(messageId),

@@ -1504,6 +1504,10 @@ const GROUPS = {
 // 运行中的调用、或后端没有 park 时按键仍归侧栏。按键提示画在卡片自身，settled
 // 后消失。
     ["verify-tool-park", ['node', '--import', 'tsx/esm', 'scripts/verify-tool-park.tsx']],
+// 重启把当前回合按 aborted/disposed 关掉，回放里那一行是收尾提示：替换进程把
+// 它读作「Session restarted」（进程回来了、继续干活），崩溃恢复仍写「Session
+// stopped」；重启之后的后续回放不翻回 stopped，重启进程里后来的停止仍如实报。
+    ["verify-restart-notice", ['node', '--import', 'tsx/esm', 'scripts/verify-restart-notice.ts']],
 // 问卷折叠：真实 Chat + stores 验证审批/对话框优先、整屏中断层恢复、
 // abort 后 FIFO 请求身份隔离，以及改键和草稿保持（inline/fullscreen）。
     ["verify-question-fold", ['node', '--import', 'tsx/esm', 'scripts/verify-question-fold.tsx']],
