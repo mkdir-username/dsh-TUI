@@ -7,33 +7,42 @@
  */
 import '../force-production-react.js'
 import { spawn } from 'node:child_process'
+import { realpathSync } from 'node:fs'
+import { dirname } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { markBoot } from '../utils/bootTrace.js'
 import { configuredBackend, delegatesToProfile, entryKernel, hostProfile } from '../hostEntryRoute.js'
 import { HANDOFF_ACK_FD_ENV } from '../handoffAck.js'
-import { HOST_NOTICE_ENV, type KernelBackendId } from '../kernelPrefs.js'
+import { HOST_NOTICE_ENV, hostEntryDisabled, type KernelBackendId } from '../kernelPrefs.js'
 import { logForDebugging, logLifecycle } from '../utils/debug.js'
 import { setProcessName } from '../utils/processName.js'
 import { cmdEscapeArgument } from '../utils/shellQuote.js'
 import type { Context } from '@deepseek-ai/cordis'
 import type { Config as TuiConfig } from './index.js'
+import { parseBackendChoice } from './backend-registry.js'
 import { ENTRY_ROW_DEFAULTS } from './lite-profile.js'
-import { HostComposeError, loadHostDsh, NO_DSH_ON_PATH, prepareHostRoot, type HostRoot } from './host-dsh.js'
+import { HostComposeError, loadHostDsh, NO_DSH_ON_PATH, prepareHostRoot, type HostRoot, type PreparedHostProfile } from './host-dsh.js'
 import { installEntrySignals, type ProcessExitSeam } from './process-exit.js'
 import { disposeRootSettled, trackComposition } from './root-dispose.js'
 
-markBoot('entry-start')
-// #1831: process listings show the inherited main-thread name ("MainThread");
-// the process that becomes the screen names itself as early as it can.
-setProcessName('dsh-tui')
-// DSH's native flock loader reads `process.report.getReport()`; with sockets
-// already open, the network section's reverse lookups block the event loop.
-if (process.report !== undefined) (process.report as { excludeNetwork?: boolean }).excludeNetwork = true
-const profile = hostProfile()
-const configured = configuredBackend(profile)
-// A `!!js` backend is evaluated only by the profile's Loader: that launch
-// keeps the full `dsh --profile` path, which honours the evaluated row.
-if (delegatesToProfile(configured)) delegateToDsh()
-else await runInEntry(entryKernel(process.env, { configured }))
+function startEntry(): void {
+  markBoot('entry-start')
+  // #1831: process listings show the inherited main-thread name ("MainThread");
+  // the process that becomes the screen names itself as early as it can.
+  setProcessName('dsh-tui')
+  // DSH's native flock loader reads `process.report.getReport()`; with sockets
+  // already open, the network section's reverse lookups block the event loop.
+  if (process.report !== undefined) (process.report as { excludeNetwork?: boolean }).excludeNetwork = true
+}
+
+function directLaunch(): boolean {
+  if (process.argv[1] === undefined) return false
+  try {
+    return realpathSync(process.argv[1]) === fileURLToPath(import.meta.url)
+  } catch {
+    return false
+  }
+}
 
 /** bin/dsh-tui.js `MSG.noDsh`, newline-terminated. */
 function noDshGuidance(): string {
@@ -42,8 +51,7 @@ function noDshGuidance(): string {
     : '[dsh-tui] 未检测到 dsh CLI。请先安装官方客户端：\n  npm install -g @deepseek-ai/dsh\n'
 }
 
-function delegateToDsh(): void {
-  const appArgs = process.argv.slice(2)
+function delegateToDsh(profile: string, appArgs: readonly string[]): void {
   const args = ['--profile', profile, ...(appArgs.length > 0 ? ['--', ...appArgs] : [])]
   // A kernel-switch replacement's ACK pipe (fd 3) goes to dsh, which adopts the screen.
   const ack = process.env[HANDOFF_ACK_FD_ENV] === '3'
@@ -115,7 +123,23 @@ async function disposeEntryRoot(ctx: Context): Promise<void> {
   }
 }
 
-async function runInEntry(kernelBeforeHost: KernelBackendId): Promise<void> {
+export interface PreparedHostOptions extends PreparedHostProfile {
+  readonly name: string
+  readonly args: readonly string[]
+  readonly config: TuiConfig
+}
+
+/** Returns false only while the caller can still boot the prepared profile itself. */
+export async function startPreparedHost(options: PreparedHostOptions): Promise<boolean> {
+  if (hostEntryDisabled() || process.stdin.isTTY !== true || process.stdout.isTTY !== true) return false
+  const configured = parseBackendChoice(options.config.backend)
+  const kernel = entryKernel(process.env, { configured })
+  if (kernel !== 'dsh') return false
+  startEntry()
+  return runInEntry(kernel, options.name, options.args, options)
+}
+
+async function runInEntry(kernelBeforeHost: KernelBackendId, profile: string, args: readonly string[], prepared?: PreparedHostOptions): Promise<boolean> {
   // Without a usable dsh, DSH delegates to `dsh --profile`; the other kernels
   // run on this package's own cordis. This pre-mount answer is only for the two
   // failure paths below. The root starts neutral: its final composition mode is
@@ -123,10 +147,15 @@ async function runInEntry(kernelBeforeHost: KernelBackendId): Promise<void> {
   let root: HostRoot | undefined
   const exitSeam: ProcessExitSeam = {}
   try {
-    root = await prepareHostRoot(await loadHostDsh(), { profile, args: process.argv.slice(2), exitSeam })
+    const host = await loadHostDsh(prepared === undefined ? undefined : dirname(prepared.installAnchor))
+    root = await prepareHostRoot(host, { profile, args, exitSeam, prepared })
     markBoot('entry-hijacked')
   } catch (error) {
     markBoot('entry-host-unavailable')
+    if (prepared !== undefined) {
+      logForDebugging(`dsh-tui: prepared host setup failed (${error instanceof Error ? error.message : String(error)})`)
+      return false
+    }
     // No dsh at all: stop with the install guidance rather than delegate into
     // a spawn failure (on Windows `shell: true` hides the ENOENT).
     if (kernelBeforeHost === 'dsh' && error instanceof Error && error.message === NO_DSH_ON_PATH) {
@@ -135,8 +164,8 @@ async function runInEntry(kernelBeforeHost: KernelBackendId): Promise<void> {
     }
     noteHostUnavailable(kernelBeforeHost, error)
     if (kernelBeforeHost === 'dsh') {
-      delegateToDsh()
-      return
+      delegateToDsh(profile, args)
+      return true
     }
   }
   const [{ Config }, { apply, handleStartupError }, { assembleBackendsFromProfile }, { createEntrySlot }, { deferRootCapabilityGuard, armRootCapabilityGuard }, { processGuardActive }, { logRestartEvent }] = await Promise.all([
@@ -164,17 +193,28 @@ async function runInEntry(kernelBeforeHost: KernelBackendId): Promise<void> {
   // no-op the second time. Without a host root there is no Loader and no profile to
   // read: the assembly says so and registers nothing.
   assembleBackendsFromProfile(ctx)
-  const kernel: KernelBackendId = entryKernel(env, { configured: configuredBackend(profile) })
+  const configured = prepared === undefined ? configuredBackend(profile) : parseBackendChoice(prepared.config.backend)
+  const kernel: KernelBackendId = entryKernel(env, { configured })
+  if (prepared !== undefined && kernel !== 'dsh') {
+    await disposeRootSettled(ctx)
+    releaseRootGuard?.()
+    return false
+  }
   try {
     await root?.selectKernel(kernel === 'dsh')
   } catch (error) {
+    if (prepared !== undefined) {
+      releaseRootGuard?.()
+      logForDebugging(`dsh-tui: prepared kernel setup failed (${error instanceof Error ? error.message : String(error)})`)
+      return false
+    }
     if (kernel === 'dsh') {
       noteHostUnavailable(kernel, error)
-      delegateToDsh()
-      return
+      delegateToDsh(profile, args)
+      return true
     }
     handleStartupError(ctx, error)
-    return
+    return true
   }
   // cordis.patch.yml's dsh-tui row, rebuilt from the same environment; the
   // editable fields come from ./tui-settings.ts on top.
@@ -184,6 +224,7 @@ async function runInEntry(kernelBeforeHost: KernelBackendId): Promise<void> {
     ...(env.DSH_TUI_WORKSPACE_TARGET === undefined ? {} : { workspace: env.DSH_TUI_WORKSPACE_TARGET }),
     ...(env.DSH_TUI_RESUME_SESSION === undefined ? {} : { sessionId: env.DSH_TUI_RESUME_SESSION }),
     ...(env.DSH_TUI_BACKEND === undefined ? {} : { backend: env.DSH_TUI_BACKEND as TuiConfig['backend'] }),
+    ...prepared?.config,
   })
   installEntrySignals({
     seam: exitSeam,
@@ -211,12 +252,12 @@ async function runInEntry(kernelBeforeHost: KernelBackendId): Promise<void> {
     await apply(ctx, config, ctx, { deferBackendOpen: true, profile, entryKernel: kernel, exitSeam, ...(slot === undefined ? {} : { entrySlot: slot }) })
   } catch (error) {
     handleStartupError(ctx, error)
-    return
+    return true
   }
   // One owner of a fatal error: with the TUI's process guard up, DSH's
   // fail-loud would exit 1 before the exit funnel ran.
   if (root !== undefined && processGuardActive()) root.uninstallFailLoud()
-  if (root === undefined || slot === undefined) return
+  if (root === undefined || slot === undefined) return true
   // The "starting" frame must reach the terminal before the composition's
   // synchronous stretch.
   await slot.firstFrameFlushed?.()
@@ -239,20 +280,31 @@ async function runInEntry(kernelBeforeHost: KernelBackendId): Promise<void> {
     // ecosystem did not come up must not pass as a boot.
     if (failure === undefined) {
       slot.composeSucceeded?.()
-      return
+      return true
     }
     const { error } = failure
     handleStartupError(ctx, error instanceof HostComposeError && error.logPath !== undefined ? `${error.message} — startup report: ${error.logPath}` : error)
-    return
+    return true
   }
   // DSH: past the mount nothing writes to the terminal; a failure lands in the screen.
   if (failure !== undefined) {
     const { error } = failure
     if (error instanceof HostComposeError) slot.composeFailed?.(error.original, error.logPath)
     else slot.composeFailed?.(error)
-    return
+    return true
   }
-  if (composition.disposing) return
+  if (composition.disposing) return true
   if (!slot.rowSeen) slot.composeFailed?.(new Error(`the ${profile} profile has no dsh-tui row`))
   else slot.composeSucceeded?.()
+  return true
+}
+
+if (directLaunch()) {
+  startEntry()
+  const profile = hostProfile()
+  const args = process.argv.slice(2)
+  const configured = configuredBackend(profile)
+  // A `!!js` backend is evaluated only by the profile's Loader.
+  if (delegatesToProfile(configured)) delegateToDsh(profile, args)
+  else await runInEntry(entryKernel(process.env, { configured }), profile, args)
 }

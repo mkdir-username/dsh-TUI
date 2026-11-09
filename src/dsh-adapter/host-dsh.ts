@@ -277,6 +277,14 @@ export interface PrepareHostRootOptions {
   readonly args: readonly string[]
   /** Routes `ctx.appExit(code)` to the TUI's exit funnel; the bounded `shutdown` when unfilled or refused. */
   readonly exitSeam?: ProcessExitSeam
+  readonly prepared?: PreparedHostProfile
+}
+
+export interface PreparedHostProfile {
+  readonly profile: AppBoot.Profile
+  readonly installAnchor: string
+  readonly overlays: AppBoot.ProfileContext['overlays']
+  readonly environment: ReturnType<AppBootModule['loadLayeredEnv']>
 }
 
 /**
@@ -304,10 +312,13 @@ export async function prepareHostRoot(host: HostDsh, options: PrepareHostRootOpt
   const { appBoot, profileBoot } = host
   // bin.js: the `.env` layers fill unset variables before anything reads them
   // (the dsh-tui row's `!!js process.env.DSH_TUI_*` included).
-  const environment = appBoot.loadLayeredEnv(BIN_NAME)
-  // 1–2. composeProfile (no `--patch` overlays from the launcher).
-  const profile = profileBoot.prepareProfile(options.profile, true, undefined)
-  const resolution = await appBoot.createRuntimeResolution({ installAnchor: profileBoot.INSTALL_ANCHOR, profile })
+  const { environment, profile, installAnchor, overlays } = options.prepared ?? {
+    environment: appBoot.loadLayeredEnv(BIN_NAME),
+    profile: profileBoot.prepareProfile(options.profile, true, undefined),
+    installAnchor: profileBoot.INSTALL_ANCHOR,
+    overlays: [],
+  }
+  const resolution = await appBoot.createRuntimeResolution({ installAnchor, profile })
   const rootConfig = join(profile.dir, profileBoot.PROFILE_ROOT_FILENAME)
   // Build the neutral Loader root first: discovery needs its resolver before
   // the final kernel can decide whether DSH-only preparation is appropriate.
@@ -326,7 +337,6 @@ export async function prepareHostRoot(host: HostDsh, options: PrepareHostRootOpt
       Promise.resolve(next()).catch((error: unknown) => { ctx.logger.error(error) })
     }) as never, { global: true, prepend: true } as never)
   }
-  await ctx.plugin(host.Loader as never, undefined as never)
   const shutdown = createProcessShutdown(() => ctx.fiber.dispose())
   const appReady = createAppReady()
   let uninstallFailLoud = (): void => undefined
@@ -335,16 +345,17 @@ export async function prepareHostRoot(host: HostDsh, options: PrepareHostRootOpt
     name: options.profile,
     dir: profile.dir,
     patchPath: profile.patchPath,
-    installAnchor: profileBoot.INSTALL_ANCHOR,
+    installAnchor,
     startedBundles: [...startedBundles],
     cwd: process.cwd(),
     home: host.homePaths.resolveDshHome(),
-    overlays: [],
+    overlays,
     telemetryDisabledEnv: process.env.DSH_TELEMETRY_DISABLED,
   })
   let profileContext: AppBoot.ProfileContext | undefined
   let kernelSelected = false
   try {
+    await ctx.plugin(host.Loader as never, undefined as never)
     // 6. The resolution hijack (both kernels), before any TUI module loads.
     await ctx.plugin(appBoot.PluginPackages as never, { resolution } as never)
   } catch (error) {

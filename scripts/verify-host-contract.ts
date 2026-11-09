@@ -18,7 +18,8 @@ import { tmpdir } from 'node:os'
 import { delimiter, dirname, join, resolve } from 'node:path'
 import { ADAPTER_TYPE_PACKAGES, HOST_MODULES, HOST_PACKAGE, HOST_REPLICA_VERSION, HOST_REPLICAS, HOST_TYPE_PACKAGES } from '../src/dsh-adapter/host-contract.js'
 import { UPSTREAM_BLESSED_PACKAGES, UPSTREAM_VALIDATED_VERSION, upstreamDriftSummary } from '../src/dsh-adapter/contract.js'
-import { findHostDsh, loadHostDsh } from '../src/dsh-adapter/host-dsh.js'
+import { findHostDsh, loadHostDsh, prepareHostRoot } from '../src/dsh-adapter/host-dsh.js'
+import { cmdlineArgsOf } from '../src/dsh-adapter/startup-args.js'
 import { fingerprintReplica } from './lib/host-replicas.js'
 
 const repo = resolve(import.meta.dirname, '..')
@@ -58,6 +59,41 @@ if (loaded === undefined) {
   check('the probe passes on the installed host', loaded.packageDir === hostDir)
   check('the probe hands back a constructible Context', typeof loaded.Context === 'function')
   check('the launch-environment key is read', typeof loaded.launchEnvironmentKey === 'string' && loaded.launchEnvironmentKey !== '')
+  const dir = mkdtempSync(join(tmpdir(), 'verify-prepared-host-'))
+  const installAnchor = join(loaded.packageDir, 'package.json')
+  const patchPath = join(dir, 'cordis.patch.yml')
+  const profile = { name: 'fixture', dir, patchPath, layers: [], patches: [], skippedBundles: [] }
+  const overlays = [{ id: 'prepared-overlay', disabled: true }]
+  const environment = { get: () => undefined, getFrom: () => undefined }
+  let proxiesInstalled = 0
+  const host = {
+    ...loaded,
+    appBoot: { ...loaded.appBoot, loadLayeredEnv: () => assert.fail('the supplied launch environment must be reused') },
+    profileBoot: {
+      ...loaded.profileBoot,
+      INSTALL_ANCHOR: join(dir, 'unavailable', 'package.json'),
+      prepareProfile: () => assert.fail('the live profile must not be read'),
+    },
+    httpProxy: { installProxyFromEnvironment: async (actual: typeof environment) => {
+      assert.equal(actual, environment)
+      proxiesInstalled++
+    } },
+  }
+  try {
+    const root = await prepareHostRoot(host, { profile: 'fixture', args: ['first prompt'], prepared: { profile, installAnchor, overlays, environment } })
+    try {
+      await root.selectKernel(true)
+      const context = root.ctx.profileContext
+      check('prepared profile keeps its directory and install anchor', context.dir === dir && context.installAnchor === installAnchor)
+      check('prepared profile passes overlays and app args', context.overlays[0]?.id === overlays[0]?.id && cmdlineArgsOf(root.ctx)?.[0] === 'first prompt')
+      check('prepared profile sets up proxy once', proxiesInstalled === 1)
+    } finally {
+      root.uninstallFailLoud()
+      await root.ctx.fiber.dispose()
+    }
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
 }
 
 // ── 3. fake hosts, each missing one piece ─────────────────────────────
@@ -148,6 +184,16 @@ check('the entry hands a host it cannot use to `dsh --profile`', JSON.stringify(
 check('the entry mirrors the delegated exit', entry.status === 7, { status: entry.status, signal: entry.signal, stderr: entry.stderr })
 check('the reason reaches stderr', /cannot host this launch \(dsh 0\.0\.0-fake\.0 at .* lacks dsh-cmdline\.provideCmdline\); starting DSH through `dsh --profile`/u.test(entry.stderr), entry.stderr)
 check('the reason reaches the delegated screen', delegated?.notice?.includes('lacks dsh-cmdline.provideCmdline') === true, delegated)
+const imported = spawnSync(process.execPath, ['--import', 'tsx/esm', '--input-type=module', '-e', `
+  const argv = [...process.argv]
+  const { startPreparedHost } = await import('./src/dsh-adapter/prepared-entry.ts')
+  if (await startPreparedHost({ installAnchor: '/unavailable/package.json' }) !== false) process.exit(8)
+  if (JSON.stringify(process.argv) !== JSON.stringify(argv)) process.exit(9)
+  console.log('entry import completed')
+`], { cwd: repo, env, encoding: 'utf8', timeout: 60_000 })
+check('the prepared entry does not start or delegate without a TTY', imported.status === 0 && imported.stdout.trim() === 'entry import completed' && imported.stderr === '', {
+  status: imported.status, stdout: imported.stdout, stderr: imported.stderr,
+})
 rmSync(fakeRoot, { recursive: true, force: true })
 rmSync(entryHome, { recursive: true, force: true })
 

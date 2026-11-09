@@ -783,13 +783,14 @@ check('the wiring check bites: moving the assembly after the entry\'s kernel is 
 check('the wiring check bites: a host mode decided by the preliminary kernel is red',
   !selectsFinalKernel(entrySource.replace(HOST_MODE_CALL, "await root?.selectKernel(kernelBeforeHost === 'dsh')")))
 const selectionFailure = entrySource.slice(entrySource.indexOf(HOST_MODE_CALL), entrySource.indexOf('const config = Config('))
+const DELEGATE_CALL = 'delegateToDsh(profile, args)'
 const delegatesDshFailure = (source: string): boolean => source.includes("if (kernel === 'dsh')")
   && source.indexOf('noteHostUnavailable(kernel, error)') >= 0
-  && source.indexOf('delegateToDsh()') > source.indexOf('noteHostUnavailable(kernel, error)')
-  && source.indexOf('handleStartupError(ctx, error)') > source.indexOf('delegateToDsh()')
+  && source.indexOf(DELEGATE_CALL) > source.indexOf('noteHostUnavailable(kernel, error)')
+  && source.indexOf('handleStartupError(ctx, error)') > source.indexOf(DELEGATE_CALL)
 check('failed DSH-only preparation still delegates before the screen mounts', delegatesDshFailure(selectionFailure))
 check('the wiring check bites: removing DSH preparation fallback is red',
-  !delegatesDshFailure(selectionFailure.replace('delegateToDsh()', '')))
+  !delegatesDshFailure(selectionFailure.replace(DELEGATE_CALL, '')))
 
 const waitingFailure = await loadFailure(WAITING_ID)
 check('an explicit waiting backend choice fails without importing its module',
