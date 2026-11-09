@@ -205,6 +205,8 @@ export type ShortcutActionId =
   | 'todoFold'
   | 'expandEditor'
   | 'undo'
+  /** 把运行中的 shell 调用转入后台（Ctrl+B，Claude CLI 同键）。 */
+  | 'toolPark'
   | 'sidePanel'
   | 'sidePanelZoom'
 
@@ -248,9 +250,13 @@ export const SHORTCUT_ACTIONS: readonly ShortcutActionSpec[] = [
   // Word-level undo for the prompt draft. `exactPrimary` keeps Cmd+Z out of
   // it on macOS; the combo stays remappable through /settings like any other.
   { id: 'undo', defaults: ['ctrl+z'], exactPrimary: true },
-  // 侧栏三态开关：关闭 → 打开并聚焦右栏 → 焦点回 Chat → 关闭（VS Code 同
-  // 键位；tmux 用户的前缀会吞掉 Ctrl+B，可在 /settings → Shortcuts 重映射）。
-  { id: 'sidePanel', defaults: ['ctrl+b'] },
+  // 后台键：把等待中的 foreground shell 调用转入后台（Claude CLI 的 Ctrl+B）。
+  // 没有可转的调用时按键不做事——它不再兼作侧栏开关。
+  { id: 'toolPark', defaults: ['ctrl+b'] },
+  // 侧栏三态开关：关闭 → 打开并聚焦右栏 → 焦点回 Chat → 关闭。默认不绑键：
+  // Ctrl+B 归后台键，tmux 前缀又会吞掉它；需要热键的在 /settings → Shortcuts
+  // 自己绑一个，/panel 与点击标签照旧可用。
+  { id: 'sidePanel', defaults: [] },
   { id: 'sidePanelZoom', defaults: ['alt+z'] },
 ]
 

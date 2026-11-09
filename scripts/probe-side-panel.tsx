@@ -17,6 +17,9 @@ const [{ Writable }, React, { Terminal: XTerm }, ui, { SidePanelLayout }, { Side
     import('../src/tuiDisplayPrefs.js'),
   ])
 const { render, ThemeProvider, Box, Text, AlternateScreen } = ui
+// 侧栏热键默认不绑（Ctrl+B 归后台键）：探针显式绑一个组合再直观感按键。
+const { setKeymapOverrides } = await import('../src/utils/keymap.js')
+setKeymapOverrides({ sidePanel: 'alt+b' })
 
 const fakeChannel = {
   goal: { id: 'g1', phase: 'active', roundsStarted: 3, maxGoalRounds: 20, objective: '落地侧栏分栏布局与 Panel 系统（含 v2.1 键盘契约修订）' },
@@ -86,6 +89,6 @@ async function scene(label, cols, rows, drive) {
 
 applySidePanelOpen(true)
 const key = (k = {}) => ({ escape: false, leftArrow: false, rightArrow: false, ctrl: false, meta: false, shift: false, ...k })
-await scene('120x18 focus=panel (Ctrl+B)', 120, 18, async (get) => { get().handleKey('b', key({ ctrl: true })) })
-await scene('120x18 panel jobs tab (->)', 120, 18, async (get, tick) => { get().handleKey('b', key({ ctrl: true })); await tick(); get().handleKey('', key({ rightArrow: true })) })
-await scene('120x18 zoom', 120, 18, async (get, tick) => { get().handleKey('b', key({ ctrl: true })); await tick(); get().handleKey('z', key()) })
+await scene('120x18 focus=panel (Alt+B)', 120, 18, async (get) => { get().handleKey('b', key({ meta: true })) })
+await scene('120x18 panel jobs tab (->)', 120, 18, async (get, tick) => { get().handleKey('b', key({ meta: true })); await tick(); get().handleKey('', key({ rightArrow: true })) })
+await scene('120x18 zoom', 120, 18, async (get, tick) => { get().handleKey('b', key({ meta: true })); await tick(); get().handleKey('z', key()) })

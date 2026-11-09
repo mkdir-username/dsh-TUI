@@ -207,7 +207,8 @@ try {
   const body = findText('chat-body')
   check('e focus: chat body located', body !== null, JSON.stringify(body))
   if (body !== null) click(body.col, body.row)
-  check('e focus: hint swaps back to the unfocused copy', await settled(() => has('Ctrl+B focus panel'), { timeoutMs: 4000 }))
+  // 侧栏热键默认不绑（Ctrl+B 归后台键）：未聚焦那格提示点击标签。
+  check('e focus: hint swaps back to the unfocused copy', await settled(() => has('click a tab to focus panel'), { timeoutMs: 4000 }))
 } finally {
   await app.unmount()
 }
@@ -218,9 +219,9 @@ try {
   const NROWS = 14
   const term2 = new XTerm({ cols: NARROW, rows: NROWS, scrollback: 0, allowProposedApi: true })
   const lines2 = (): string[] => viewportLines(term2, NROWS)
-  // Jobs starts active so the fullscreen control is present beside seven icons.
+  // Jobs starts active so the fullscreen control is present beside six icons.
   applySidePanelRatio(0.78)
-  applySidePanelPanels('jobs,todo,info,trajectory,btw,agents,workspace,companion')
+  applySidePanelPanels('jobs,info,trajectory,btw,agents,workspace,companion')
   const app2 = await render(
     <AlternateScreen>
       <Harness columns={NARROW} />
@@ -236,7 +237,7 @@ try {
   try {
     await settled(() => lines2().some(line => line.includes('Jobs')), { timeoutMs: 4000 })
     const barRow = lines2()[0] ?? ''
-    check('f narrow: eight-panel bar keeps every icon and both arrows', (barRow.match(/[≡ⓘ∿?◆⌗♥]/g) ?? []).length === 7 && barRow.includes('◀') && barRow.includes('▶'), barRow.trim())
+    check('f narrow: seven-panel bar keeps every icon and both arrows', (barRow.match(/[≡ⓘ∿?◆⌗♥]/g) ?? []).length === 6 && barRow.includes('◀') && barRow.includes('▶'), barRow.trim())
     check('f narrow: ⤢ stays on the same row', barRow.includes('⤢'), barRow.trim())
     check('f fold: the bar is exactly one row (row 1 is the rule)', (lines2()[1] ?? '').includes('─'), (lines2()[1] ?? '').trim())
   } finally {

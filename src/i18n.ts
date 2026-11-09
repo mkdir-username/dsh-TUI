@@ -2487,7 +2487,8 @@ const dict = {
   // 声明 capabilities.sendToChat 的面板自己绑 s（btw/jobs 都是）。
   'panel-hint-send-to-chat': { zh: 's 送聊天', en: 's to chat' },
   'panel-hint-zoom-width': { zh: 'z 缩放 · +/- 调宽', en: 'z zoom · +/- width' },
-  'panel-hint-unfocused': { zh: 'Ctrl+B 聚焦侧栏', en: 'Ctrl+B focus panel' },
+  'panel-hint-unfocused': { zh: '{{key}} 聚焦侧栏', en: '{{key}} focus panel' },
+  'panel-hint-unfocused-click': { zh: '点击标签聚焦侧栏', en: 'click a tab to focus panel' },
   'panel-empty-none': { zh: '没有已启用的面板（/panel manage 管理）', en: 'No enabled panels (/panel manage)' },
   'panel-too-narrow': { zh: '宽度不足（需 ≥ {{min}} 列）', en: 'Too narrow (needs ≥ {{min}} cols)' },
   'panel-error-title': { zh: '面板渲染出错', en: 'Panel render error' },

@@ -29,8 +29,8 @@ Fullscreen text selection belongs to its starting pane (chat, sidebar or one dif
 | `Ctrl+D` | Same ladder as `Ctrl+C`: interrupt while working (press again to force-exit if the interrupt stalls); press twice while idle to exit |
 | `Ctrl+O` | Toggle transcript/verbose detail, including full reasoning and tool arguments/output; also the escape hatch for the **long-line fold** (a single line over 1000 chars is clipped to 1000 with a `… N chars folded` marker — see the user guide §5). Clicking the folded row (or the tool card face) toggles it too |
 | `Ctrl+P` | Toggle the loaded-context panel shown at startup (while it is on screen) |
-| `Ctrl+B` | Side panel, three states (with a command running the key moves it to the background first — see the next row): closed → open and focus the right column; open with the chat focused → focus the right column; panel focused → close and return to the chat. Splits only under `fullscreen` at a content width of ≥93 columns; on narrow terminals and in inline mode the key does nothing (`/jobs` & co. keep their full-screen panels — see the user guide §2.8); with the panel focused, `↑`/`↓`/`PgUp`/`PgDn` go to the active panel (jobs selects and scrolls, todo scrolls a long goal with `↑`/`↓`) |
-| `Ctrl+B` (command running) | Moves that call to the background: the turn stops waiting, the command becomes a background job and its card keeps going as a job card (`promoted`), and the model continues with the job id; with nothing running the key keeps the side-panel behaviour above |
+| `Ctrl+B` | The background key: moves a waiting foreground shell call to the background (the turn stops waiting for it — see the next row). With nothing waiting the key does nothing; the panel is not opened by it — use `/panel`, a tab click, or a `sidePanel` combo bound under `/settings` → `Shortcuts` |
+| `Ctrl+B` (command running) | Moves that call to the background: the turn stops waiting, the command becomes a background job and its card keeps going as a job card (`promoted`), and the model continues with the job id; with nothing waiting the key does nothing |
 | `Alt+Z` | Zoom the active side panel (the chat column keeps its minimum width); press again to restore |
 | `Ctrl+T` | Open the trajectory scene (same as `/trace`); `q`/`Esc` returns to the conversation |
 | `Ctrl+R` | Open input-history search; repeat or press `Down` for the next result |
@@ -41,7 +41,7 @@ Fullscreen text selection belongs to its starting pane (chat, sidebar or one dif
 | `Shift+Up` | Enter message selection; arrows move, `Enter` expands one row, `Esc` exits |
 
 **Remapping shortcuts**: paste, history search, external editor, `Ctrl+O/T/P/R/L`,
-side panel (`Ctrl+B`/`Alt+Z`), subagent dashboard, show-all, and todo fold are remappable in
+the background key and the side panel (`Ctrl+B`, `sidePanel`, `Alt+Z`), subagent dashboard, show-all, and todo fold are remappable in
 `/settings` → `dsh-tui` → `Shortcuts`.
 
 - Enter combos like `alt+v`; comma-separate several; leave blank to restore defaults. Saves apply live.
@@ -544,7 +544,7 @@ A full-screen scene (no scrollback pollution) over the whole session timeline:
 Codex and Claude show their complete model catalogs directly, without provider or recents tabs; the current model is initially focused when the catalog loads.
 In DSH, `Tab` selects the next provider and `Shift+Tab` the previous one, wrapping at either end; all backends use `↑/↓` to select a model and `←/→` to adjust its effort.
 The native terminal cursor follows the **region you used last**: `Tab`/`Shift+Tab` moves to the provider tab, `↑/↓` to the focused model's `❯`, and `←/→` to the effort level. Movement shows the terminal's original cursor shape, blinking, and enabled animation or trail effects; the cursor hides after **0.5 seconds at rest**, then reappears and restarts the timer on the next movement. Ordinary repaints do not extend this window; text input carets stay visible, and accessibility mode retains visible focus anchors. Clipped tabs or unavailable effort levels fall back to the model row. Inverse tabs and the `❯` pointer always remain visible, including in static rendering.
-Confirmation submits only explicit effort drafts. Changing only the model leaves saved-effort validation to the backend; candidate defaults do not become new preferences. While the picker is open, `Ctrl+B` and `Alt+Z` still control the sidebar, and picker navigation stays with the model picker.
+Confirmation submits only explicit effort drafts. Changing only the model leaves saved-effort validation to the backend; candidate defaults do not become new preferences. While the picker is open, a bound side-panel combo and `Alt+Z` still control the sidebar, and picker navigation stays with the model picker.
 `Enter` applies the model and effort; `Esc` cancels the draft. Shortcuts sit below the title, and a separate effort heading and level strip sit below the models, with the `←/→` hint beside the effort heading. Selectable levels use the body text color and the current level is highlighted. DSH, Claude, and Codex use the terminal background while covering the text underneath.
 Click tabs, models, and effort levels, then click **select** or **cancel** below the title; the wheel moves through the model list. When space above the input is tight, navigation hints, model descriptions and neighboring models are omitted, effort collapses to one row, and Select / Cancel stay at the bottom. With only two rows, effort is hidden too, keeping the focused model and actions visible.
 

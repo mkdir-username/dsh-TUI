@@ -29,6 +29,9 @@ const [{ PassThrough, Writable }, React, { Terminal: XTerm }, { render, Alternat
   import('../src/tuiDisplayPrefs.js'),
   import('./lib/term-test.mjs'),
 ])
+const { setKeymapOverrides } = await import('../src/utils/keymap.js')
+// 侧栏热键默认不绑（Ctrl+B 归后台键）：这里显式绑 Alt+O 再按真实 stdin 发键。
+setKeymapOverrides({ sidePanel: 'alt+o' })
 const { applySidePanelOpen, applySidePanelPanels, applySidePanelRatio } = prefs
 const { settled } = termTest
 
@@ -118,7 +121,7 @@ const occurrencesInChatColumn = (s: string): number => {
 }
 
 applySidePanelRatio(0.68)
-applySidePanelPanels('todo,companion')
+applySidePanelPanels('companion,jobs')
 applySidePanelOpen(true)
 
 const app = await render(
@@ -140,11 +143,11 @@ const push = (item: { id: number; text: string; color?: string }): void => {
 }
 
 try {
-  check('boot: split is up', await settled(() => termTest.viewportLines(term, ROWS).some(l => l.includes('Ctrl+B focus panel') || l.includes('z zoom')), { timeoutMs: 5000 }))
-  stdin.write('\x02') // Ctrl+B: open(已开) + focus chat → focus panel
+  check('boot: split is up', await settled(() => termTest.viewportLines(term, ROWS).some(l => l.includes('Alt+O focus panel') || l.includes('z zoom')), { timeoutMs: 5000 }))
+  stdin.write('\x1bo') // Alt+O: open(已开) + focus chat → focus panel
   check('focus: keyboard is in the panel', await settled(() => termTest.viewportLines(term, ROWS).some(l => l.includes('Esc chat')), { timeoutMs: 5000 }))
-  stdin.write('2') // jump to the 2nd enabled panel = companion
-  check('active: companion carousel title with the todo icon', await settled(() => panelBar().includes('Companion') && panelBar().includes('◀') && panelBar().includes('▶') && panelBar().includes('≡'), { timeoutMs: 5000 }), panelBar().trim())
+  // 启用列表以 companion 开头：挂载后它就是活动面板。
+  check('active: companion is the active panel', await settled(() => panelBar().includes('Companion'), { timeoutMs: 5000 }), panelBar().trim())
 
   // a. plain notice on the pet panel → bubble owns it; the chat column stays clean
   push({ id: 1, text: 'NOTICE-A-PET-SAYS' })
@@ -152,14 +155,14 @@ try {
   check('a: pet panel active → plain notice NOT in the chat column', occurrencesInChatColumn('NOTICE-A-PET-SAYS') === 0, 'chat occurrences=' + occurrencesInChatColumn('NOTICE-A-PET-SAYS'))
 
   // b. switch to another panel → toast shows in the chat column
-  stdin.write('[') // previous panel
-  check('switch: todo carousel title again', await settled(() => panelBar().includes('Todo') && !panelBar().includes('Companion'), { timeoutMs: 5000 }), panelBar().trim())
+  stdin.write('[') // previous panel (wrap: companion → jobs)
+  check('switch: jobs becomes the active panel', await settled(() => panelBar().includes('Jobs') && !panelBar().includes('Companion'), { timeoutMs: 5000 }), panelBar().trim())
   push({ id: 2, text: 'NOTICE-B-TOAST' })
   check('b: other panel active → toast shows in the chat column', await settled(() => occurrencesInChatColumn('NOTICE-B-TOAST') > 0, { timeoutMs: 5000 }))
 
   // c. error notice toasts even on the pet panel
-  stdin.write('2')
-  check('back: companion carousel title', await settled(() => panelBar().includes('Companion') && !panelBar().includes('Todo'), { timeoutMs: 5000 }), panelBar().trim())
+  stdin.write('1')
+  check('back: companion is active again', await settled(() => panelBar().includes('Companion') && !panelBar().includes('Jobs'), { timeoutMs: 5000 }), panelBar().trim())
   push({ id: 3, text: 'NOTICE-C-ERROR', color: 'error' })
   check('c: error notice still toasts on the pet panel', await settled(() => occurrencesInChatColumn('NOTICE-C-ERROR') > 0, { timeoutMs: 5000 }))
 } finally {

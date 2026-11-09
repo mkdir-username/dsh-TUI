@@ -6,6 +6,7 @@
 import React from 'react'
 import { Box, Text, useTerminalSize } from '../../ui.js'
 import { t } from '../../i18n.js'
+import { comboDisplay, primaryComboString } from '../../utils/keymap.js'
 import type { ChannelUi } from '../../adapter/channel/ui-policy.js'
 import { useSurfaceEdges } from '../SurfaceEdges.js'
 import { PanelBar, type PanelBarTab } from './PanelBar.js'
@@ -100,6 +101,12 @@ export function SidePanelColumn({ width, controller, channel, activity, attentio
   const focusedHint = t('panel-hint-focused')
     + (panelSegment === '' ? '' : ' · ' + panelSegment)
     + ' · ' + t('panel-hint-zoom-width')
+  // 未聚焦那格只说怎么把焦点拿过来。侧栏键可自定义且默认不绑：绑了报键名，
+  // 没绑就说点击标签（Ctrl+B 归后台键，不再是侧栏开关）。
+  const unfocusedCombo = primaryComboString('sidePanel')
+  const unfocusedHint = unfocusedCombo === ''
+    ? t('panel-hint-unfocused-click')
+    : t('panel-hint-unfocused', { key: comboDisplay(unfocusedCombo, true) })
   // 标签点击与 ←/→ 宿主键走同一条路（openPanel 会顺带把焦点给右栏）。
   const onSelectPanel = React.useCallback(
     (id: string) => { controller.openPanel(id, { focus: true }) },
@@ -140,7 +147,7 @@ export function SidePanelColumn({ width, controller, channel, activity, attentio
       <Rule focused={focused} />
       <Box height={1} flexShrink={0} paddingX={1} overflow="hidden">
         <Text dimColor wrap="truncate-end">
-          {focused ? focusedHint : t('panel-hint-unfocused')}
+          {focused ? focusedHint : unfocusedHint}
         </Text>
       </Box>
     </Box>

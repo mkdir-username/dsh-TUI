@@ -850,9 +850,9 @@ export function AssistantToolUseMessage({
     }
     // A shell card is the one thing the background key can move: say so on the
     // card itself, where the wait is visible, instead of leaving the key to a
-    // README. The combo follows a remap of the panel action.
+    // README. The combo follows a remap of the background action.
     if (isRunning && tool.callView?.card === 'terminal') {
-      body.push(dim(t('tool-running-park-hint', { key: comboDisplay(primaryComboString('sidePanel'), true) })))
+      body.push(dim(t('tool-running-park-hint', { key: comboDisplay(primaryComboString('toolPark'), true) })))
     }
   }
   const cap = view?.card === 'diff' ? DIFF_BODY_MAX_LINES : TEXT_BODY_MAX_LINES

@@ -362,7 +362,7 @@ const GROUPS = {
 // 按键解析回归（issue #110）：Option+Enter（ESC CR）精确/合并/分块
 // 三种到达形态、CSI-u 与 modifyOtherKeys 的 Shift/Ctrl/Meta+Enter。
     ["verify-keys", ['node', '--import', 'tsx/esm', 'scripts/verify-keys.tsx']],
-// 侧栏 Phase 1 控制器键盘契约（真 stdin 注入）：ctrl+b 三态循环、面板聚焦
+// 侧栏 Phase 1 控制器键盘契约（真 stdin 注入，脚本自绑 Alt+O）：三态循环、面板聚焦
 // 时 ←/→ 与 [ ] 循环、数字直达、z 缩放、+/- 调宽（面板+4/chat+4）、plain
 // 键吞掉、ctrl 组合放行、alt+z 全局缩放、窄终端/编辑器打开时无效；含
 // 已知缺陷 tripwire（真 Esc 带 meta 被放行，见脚本头注）。

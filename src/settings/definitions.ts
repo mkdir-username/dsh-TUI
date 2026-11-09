@@ -276,8 +276,8 @@ export const SETTING_DEFINITIONS = {
     label: 'Side panel starts open',
     descriptions: { zh: '启动时展开侧栏' },
     group: 'side-panel',
-    hint: 'Whether a session opens with the sidebar already expanded (Ctrl+B or /panel toggles it any time). Off by default, so the upgrade leaves the layout exactly as it was until asked; the in-session toggle is not persisted. Applies immediately.',
-    hintDescriptions: { zh: '打开会话时侧栏是否已展开（随时可用 Ctrl+B 或 /panel 切换）。默认关闭，升级后界面与原来完全一致，除非主动开启；会话内的切换不会写回设置。立即生效。' },
+    hint: 'Whether a session opens with the sidebar already expanded (/panel or a tab click opens it any time). Off by default, so the upgrade leaves the layout exactly as it was until asked; the in-session toggle is not persisted. Applies immediately.',
+    hintDescriptions: { zh: '打开会话时侧栏是否已展开（随时可用 /panel 或点击标签打开）。默认关闭，升级后界面与原来完全一致，除非主动开启；会话内的切换不会写回设置。立即生效。' },
     kind: 'boolean',
   },
   'sidePanel.panels': {
@@ -300,8 +300,8 @@ export const SETTING_DEFINITIONS = {
     label: 'Split layout',
     descriptions: { zh: '分栏布局' },
     group: 'side-panel',
-    hint: 'Master switch of the split layout: on (default) Ctrl+B and /panel open the side column next to the chat; off makes both fall back to the fullscreen panels. Applies immediately.',
-    hintDescriptions: { zh: '分栏总开关：开启（默认）时 Ctrl+B 与 /panel 在聊天右侧展开侧栏；关闭时两者都退回整屏面板。立即生效。' },
+    hint: 'Master switch of the split layout: on (default) /panel and the side-panel shortcut open the side column next to the chat; off makes both fall back to the fullscreen panels. Applies immediately.',
+    hintDescriptions: { zh: '分栏总开关：开启（默认）时 /panel 与侧栏快捷键在聊天右侧展开侧栏；关闭时两者都退回整屏面板。立即生效。' },
     kind: 'boolean',
   },
   'smoothStreaming': {
@@ -700,11 +700,21 @@ export const SHORTCUT_FIELD_META: Record<ShortcutActionId, { label: string; zh: 
     hintEn: d => `Undo the prompt draft one word-level step at a time (text, caret and images together). Draft-only: submitted or history-recalled text is out of scope (Esc Esc rewinds turns, Ctrl+R recalls history). Default: ${d}.`,
     hintZh: d => `按词撤销输入框草稿（文本、光标、图片一起回退）。只作用于草稿：提交或用历史召回后不可撤销；与 Esc Esc 回溯、Ctrl+R 历史召回不是一回事。默认 ${d}。`,
   },
+  toolPark: {
+    label: 'Move to background shortcut',
+    zh: '转入后台快捷键',
+    hintEn: d => `Move a waiting foreground shell call to the background: the turn stops waiting, the command keeps running as a job. With nothing waiting the key does nothing. Default: ${d}.`,
+    hintZh: d => `把等待中的前台 shell 调用转入后台：本轮不再等它，命令作为任务继续跑。没有等待中的调用时按键不做事。默认 ${d}。`,
+  },
   sidePanel: {
     label: 'Side panel shortcut',
     zh: '侧栏快捷键',
-    hintEn: d => `Smart three-state sidebar toggle: closed → open+focus → focus chat → closed. Default: ${d}. tmux users should remap it (the prefix eats Ctrl+B).`,
-    hintZh: d => `侧栏智能三态：关闭 → 打开并聚焦 → 焦点回聊天 → 关闭。默认 ${d}。tmux 用户请改键（前缀会吞掉它）。`,
+    hintEn: d => d === ''
+      ? 'Smart three-state sidebar toggle: closed → open+focus → focus chat → closed. Unbound by default — set a combo here; /panel and a tab click open the panel without one.'
+      : `Smart three-state sidebar toggle: closed → open+focus → focus chat → closed. Default: ${d}.`,
+    hintZh: d => d === ''
+      ? '侧栏智能三态：关闭 → 打开并聚焦 → 焦点回聊天 → 关闭。默认不绑键——在这里设一个组合；/panel 与点击标签无需热键也能打开。'
+      : `侧栏智能三态：关闭 → 打开并聚焦 → 焦点回聊天 → 关闭。默认 ${d}。`,
   },
   sidePanelZoom: {
     label: 'Side panel zoom shortcut',

@@ -55,8 +55,12 @@ const [React, { Terminal: XTerm }, ui, { SidePanelLayout }, { SidePanelColumn },
   import('../src/components/sidePanel/PanelStore.js'),
   import('../src/components/sidePanel/btw/BtwComposer.js'),
   import('../src/components/sidePanel/btw/useBtwComposerPaste.js'),
+  import('../src/utils/keymap.js'),
 ])
 const { render, ThemeProvider, Box, Text, AlternateScreen, useInput, useTerminalSize } = ui
+const { setKeymapOverrides } = await import('../src/utils/keymap.js')
+// 侧栏热键默认不绑（Ctrl+B 归后台键）：本套件要看焦点提示与三态，显式绑 Alt+O。
+setKeymapOverrides({ sidePanel: 'alt+o' })
 const { applySidePanelOpen, applySidePanelRatio, applySidePanelPanels, applySidePanelSplitEnabled, getSidePanelOpen } = prefs
 setLang('zh')
 
@@ -315,7 +319,7 @@ async function keys(frame: Frame, sequence: readonly string[]): Promise<void> {
   const badged = frame.lines()[0]
   check('P3b. 不可见期间落定 → 未读徽章 ?1', badged.includes('?1') && panelStore.get('btw')?.badge?.unread === 1, badged.trim())
   // 聚焦右栏 + ']' 切到 btw → visible → markSeen 清徽章
-  await keys(frame, [String.fromCharCode(2), ']'])
+  await keys(frame, ['\x1bo', ']'])
   await delay(500)
   const opened = frame.lines().join('\n')
   check('P3c. 进入面板看到最新线程后清徽章', !opened.includes('?1') && panelStore.get('btw')?.badge === null && opened.includes('badge answer'),
@@ -350,10 +354,10 @@ async function keys(frame: Frame, sequence: readonly string[]): Promise<void> {
   await keys(frame, [ESC])
   await delay(300)
   const afterSecondEsc = frame.lines().join('\n')
-  check('P5b. 第二层 Esc 交宿主回聊天（提示行换焦点文案）', afterSecondEsc.includes('Ctrl+B 聚焦侧栏'))
+  check('P5b. 第二层 Esc 交宿主回聊天（提示行换焦点文案）', afterSecondEsc.includes('Alt+O 聚焦侧栏'))
   check('P5c. 草稿仍在（store 持久）', btwThreads.get('probe-session')?.draft === '草稿保留')
   // P5d：列表态 Enter 回编辑层（草稿续写），Esc 再收起——列表动作不受影响。
-  await keys(frame, [String.fromCharCode(2), '\r', 'x'])
+  await keys(frame, ['\x1bo', '\r', 'x'])
   await delay(150)
   check('P5d. 列表态 Enter 回编辑层，草稿续写', btwThreads.get('probe-session')?.draft === '草稿保留x', JSON.stringify(btwThreads.get('probe-session')?.draft))
   await keys(frame, [ESC])
@@ -378,8 +382,8 @@ async function keys(frame: Frame, sequence: readonly string[]): Promise<void> {
   check('P7c. 附加成功提示', channel.notices.some(text => text.includes('已附加')))
   // 送完焦点交回主输入框：chip 就在眼前、可直接接着打字，toast 里那句
   // 「Esc 可撤」也才成立（剥 chip 的 Esc 只有主输入框有焦点才收得到）。
-  check('P7g. 送完焦点回主输入框（底栏换未聚焦文案）', frame.lines().join('\n').includes('Ctrl+B 聚焦侧栏'), frame.lines()[ROWS - 1])
-  await keys(frame, [String.fromCharCode(2)])
+  check('P7g. 送完焦点回主输入框（底栏换未聚焦文案）', frame.lines().join('\n').includes('Alt+O 聚焦侧栏'), frame.lines()[ROWS - 1])
+  await keys(frame, ['\x1bo'])
   await delay(250)
   const noticesBeforeCopy = channel.notices.length
   await keys(frame, ['c'])
@@ -871,7 +875,7 @@ async function mountChat(ask: ReturnType<typeof scriptedAsk>, cols = 100, fullsc
   check('C6a. 92 列：分栏渲不出来，浮层兜底把题目上屏', chat.viewport().includes('拉宽之后还在的问题'))
   await chat.resize(120)
   const wide = chat.viewport()
-  check('C6b. 拉宽后侧栏出现（分栏在渲染）', wide.includes(t('panel-hint-unfocused')), wide.split('\n').slice(-2).join(' | '))
+  check('C6b. 拉宽后侧栏出现（分栏在渲染）', wide.includes(t('panel-hint-unfocused', { key: 'Alt+O' })), wide.split('\n').slice(-2).join(' | '))
   check('C6c. 但活动面板不是 btw：浮层与题目必须留在原处',
     wide.includes(fallbackNote) && wide.includes('拉宽之后还在的问题'),
     wide.split('\n').filter(l => l.trim() !== '').slice(-3).join(' | '))
@@ -1022,14 +1026,14 @@ for (const fullscreen of [true, false]) {
   // focusPanel=false：焦点留在聊天，正是「回到主输入框后想点侧栏输入框」的起点。
   const frame = await mountPanel(105, 'btw', false, channel)
   const before = frame.lines()
-  check('P12a. 起点焦点在聊天（底栏提示 Ctrl+B）', before.join('\n').includes('Ctrl+B 聚焦侧栏'), before[ROWS - 1])
+  check('P12a. 起点焦点在聊天（底栏提示 Alt+O）', before.join('\n').includes('Alt+O 聚焦侧栏'), before[ROWS - 1])
   const top = before.findIndex(l => l.includes('╭'))
   const col = (before[top] ?? '').indexOf('╭') + 6
   frame.stdin.write(`\x1b[<0;${col};${top + 2}M`)
   frame.stdin.write(`\x1b[<0;${col};${top + 2}m`)
   await delay(400)
   const after = frame.lines().join('\n')
-  check('P12b. 点输入框后列焦点归面板（底栏换聚焦文案）', after.includes('Esc 聊天') && !after.includes('Ctrl+B 聚焦侧栏'), frame.lines()[ROWS - 1])
+  check('P12b. 点输入框后列焦点归面板（底栏换聚焦文案）', after.includes('Esc 聊天') && !after.includes('Alt+O 聚焦侧栏'), frame.lines()[ROWS - 1])
   check('P12c. 同一次点击即进编辑层（框内提示出现）', after.includes('Enter 发送'), frame.lines().filter(l => l.includes('›')).join(' | '))
   await frame.app.unmount()
 }
@@ -1067,9 +1071,9 @@ for (const fullscreen of [true, false]) {
   await delay(300)
   check('P13d. s 送的是选中轮（不是最新轮）+ 焦点回主输入框',
     channel.attachedContexts[0]?.sourceId === r1.turnId
-    && frame.lines().join('\n').includes('Ctrl+B 聚焦侧栏'),
+    && frame.lines().join('\n').includes('Alt+O 聚焦侧栏'),
     JSON.stringify({ sourceId: channel.attachedContexts[0]?.sourceId, turn: r1.turnId }))
-  await keys(frame, [String.fromCharCode(2)])
+  await keys(frame, ['\x1bo'])
   await delay(250)
   const noticesBefore = channel.notices.length
   await keys(frame, ['s'])
@@ -1256,7 +1260,7 @@ for (const phase of ['running', 'failed', 'cancelled'] as const) {
   await settle(() => frame.lines().join('\n').includes('partial-' + phase))
   await keys(frame, ['s'])
   check('P17. ' + phase + ' 不附加且不切走焦点', channel.attachedContexts.length === 0
-    && !frame.lines()[ROWS - 1].includes('Ctrl+B'), JSON.stringify(channel.attachedContexts))
+    && !frame.lines()[ROWS - 1].includes('Alt+O'), JSON.stringify(channel.attachedContexts))
   await frame.app.unmount()
 }
 
@@ -1329,8 +1333,8 @@ for (const phase of ['running', 'failed', 'cancelled'] as const) {
   // 主输入框先有一份草稿（焦点在聊天）：一旦粘贴串框，它会被插进这份草稿。
   chat.stdin.write('主草稿')
   await delay(300)
-  // Ctrl+B 聚焦右栏，Enter 进 btw composer 编辑层。
-  chat.stdin.write(String.fromCharCode(2))
+  // Alt+O 聚焦右栏，Enter 进 btw composer 编辑层。
+  chat.stdin.write('\x1bo')
   await delay(300)
   chat.stdin.write('\r')
   await delay(300)
@@ -1368,7 +1372,7 @@ for (const phase of ['running', 'failed', 'cancelled'] as const) {
       const chatBtw = await mountChat(ask, 120)
       chatBtw.stdin.write('真草稿')
       await delay(300)
-      chatBtw.stdin.write(String.fromCharCode(2))
+      chatBtw.stdin.write('\x1bo')
       await delay(300)
       chatBtw.stdin.write('\r')
       await delay(300)
@@ -1391,7 +1395,7 @@ for (const phase of ['running', 'failed', 'cancelled'] as const) {
       const chatTodo = await mountChat(ask, 120)
       chatTodo.stdin.write('真草稿二')
       await delay(300)
-      chatTodo.stdin.write(String.fromCharCode(2))
+      chatTodo.stdin.write('\x1bo')
       await delay(300)
       chatTodo.stdin.write('\x16')
       await delay(800)
@@ -1408,7 +1412,7 @@ for (const phase of ['running', 'failed', 'cancelled'] as const) {
       applySidePanelPanels('btw')
       btwThreads.resetForTest()
       const chatEditor = await mountChat(ask, 120)
-      chatEditor.stdin.write(String.fromCharCode(2)) // 聚焦右栏
+      chatEditor.stdin.write('\x1bo') // 聚焦右栏（Alt+O）
       await delay(300)
       chatEditor.stdin.write(CTRL_SHIFT_E)           // 展开全屏草稿编辑器
       const editorOpen = await settled(() => chatEditor.lines().join('\n').includes('草稿编辑'))

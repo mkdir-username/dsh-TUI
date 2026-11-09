@@ -32,6 +32,7 @@
 |---|---|---|
 | Ctrl+Enter без аборта | `src/components/PromptInput.tsx`, `src/tips.ts`, `src/i18n.ts`, `README*.md` | `pnpm verify:ctrl-enter-steer` (4 PASS) |
 | Очередь ввода на время `/compact` | `src/dsh-adapter/channel/compact-hold.ts` (новый), `input-delivery.ts`, `input-actions.ts`, `PromptInput.tsx`, `channel-view.ts` | `pnpm verify:compact-queue` (20 PASS) |
+| Ctrl+B — только «в фон», панель без дефолтного хоткея | `src/utils/keymap.ts` (`toolPark`, `sidePanel` defaults `[]`), `src/screens/Chat.tsx`, `src/components/sidePanel/SidePanelColumn.tsx` (динамическая подсказка), `src/settings/definitions.ts`, `src/i18n.ts` | `pnpm verify:tool-park`, `node --import tsx/esm scripts/verify-side-panel-keys.tsx` |
 | restruct-plan перед сжатием | `src/dsh-adapter/channel/compaction.ts`, `action-readiness.ts`, `extensions.ts`, `channel-ui.ts`, `screens/Chat.tsx` | `pnpm verify:compact-rp` (13 PASS) + `pnpm typecheck` + гейты |
 
 Все `verify-*` пробы зарегистрированы в `package.json`. `verify:ctrl-enter-steer` и

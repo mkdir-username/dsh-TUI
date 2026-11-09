@@ -288,6 +288,7 @@
     "verify:plugin-field-picker": "node --import tsx/esm scripts/verify-plugin-field-picker.tsx",
     "verify:activity-ownership": "node --import tsx/esm scripts/verify-activity-ownership.ts",
     "verify:ctrl-enter-steer": "node scripts/verify-ctrl-enter-steer.mjs",
+    "verify:tool-park": "node --import tsx/esm scripts/verify-tool-park.tsx",
     "verify:compact-queue": "node scripts/verify-compact-queue.mjs",
     "verify:compact-rp": "node scripts/verify-compact-rp.mjs"
   },

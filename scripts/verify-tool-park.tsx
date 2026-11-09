@@ -7,8 +7,10 @@
  * contract with the seam stubbed:
  *
  *  - the key asks the harness to park, and the toast names the parked
- *    command; a key with nothing waiting falls through to the panel;
- *  - a backend with no park seam keeps the panel key and says nothing;
+ *    command; a key with nothing waiting is consumed and raises no toast;
+ *  - the side panel never opens on the key, whether a call was parked or not
+ *    (it has no default combo of its own any more);
+ *  - a backend with no park seam says nothing;
  *  - the running card carries the hint, a settled one does not.
  *
  * Runs the real Chat useInput path over fake stdin; assertions read the
@@ -41,7 +43,8 @@ function check(name: string, ok: boolean, extra = ''): void {
 
 const T0 = 1_700_000_000_000
 const CTRL_B = '\x02'
-const HINT = t('tool-running-park-hint', { key: comboDisplay(primaryComboString('sidePanel'), true) })
+const prefs = await import('../src/tuiDisplayPrefs.js')
+const HINT = t('tool-running-park-hint', { key: comboDisplay(primaryComboString('toolPark'), true) })
 
 /** One tool row, in the shape the projector publishes. */
 function toolRow(overrides: Record<string, unknown>): Record<string, unknown> {
@@ -136,13 +139,13 @@ function makeHarness(cols: number, rows: number) {
   return { term, stdout: new FakeStdout(), stdin, screen }
 }
 
-async function mount(harness: ReturnType<typeof makeHarness>, channel: Record<string, unknown>) {
+async function mount(harness: ReturnType<typeof makeHarness>, channel: Record<string, unknown>, fullscreen = false) {
   const instance = await render(
     React.createElement(Chat, {
       channel: channel as never,
       questionStore: new QuestionStore() as never,
       onExit: () => {},
-      fullscreen: false,
+      fullscreen,
       trajectorySeen: true,
     }),
     {
@@ -160,14 +163,15 @@ async function mount(harness: ReturnType<typeof makeHarness>, channel: Record<st
 let notices: string[] = []
 
 /** Mount one transcript state, press Ctrl+B once, report what the key did. */
-async function press(rows: readonly unknown[], jobControl: unknown, parked: { callId: string; command: string } | null = { callId: 'call-1', command: 'bats suite.bats' }) {
+async function press(rows: readonly unknown[], jobControl: unknown, parked: { callId: string; command: string } | null = { callId: 'call-1', command: 'bats suite.bats' }, layout: { cols?: number; rows?: number; fullscreen?: boolean } = {}) {
   notices = []
   const parks: Array<{ callId: string; command: string } | null> = []
   const control = jobControl === 'passthrough'
     ? { kill: () => false, parkAny: () => { parks.push(parked); return parked } }
     : jobControl
-  const harness = makeHarness(100, 30)
-  const instance = await mount(harness, makeChannel(rows, control))
+  prefs.applySidePanelOpen(false)
+  const harness = makeHarness(layout.cols ?? 100, layout.rows ?? 30)
+  const instance = await mount(harness, makeChannel(rows, control), layout.fullscreen === true)
   // 固定窗:探针 卡片绘制与键盘处理器挂上之间没有可观测完成条件。
   await sleep(120)
   const before = harness.screen()
@@ -197,11 +201,16 @@ const BACKGROUND_CARD = toolRow({
   check('the running card advertises the key', after.includes(HINT), after.split('\n').find(line => line.includes('Running')) ?? '')
 }
 
-// ── nothing waits: the key keeps its panel job ─────────────────────────────
+// ── nothing waits: the key asks, says nothing, opens no panel ─────────────
 {
   const { parks, notices } = await press([RUNNING], 'passthrough', null)
   check('a key with nothing waiting still asks the harness', parks.length === 1, JSON.stringify(parks))
   check('nothing waiting raises no toast', notices.length === 0, JSON.stringify(notices))
+  // 宽屏 fullscreen 下侧栏本来可分栏——旧行为在这里会打开面板。
+  await press([RUNNING], 'passthrough', null, { cols: 120, rows: 30, fullscreen: true })
+  check('an empty park leaves the side panel closed', !prefs.getSidePanelOpen())
+  await press([RUNNING], 'passthrough', undefined, { cols: 120, rows: 30, fullscreen: true })
+  check('parking a call does not open the side panel', !prefs.getSidePanelOpen())
 }
 
 // ── a settled card carries no hint ─────────────────────────────────────────

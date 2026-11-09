@@ -7,7 +7,7 @@
  * counted as "received by chat" (the fall-through contract).
  *
  * Locked behavior:
- *  a. ctrl+b three-state at 120 cols: closed -> open+focus panel ->
+ *  a. alt+o three-state at 120 cols: closed -> open+focus panel ->
  *     close+focus chat -> open+focus panel (panel-focus press closes);
  *     a fresh open session with chat focus -> panel focus (not close).
  *  b. panel-focused keys: arrows and [ ] cycle activePanelId, '2' jumps,
@@ -17,9 +17,9 @@
  *  e. Esc: a real lone ESC arrives from this ink fork as
  *     {escape:true, meta:true}; the ctrl/meta fall-through guard exempts
  *     escape (meta && escape!==true), so Esc returns focus to chat, and
- *     ctrl+b afterwards re-focuses the panel (three-state intact).
- *  c. 90 cols (splitAvailable=false): ctrl+b returns false, no state move.
- *  d. editorOpen=true at 120 cols: ctrl+b likewise inert.
+ *     alt+o afterwards re-focuses the panel (three-state intact).
+ *  c. 90 cols (splitAvailable=false): alt+o returns false, no state move.
+ *  d. editorOpen=true at 120 cols: alt+o likewise inert.
  * Run: node --import tsx/esm scripts/verify-side-panel-keys.tsx
  */
 process.env.FORCE_COLOR = '3'
@@ -37,8 +37,12 @@ const [{ PassThrough, Writable }, React, { Terminal: XTerm }, ui, { useSidePanel
   import('../src/components/sidePanel/PanelStore.js'),
 ])
 const { render, AlternateScreen, Box, Text, useInput } = ui
+const { setKeymapOverrides } = await import('../src/utils/keymap.js')
+// 侧栏热键默认不绑（Ctrl+B 归后台键）。本套件测的是控制器本身，所以显式
+// 绑一个空闲组合：Alt+O 走真实 stdin 路径，和 Alt+Z 缩放同一层。
+setKeymapOverrides({ sidePanel: 'alt+o' })
 const { applySidePanelOpen, applySidePanelRatio, setTemporarySidePanelHidden } = prefs
-const { settled, viewportLines } = termTest
+const { settled, sleep, viewportLines } = termTest
 
 // `sidePanel.panels` defaults to `*`, which derives the tab list from the
 // registry: register the built-ins the way the app does before any mount
@@ -59,12 +63,14 @@ let chatKeyCount = 0
 let lastHandled = -1 // -1 none yet, 1 handled by panel, 0 fell through
 let exposedHandleKey: ((input: string, key: Record<string, boolean | undefined>) => boolean) | undefined
 let exposedFocus = ''
+let exposedOpen: ((id: string, opts?: { focus?: boolean }) => void) | undefined
 
 function Harness({ columns, fullscreen, editorOpen }: { columns: number; fullscreen: boolean; editorOpen: boolean }): React.ReactNode {
   const sp = useSidePanel({ columns, fullscreen, editorOpen })
   const [, bump] = React.useState(0)
   exposedHandleKey = sp.handleKey
   exposedFocus = sp.focus
+  exposedOpen = sp.openPanel
   useInput((input: string, key: { escape?: boolean; leftArrow?: boolean; rightArrow?: boolean; ctrl?: boolean; meta?: boolean }) => {
     // Chat's call point (v2.1 contract): sidePanel.handleKey first; only a
     // false return lets the key reach the chat surface.
@@ -137,39 +143,61 @@ async function press(session: Session, bytes: string, expectState: string): Prom
   return state
 }
 
-// --- a. ctrl+b three-state at 120 columns --------------------------------
+const activeOf = (state: string): string => /active=(\S+)/u.exec(state)?.[1] ?? ''
+
+async function pressUntil(session: Session, bytes: string, ok: (state: string) => boolean, label: string): Promise<string> {
+  session.stdin.write(bytes)
+  const reached = await settled(() => ok(session.state()), { timeoutMs: 4000 })
+  const state = session.state()
+  if (!reached) throw new Error('state never satisfied ' + JSON.stringify(label) + '; last: ' + JSON.stringify(state))
+  return state
+}
+
+// --- a. alt+o three-state at 120 columns --------------------------------
+// 侧栏热键默认不绑（Ctrl+B 归后台键），本文件开头把它绑到 Alt+O，所以这里
+// 驱动的是「绑了组合之后」的控制器，不是某个具体默认键。
 {
   const s = await openSession(120)
-  check('a: initial state is closed, chat focus, chat=120', s.state().includes('split=0 focus=chat zoom=0 active=todo chat=120 avail=1'), s.state())
-  await press(s, '\x02', 'split=1 focus=panel zoom=0 active=todo chat=81')
-  check('a: ctrl+b #1 opens and focuses the panel (chat=81)', s.state().includes('split=1 focus=panel zoom=0 active=todo chat=81 avail=1 handled=1'), s.state())
-  await press(s, '\x02', 'split=0 focus=chat zoom=0 active=todo chat=120')
-  check('a: ctrl+b #2 (panel focused) closes and returns to chat', s.state().includes('split=0 focus=chat zoom=0 active=todo chat=120 avail=1 handled=1'), s.state())
-  await press(s, '\x02', 'split=1 focus=panel zoom=0 active=todo chat=81')
-  check('a: ctrl+b #3 re-opens with panel focus', s.state().includes('split=1 focus=panel zoom=0 active=todo chat=81 avail=1 handled=1'), s.state())
+  check('a: initial state is closed, chat focus, chat=120',
+    s.state().includes('split=0 focus=chat zoom=0') && s.state().includes('chat=120 avail=1'), s.state())
+  const first = activeOf(s.state())
+  check('a: a default active panel is present', first !== '', s.state())
+  await press(s, '\x1bo', 'split=1 focus=panel')
+  check('a: alt+o #1 opens and focuses the panel (chat=81)',
+    s.state().includes('split=1 focus=panel') && s.state().includes('chat=81 avail=1 handled=1'), s.state())
+  await press(s, '\x1bo', 'split=0 focus=chat')
+  check('a: alt+o #2 (panel focused) closes and returns to chat',
+    s.state().includes('split=0 focus=chat') && s.state().includes('chat=120 avail=1 handled=1'), s.state())
+  await press(s, '\x1bo', 'split=1 focus=panel')
+  check('a: alt+o #3 re-opens with panel focus',
+    s.state().includes('split=1 focus=panel') && s.state().includes('chat=81 avail=1 handled=1'), s.state())
   await s.close()
-  // open + focus chat -> ctrl+b moves focus to the panel (not close).
+  // open + focus chat -> alt+o moves focus to the panel (not close).
   const s2 = await openSession(120, true, false, true)
-  check('a: pre-opened session starts open with chat focus', s2.state().includes('split=1 focus=chat zoom=0 active=todo chat=81'), s2.state())
-  await press(s2, '\x02', 'split=1 focus=panel zoom=0 active=todo chat=81')
-  check('a: ctrl+b with open+chat-focus focuses the panel', s2.state().includes('split=1 focus=panel zoom=0 active=todo chat=81'), s2.state())
+  check('a: pre-opened session starts open with chat focus',
+    s2.state().includes('split=1 focus=chat') && s2.state().includes('chat=81'), s2.state())
+  await press(s2, '\x1bo', 'focus=panel')
+  check('a: alt+o with open+chat-focus focuses the panel',
+    s2.state().includes('split=1 focus=panel') && s2.state().includes('chat=81') && s2.state().includes('handled=1'), s2.state())
   await s2.close()
 }
 
 // --- b. panel-focused host keys -------------------------------------------
 {
   const s = await openSession(120)
-  await press(s, '\x02', 'split=1 focus=panel zoom=0 active=todo chat=81')
-  await press(s, '\x1b[D', 'active=companion')
-  check('b: leftArrow cycles todo -> companion (wrap)', s.state().includes('active=companion'), s.state())
-  await press(s, '\x1b[C', 'active=todo')
-  check('b: rightArrow cycles back to todo', s.state().includes('active=todo'), s.state())
-  await press(s, '[', 'active=companion')
-  check('b: [ cycles backwards', s.state().includes('active=companion'), s.state())
-  await press(s, ']', 'active=todo')
-  check('b: ] cycles forwards', s.state().includes('active=todo'), s.state())
-  await press(s, '2', 'active=jobs')
-  check('b: 2 jumps to the second panel', s.state().includes('active=jobs'), s.state())
+  await press(s, '\x1bo', 'split=1 focus=panel')
+  const first = activeOf(s.state())
+  await pressUntil(s, '\x1b[D', state => activeOf(state) !== first, 'leftArrow cycles away')
+  check('b: leftArrow cycles to the previous panel (wrap)', activeOf(s.state()) !== first, s.state())
+  await pressUntil(s, '\x1b[C', state => activeOf(state) === first, 'rightArrow cycles back')
+  check('b: rightArrow cycles back', activeOf(s.state()) === first, s.state())
+  await pressUntil(s, '[', state => activeOf(state) !== first, '[ cycles backwards')
+  check('b: [ cycles backwards', activeOf(s.state()) !== first, s.state())
+  await pressUntil(s, ']', state => activeOf(state) === first, '] cycles forwards')
+  check('b: ] cycles forwards', activeOf(s.state()) === first, s.state())
+  await pressUntil(s, '2', state => activeOf(state) !== first, '2 jumps')
+  const second = activeOf(s.state())
+  check('b: 2 jumps to the second enabled panel', second !== '' && second !== first, s.state())
   // Resize (ratio store, split stays): the panel-focused '+' WIDENS THE
   // PANEL (nudge -4 → chat 81->77); '-' gives the width back to chat.
   await press(s, '+', 'chat=77')
@@ -178,21 +206,25 @@ async function press(session: Session, bytes: string, expectState: string): Prom
   check('b: - returns the width to the chat column', s.state().includes('chat=81'), s.state())
   // Zoom: chat pinned to CHAT_MIN (64) and back.
   await press(s, 'z', 'zoom=1')
-  check('b: z zooms (chat=64)', s.state().includes('zoom=1 active=jobs chat=64'), s.state())
+  check('b: z zooms (chat=64)', s.state().includes('zoom=1') && s.state().includes('chat=64'), s.state())
   await press(s, 'z', 'zoom=0')
-  check('b: z again restores the split (chat=81)', s.state().includes('zoom=0 active=jobs chat=81'), s.state())
+  check('b: z again restores the split (chat=81)', s.state().includes('zoom=0') && s.state().includes('chat=81'), s.state())
   // Plain letter swallowed: handled=1 and the chat counter does not move.
   const before = chatKeyCount
-  await press(s, 'x', 'handled=1 chatKeys=' + before)
-  check('b: plain x swallowed by the panel (no chat key)', s.state().includes('handled=1') && chatKeyCount === before, s.state() + ' chatKeys=' + chatKeyCount)
+  s.stdin.write('x')
+  // 固定窗:探针 面板吞键不改变状态行（handled 一直是 1），只能等一拍看 chatKeys。
+  await sleep(150)
+  check('b: plain x swallowed by the panel (no chat key)',
+    s.state().includes('handled=1') && chatKeyCount === before, s.state() + ' chatKeys=' + chatKeyCount)
   // Ctrl combo falls through to Chat.
   await press(s, '\x0c', 'chatKeys=' + (before + 1))
-  check('b: ctrl+l falls through to chat (handled=0, counted)', s.state().includes('handled=0') && chatKeyCount === before + 1, s.state())
+  check('b: ctrl+l falls through to chat (handled=0, counted)',
+    s.state().includes('handled=0') && chatKeyCount === before + 1, s.state())
   // Global alt+z zoom works from panel focus too (input 'z' + meta).
   await press(s, '\x1bz', 'zoom=1')
-  check('b: alt+z (global) toggles zoom from panel focus', s.state().includes('zoom=1 active=jobs chat=64'), s.state())
+  check('b: alt+z (global) toggles zoom from panel focus', s.state().includes('zoom=1') && s.state().includes('chat=64'), s.state())
   await press(s, '\x1bz', 'zoom=0')
-  check('b: alt+z toggles zoom back', s.state().includes('zoom=0 active=jobs chat=81'), s.state())
+  check('b: alt+z toggles zoom back', s.state().includes('zoom=0') && s.state().includes('chat=81'), s.state())
   await s.close()
 }
 
@@ -203,14 +235,14 @@ async function press(session: Session, bytes: string, expectState: string): Prom
   const id = 'session:act777:scratch'
   const dispose = panelStore.register({ id, title: 'Scratch', icon: '◉', source: 'plugin', component: () => null }, { pluginId: 'session:act777' })
   const s = await openSession(120)
-  await press(s, '\x02', 'split=1 focus=panel')
-  await press(s, '9', 'active=' + id)
-  check('f: a registered temporary panel is reachable under *', s.state().includes('active=' + id), s.state())
+  await press(s, '\x1bo', 'split=1 focus=panel')
+  exposedOpen?.(id, { focus: true })
+  check('f: a registered temporary panel opens by id', await settled(() => activeOf(s.state()) === id, { timeoutMs: 4000 }), s.state())
   setTemporarySidePanelHidden(id, true)
-  check('f: hiding it removes it from the bar', await settled(() => s.state().includes('active=todo')), s.state())
+  check('f: hiding it removes it from the bar', await settled(() => activeOf(s.state()) !== id, { timeoutMs: 4000 }), s.state())
   setTemporarySidePanelHidden(id, false)
-  await press(s, '9', 'active=' + id)
-  check('f: unhiding brings it back without a stored id', s.state().includes('active=' + id), s.state())
+  exposedOpen?.(id, { focus: true })
+  check('f: unhiding brings it back without a stored id', await settled(() => activeOf(s.state()) === id, { timeoutMs: 4000 }), s.state())
   await s.close()
   dispose()
 }
@@ -218,42 +250,46 @@ async function press(session: Session, bytes: string, expectState: string): Prom
 // --- e. Esc returns focus to chat (real key path) --------------------------
 {
   const s = await openSession(120)
-  await press(s, '\x02', 'split=1 focus=panel zoom=0 active=todo chat=81')
+  await press(s, '\x1bo', 'split=1 focus=panel')
   // e.1 Programmatic: the escape branch itself handles {escape:true}.
   const handledEsc = exposedHandleKey?.('', { escape: true }) ?? null
   await settled(() => exposedFocus === 'chat')
-  check('e: handleKey({escape:true}) returns to chat focus (branch works)', handledEsc === true && exposedFocus === 'chat', 'handled=' + String(handledEsc) + ' focus=' + exposedFocus)
-  await press(s, '\x02', 'split=1 focus=panel zoom=0 active=todo chat=81')
+  check('e: handleKey({escape:true}) returns to chat focus (branch works)',
+    handledEsc === true && exposedFocus === 'chat', 'handled=' + String(handledEsc) + ' focus=' + exposedFocus)
+  await press(s, '\x1bo', 'split=1 focus=panel')
   // e.2 Real lone ESC arrives as {escape:true, meta:true} from this ink
   //     fork; the ctrl/meta fall-through guard exempts escape, so the key
   //     is consumed here and focus returns to chat (split stays open).
-  await press(s, '\x1b', 'split=1 focus=chat zoom=0 active=todo chat=81')
-  check('e: real Esc key returns focus to chat (stays open, handled)', s.state().includes('split=1 focus=chat zoom=0 active=todo chat=81 avail=1 handled=1'), s.state())
-  // e.3 Three-state intact: ctrl+b re-focuses the panel, next press closes.
-  await press(s, '\x02', 'split=1 focus=panel zoom=0 active=todo chat=81')
-  check('e: ctrl+b after Esc re-focuses the panel', s.state().includes('split=1 focus=panel zoom=0 active=todo chat=81'), s.state())
-  await press(s, '\x02', 'split=0 focus=chat zoom=0 active=todo chat=120')
-  check('e: ctrl+b from panel focus closes and returns to chat', s.state().includes('split=0 focus=chat zoom=0 active=todo chat=120 avail=1 handled=1'), s.state())
+  await press(s, '\x1b', 'split=1 focus=chat')
+  check('e: real Esc key returns focus to chat (stays open, handled)',
+    s.state().includes('split=1 focus=chat') && s.state().includes('avail=1 handled=1'), s.state())
+  // e.3 Three-state intact: alt+o re-focuses the panel, next press closes.
+  await press(s, '\x1bo', 'split=1 focus=panel')
+  check('e: alt+o after Esc re-focuses the panel', s.state().includes('split=1 focus=panel'), s.state())
+  await press(s, '\x1bo', 'split=0 focus=chat')
+  check('e: alt+o from panel focus closes and returns to chat',
+    s.state().includes('split=0 focus=chat') && s.state().includes('chat=120 avail=1 handled=1'), s.state())
   await s.close()
 }
 
-// --- c. 90 columns: split unavailable, ctrl+b inert -----------------------
+// --- c. 90 columns: split unavailable, alt+o inert -----------------------
 {
   const s = await openSession(90)
-  check('c: 90 cols -> splitAvailable=false', s.state().includes('split=0 focus=chat zoom=0 active=todo chat=90 avail=0'), s.state())
-  await press(s, '\x02', 'handled=0')
-  check('c: ctrl+b returns false (chat would process it)', s.state().includes('handled=0') && chatKeyCount === 1, s.state())
-  check('c: state unchanged (still closed, chat focus, chat=90)', s.state().includes('split=0 focus=chat zoom=0 active=todo chat=90'), s.state())
+  check('c: 90 cols -> splitAvailable=false', s.state().includes('split=0 focus=chat zoom=0') && s.state().includes('chat=90 avail=0'), s.state())
+  await press(s, '\x1bo', 'handled=0')
+  check('c: alt+o returns false (chat would process it)', s.state().includes('handled=0') && chatKeyCount === 1, s.state())
+  check('c: state unchanged (still closed, chat focus, chat=90)',
+    s.state().includes('split=0 focus=chat zoom=0') && s.state().includes('chat=90'), s.state())
   await s.close()
 }
 
-// --- d. editorOpen=true: ctrl+b inert -------------------------------------
+// --- d. editorOpen=true: alt+o inert -------------------------------------
 {
   const s = await openSession(120, true, true)
   check('d: editorOpen -> splitAvailable=false at 120 cols', s.state().includes('avail=0'), s.state())
-  await press(s, '\x02', 'handled=0')
-  check('d: ctrl+b returns false with the editor open', s.state().includes('handled=0') && chatKeyCount === 1, s.state())
-  check('d: state unchanged', s.state().includes('split=0 focus=chat zoom=0 active=todo chat=120 avail=0'), s.state())
+  await press(s, '\x1bo', 'handled=0')
+  check('d: alt+o returns false with the editor open', s.state().includes('handled=0') && chatKeyCount === 1, s.state())
+  check('d: state unchanged', s.state().includes('split=0 focus=chat zoom=0') && s.state().includes('chat=120 avail=0'), s.state())
   await s.close()
 }
 

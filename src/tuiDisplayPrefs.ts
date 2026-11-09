@@ -485,7 +485,7 @@ export const applyImageBacking = imageBackingStore.apply
 // ── Side panel (侧栏) ────────────────────────────────────────────────
 // Settings `dsh-tui.sidePanel.*`. These are module-level live stores (not
 // channel state): the layout needs them above the channel's version bump —
-// a Ctrl+B toggle must re-render Chat even though nothing about the
+// a side-panel toggle must re-render Chat even though nothing about the
 // session changed — and /settings + cordis.yml write through the same
 // apply* functions (plugin's applyDisplay mirrors them here, exactly like
 // pageMargin). Key toggles are session-level: they move the live store but

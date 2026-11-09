@@ -20,7 +20,7 @@
  * STRUCTURAL STABILITY (2026-10-02 crash fix). The collapsed state used to
  * render bare `children`, which made split↔collapsed a tree-SHAPE change:
  * React unmounted the whole chat column and mounted a fresh one on every
- * Ctrl+B / editor-open / resize-across-the-threshold. That cost more than
+ * side-panel toggle / editor-open / resize-across-the-threshold. That cost more than
  * a repaint — the deletion commit ran ScrollBox's useImperativeHandle
  * cleanup, whose ref is Chat's `setHandle` state setter, so the detached
  * ref scheduled a state update INSIDE a commit; combined with the

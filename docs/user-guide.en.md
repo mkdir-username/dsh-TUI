@@ -273,8 +273,8 @@ List `↑/↓` + `Enter` to confirm · confirm page `Enter` rewind / `Esc` back 
 
 ### 2.8 Side panel
 
-`Ctrl+B` (remappable under `/settings` → `Shortcuts`) expands a panel column to the right of the
-chat: a capsule tab bar on top, the active panel in the middle, a key-hint row at the bottom, and a
+`/panel` expands a panel column to the right of the chat (the toggle has no default combo —
+`Ctrl+B` is the background key; bind `sidePanel` under `/settings` → `Shortcuts` if you want a key): a capsule tab bar on top, the active panel in the middle, a key-hint row at the bottom, and a
 one-column seam between the two surfaces.
 
 - **Three states**: **split** (chat ≈ 68% plus the panel; `+`/`-` resize by 4 columns), **collapsed**
@@ -282,10 +282,10 @@ one-column seam between the two surfaces.
   its minimum width).
 - **When it splits**: `fullscreen` plus a content width of ≥93 columns (≈97 terminal columns at the
   default page margin); narrow terminals, inline mode and the expanded draft editor fall back —
-  `/jobs` and friends keep their full-screen panels there, while `Ctrl+B` and `/panel` do not split at all.
+  `/jobs` and friends keep their full-screen panels there, while `/panel` and a bound side-panel combo do not split at all.
 - **Focus model**: one keyboard focus at a time; while the panel holds it, its frame and the seam
-  brighten together. `Ctrl+B` is three-state: closed → open and focus the panel; open but
-  chat-focused → focus the panel; panel-focused → close and return to the chat.
+  brighten together. A bound side-panel combo is three-state: closed → open and focus the panel;
+  open but chat-focused → focus the panel; panel-focused → close and return to the chat.
 - **Panel keys**: `Esc` steps back to the input (the panel stays open) · `←`/`→` or `[`/`]` switch
   panels · `1`-`9` jump to the Nth · `z` or `Alt+Z` zoom · `+`/`-` resize (`+` widens the panel by 4 columns) · `↑`/`↓`/`PgUp`/`PgDn`
   go to the active panel (jobs selects and scrolls with them; the todo panel scrolls a long goal with `↑`/`↓`). Keys the panel does not take never
@@ -343,7 +343,7 @@ one-column seam between the two surfaces.
   `dsh-tui.sidePanel.{splitEnabled,open,ratio,panels}` (see the
   [configuration reference](configuration.en.md#tui-configuration)).
 - **tmux users**: `Ctrl+B` is tmux's default prefix, so tmux swallows it before the TUI sees it —
-  remap `sidePanel` to another combo (for example `alt+b`) under `/settings` → `Shortcuts`.
+  remap the background key (`toolPark`) to another combo (for example `alt+b`) under `/settings` → `Shortcuts`.
 
 ## 3. Command reference
 

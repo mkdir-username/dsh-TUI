@@ -4902,22 +4902,24 @@ export function Chat({
       return
     }
     // 侧栏键盘分发（v2.1 优先级）：上面的审批 / 问卷 / 对话框守卫仍然
-    // 最先，其次是侧栏全局快捷键（Ctrl+B / Alt+Z，两种焦点都生效），
+    // 最先，其次是后台键 Ctrl+B 与侧栏全局键 Alt+Z（两种焦点都生效），
     // 然后焦点在右栏时一切按键归侧栏——活动面板的业务键优先，宿主
     // 回退键（←/→ 切面板、z、+/-、Esc 回聊天）兜底。
     //
     // Ctrl+B на ждущем foreground-вызове переводит его в фон (ключ Claude CLI):
     // ядро перестаёт ждать команду, она живёт задачей, ход идёт дальше. Кого
-    // именно ждут, знает ядро, а не транскрипт, поэтому вызов не назван: без
-    // ждущего вызова (или когда бэкенд не умеет) ключ остаётся за панелью.
-    if (actionMatches('sidePanel', input, key)) {
+    // именно ждут, знает ядро, а не транскрипт, поэтому вызов не назван. Без
+    // ждущего вызова ключ не делает ничего: панель этим ключом больше не
+    // открывается — своё сочетание задаётся в /settings, /panel и клик по
+    // вкладке остаются.
+    if (actionMatches('toolPark', input, key)) {
       const parkAny = channel.jobControl?.parkAny
       const parked = parkAny === undefined ? null : parkAny.call(channel.jobControl)
       if (parked !== null) {
         channel.notify(t('tool-park-started', { command: parked.command }), { color: 'success', timeoutMs: 5000 })
-        event.stopImmediatePropagation()
-        return
       }
+      event.stopImmediatePropagation()
+      return
     }
     if (sidePanel.handleKey(input, key, event)) return
     const returnCandidate = isPlainReturnInput(input, key)

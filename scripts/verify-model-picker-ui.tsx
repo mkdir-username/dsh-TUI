@@ -43,6 +43,10 @@ const [
   import('../src/modelRecents.js'),
 ])
 const { default: instances } = await import('../src/ink/instances.js')
+const { setKeymapOverrides } = await import('../src/utils/keymap.js')
+// 侧栏热键默认不绑（Ctrl+B 归后台键）。本段测的是「选择器打开时，绑定的
+// 侧栏组合仍归侧栏」，所以显式绑一个空闲组合 Alt+O 再按真实 stdin 发键。
+setKeymapOverrides({ sidePanel: 'alt+o' })
 
 const MODELS = [
   ...Array.from({ length: 30 }, (_, index) => ({
@@ -676,12 +680,12 @@ async function reviewRegression(fullscreen: boolean): Promise<void> {
       stdin.write('\r')
       await check('picker reopened', () => focused('Alpha 00') && text().includes('最近使用'))
       const wide = pickerWidth()
-      stdin.write('\x02')
-      await check('Ctrl+B opens the sidebar without dismissing the picker', () => prefs.getSidePanelOpen() && focused('Alpha 00') && pickerWidth() < wide)
-      stdin.write('\x02')
-      await check('Ctrl+B closes the sidebar while the picker stays open', () => !prefs.getSidePanelOpen() && focused('Alpha 00') && pickerWidth() === wide)
-      stdin.write('\x02')
-      await check('Ctrl+B reopens and focuses the sidebar', () => prefs.getSidePanelOpen() && pickerWidth() < wide)
+      stdin.write('\x1bo')
+      await check('Alt+O opens the sidebar without dismissing the picker', () => prefs.getSidePanelOpen() && focused('Alpha 00') && pickerWidth() < wide)
+      stdin.write('\x1bo')
+      await check('Alt+O closes the sidebar while the picker stays open', () => !prefs.getSidePanelOpen() && focused('Alpha 00') && pickerWidth() === wide)
+      stdin.write('\x1bo')
+      await check('Alt+O reopens and focuses the sidebar', () => prefs.getSidePanelOpen() && pickerWidth() < wide)
       const splitWidth = pickerWidth()
       stdin.write('\x1bz')
       await check('Alt+Z zooms the sidebar while the picker stays open', () => pickerWidth() > 0 && pickerWidth() < splitWidth && text().includes('最近使用'))
@@ -694,8 +698,8 @@ async function reviewRegression(fullscreen: boolean): Promise<void> {
       stdin.write('\x1b')
       await check('Esc closes the picker before the sidebar', () => !text().includes('最近使用') && prefs.getSidePanelOpen())
       assert.deepEqual(effortPicks, [])
-      stdin.write('\x02')
-      await check('Ctrl+B closes the focused sidebar', () => !prefs.getSidePanelOpen())
+      stdin.write('\x1bo')
+      await check('Alt+O closes the focused sidebar', () => !prefs.getSidePanelOpen())
       stdin.write('/model')
       await check('reopen composer', () => text().includes('/model'))
       stdin.write('\r')

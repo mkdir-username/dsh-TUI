@@ -238,10 +238,10 @@ export interface Config {
    *  time, so a hand-edited value can never wedge the layout. */
   sidePanel?: {
     /** Master switch of the split layout; on by default. Off makes /panel
-     *  and Ctrl+B fall back to the fullscreen panels. */
+     *  and the side-panel shortcut fall back to the fullscreen panels. */
     splitEnabled?: boolean
     /** Whether a session opens with the sidebar expanded (off by default, so
-     *  the upgrade leaves the layout alone); Ctrl+B toggles it live. */
+     *  the upgrade leaves the layout alone); /panel toggles it live. */
     open?: boolean
     /** Chat column as a fraction of the content width, clamped to 0.1–0.95
      *  (default 0.68); +/- while the panel is focused nudges it live. */
