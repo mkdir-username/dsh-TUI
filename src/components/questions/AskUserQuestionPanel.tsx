@@ -53,10 +53,11 @@ import type { ProviderModelEditor as ModelEditor } from '../../adapter/ports/cha
 import { PlanReviewPanel } from './PlanReviewPanel.js'
 import { ProviderModelEditor } from './ProviderModelEditor.js'
 import { QuestionMinimizedBar } from './QuestionMinimizedBar.js'
-import { isMod, isPlainReturnInput } from '../../utils/modifiers.js'
+import { isPlainReturnInput } from '../../utils/modifiers.js'
 import { actionMatches, comboDisplay, effectiveComboDisplay, primaryComboString } from '../../utils/keymap.js'
-import { flattenPasteInline } from '../../dsh-adapter/sanitize.js'
-import { readClipboard, type ClipboardRead } from '../../utils/clipboard.js'
+import type { ClipboardRead } from '../../utils/clipboard.js'
+import { ANSWER_PASTE_MAX_POINTS, answerWindow, caretSplit } from './answerField.js'
+import { useAnswerField } from './useAnswerField.js'
 import { createHyperlink } from '../../terminal-utils/hyperlink.js'
 import { listWindow } from '../listWindow.js'
 import { clipPreviewRows, pagePreview } from '../previewRows.js'
@@ -71,17 +72,6 @@ const UNCHECKED = '○'
 const PENCIL = '✎'
 /** One masked code point of a secret answer (`question.secret`). */
 const SECRET_MASK = '•'
-
-/**
- * Paste cap for one answer field, in code points. Typing is naturally
- * bounded (humans cannot type unboundedly) and the protocol places no
- * limit on `custom`, but a stray Ctrl+V of a file/log must not inflate the
- * panel to hundreds of wrapped rows (every keystroke then re-lays them
- * out) or ship a megabyte answer. Deliberately generous — anything past it
- * is an accident, and the inline error says exactly that. Twin constant in
- * PlanReviewPanel (the two panels share the same input contract).
- */
-const ANSWER_PASTE_MAX_POINTS = 8000
 
 /**
  * Preview caps (#1664): each field contributes at most these rows to the
@@ -249,29 +239,10 @@ export function AskUserQuestionPanel({
   // only repaints.
   const focusRef = React.useRef(initialFocus)
   const checkedRef = React.useRef<ReadonlySet<number>>(new Set(multiSelect ? selectedIndices : []))
-  const [customText, setCustomText] = React.useState(initialCustom)
-  const [customCursor, setCustomCursor] = React.useState(() => [...initialCustom].length)
-  // Synchronous source of truth for the handlers (see the module header):
-  // keys of one stdin batch share a single React update, and the clipboard
-  // read resolves asynchronously — the state mirrors exist only to re-render.
-  const textRef = React.useRef(initialCustom)
-  const cursorRef = React.useRef([...initialCustom].length)
-  /** Single choke point for every text/caret mutation: refs first, then the
-   *  state mirrors so the render sees the committed value. */
-  const applyText = (nextText: string, nextCursor: number): void => {
-    textRef.current = nextText
-    cursorRef.current = nextCursor
-    setCustomText(nextText)
-    setCustomCursor(nextCursor)
-  }
-  /** True while the component is mounted (async clipboard continuation
-   *  guard: the panel can unmount when the user answers before the read
-   *  resolves). */
-  const mountedRef = React.useRef(true)
-  React.useEffect(() => () => { mountedRef.current = false }, [])
-  /** True while a clipboard read is in flight (ignore repeat Ctrl+V). */
-  const pasteBusyRef = React.useRef(false)
-  const clipboardReader = readClipboardOverride ?? readClipboard
+  // The answer field's editing contract is shared with the plan-review
+  // feedback row: refs mutated synchronously per stdin event, code-point
+  // caret, clipboard transport (see useAnswerField).
+  const field = useAnswerField(initialCustom, { readClipboard: readClipboardOverride })
   /** Single-select label captured by typing on a focused option — submitted
    *  together with the custom text when the input row itself is Entered. */
   const [attached, setAttached] = React.useState<string | null>(
@@ -349,7 +320,7 @@ export function AskUserQuestionPanel({
     + (linkText === '' ? 0 : wrapText(linkText, contentCells, 'wrap').split('\n').length)
   const previewRows = questionBlockRows + detailRows
   const bodyScrollRows = bodyRows > previewRows ? Math.max(1, previewRows - 1) : 0
-  const submitRows = multiSelect && fullscreen && (checked.size > 0 || textRef.current !== '') ? 2 : 0
+  const submitRows = multiSelect && fullscreen && (checked.size > 0 || field.text !== '') ? 2 : 0
   // ── Answer field geometry (the multi-line window) ──────────────────
   // The caret counts code points (module header), so every offset below is a
   // code-point index — a line start is a point index, never a UTF-16 one.
@@ -359,41 +330,15 @@ export function AskUserQuestionPanel({
     ANSWER_FIELD_MAX_LINES,
     terminalRows - QUESTION_CHROME_ROWS - 2,
   ))
-  const answerPoints = [...textRef.current]
-  const answerLineStarts: number[] = [0]
-  answerPoints.forEach((point, index) => {
-    if (point === '\n') answerLineStarts.push(index + 1)
-  })
-  let answerCaretLine = 0
-  while (
-    answerCaretLine + 1 < answerLineStarts.length
-    && answerLineStarts[answerCaretLine + 1]! <= cursorRef.current
-  ) {
-    answerCaretLine += 1
-  }
-  const answerWindowStartLine = answerLineStarts.length <= answerMaxLines
-    ? 0
-    : Math.max(0, Math.min(
-        answerCaretLine - answerMaxLines + 1,
-        answerLineStarts.length - answerMaxLines,
-      ))
-  const answerWindowStart = answerLineStarts[answerWindowStartLine] ?? 0
-  // A full window drops the newline that opened the next, unpainted line.
-  const answerWindowEnd = answerWindowStartLine + answerMaxLines < answerLineStarts.length
-    ? answerLineStarts[answerWindowStartLine + answerMaxLines]! - 1
-    : answerPoints.length
-  const answerWindowPoints = answerPoints.slice(answerWindowStart, answerWindowEnd)
+  const answerPoints = [...field.text]
+  const answerWin = answerWindow(answerPoints, field.cursor, answerMaxLines)
+  const answerWindowPoints = answerPoints.slice(answerWin.start, answerWin.end)
   // A secret answer masks its points but KEEPS the line breaks: the caret
   // must still land on the row the user typed it on.
   const answerWindowMasked = question.secret === true
     ? answerWindowPoints.map(point => point === '\n' ? '\n' : SECRET_MASK)
     : answerWindowPoints
-  const answerCaret = cursorRef.current - answerWindowStart
-  // The caret cell: a newline has no glyph to invert, so the caret sits on
-  // the blank cell that closes its line.
-  const answerCaretGlyph = answerCaret < answerWindowMasked.length && answerWindowMasked[answerCaret] !== '\n'
-    ? answerWindowMasked[answerCaret]!
-    : ' '
+  const answerSplit = caretSplit(answerWindowMasked, answerWin.caret, inputFocused)
   // Honest height: the painted window — not a constant `1` — is what the
   // option window has to leave room for. Wrapping is measured at the field's
   // real content width (pointer + pencil + margin + label + colon reserved).
@@ -454,83 +399,9 @@ export function AskUserQuestionPanel({
     setError(null)
   }
 
-  /** Append at the text tail (option-row typing has no visible cursor). */
-  const appendText = (text: string): void => {
-    applyText(textRef.current + text, cursorRef.current + [...text].length)
-    setError(null)
-  }
-
-  /** Drop the character before the caret; empty text drops the attach. */
-  const backspaceText = (): void => {
-    const points = [...textRef.current]
-    const at = cursorRef.current
-    if (at <= 0) return
-    points.splice(at - 1, 1)
-    const next = points.join('')
-    if (next === '') placeAttached(null)
-    applyText(next, at - 1)
-  }
-
-  /**
-   * Paste-path entry shared by both transports (bracketed-paste chunk and
-   * the async clipboard read). Single-line field: newlines and control
-   * chars flatten to spaces; a chunk with nothing visible (blank lines or
-   * stray controls only) inserts nothing, and one past the cap is refused
-   * (never truncated — the user must see that text was dropped). Where the
-   * text lands mirrors plain typing — at the caret while the input row is
-   * focused, appended at the tail (and the option's label attached,
-   * single-select) when typing on an option row would append.
-   * @returns 'ok' | 'empty' (nothing visible to insert) | 'too-long'
-   */
-  const insertPastedText = (raw: string, atCaret: boolean): 'ok' | 'empty' | 'too-long' => {
-    const text = flattenPasteInline(raw)
-    if (text.trim() === '') return 'empty'
-    if ([...text].length > ANSWER_PASTE_MAX_POINTS) return 'too-long'
-    const points = [...textRef.current]
-    const at = atCaret ? cursorRef.current : points.length
-    points.splice(at, 0, ...text)
-    applyText(points.join(''), at + [...text].length)
-    if (!atCaret && !multiSelect) placeAttached(options[focusRef.current]?.label ?? null)
-    return 'ok'
-  }
-
-  /** Inline error for an over-cap paste (shared by both transports). */
-  const pasteTooLongError = (): string =>
-    t('question-paste-too-long', { n: ANSWER_PASTE_MAX_POINTS })
-
-  /** Ctrl+V/Alt+V arm: read the system clipboard and insert its text. */
-  const pasteFromClipboard = (): void => {
-    if (pasteBusyRef.current) return
-    pasteBusyRef.current = true
-    // Option-row typing appends at the tail; capture which semantics the
-    // keypress asked for — the read resolves later, after the user may
-    // have moved focus or typed (the refs make either safe).
-    const atCaret = inputFocused
-    void clipboardReader()
-      .then(content => {
-        if (!mountedRef.current) return
-        if (content === null || content.kind === 'unavailable') {
-          setError(t(content === null ? 'input-clipboard-empty' : 'input-clipboard-unavailable'))
-          return
-        }
-        if (content.kind !== 'text') {
-          // File/image offers have no text form in an answer field.
-          setError(t('question-paste-not-text'))
-          return
-        }
-        if (content.text === '') {
-          setError(t('input-clipboard-empty'))
-          return
-        }
-        const result = insertPastedText(content.text, atCaret)
-        setError(result === 'too-long' ? pasteTooLongError() : null)
-      })
-      .catch(() => {
-        if (mountedRef.current) setError(t('input-clipboard-read-failed'))
-      })
-      .finally(() => {
-        pasteBusyRef.current = false
-      })
+  /** A tail paste mirrors option-row typing: the option's label attaches. */
+  const appendPasteAttachment = (): void => {
+    if (!multiSelect) placeAttached(options[focusRef.current]?.label ?? null)
   }
 
   const checkedLabels = (): string[] =>
@@ -539,7 +410,7 @@ export function AskUserQuestionPanel({
 
   /** Enter on a real option: the option(s) plus whatever the input row holds. */
   const submitOptions = (): void => {
-    const text = textRef.current.trim()
+    const text = field.textRef.current.trim()
     if (multiSelect) {
       const selected = checkedLabels()
       if (selected.length === 0 && text === '') {
@@ -560,7 +431,7 @@ export function AskUserQuestionPanel({
   /** Enter on the input row itself: the text, plus the attached label (or
    *  the checked labels for multi-select) when there is one. */
   const submitInput = (): void => {
-    const text = textRef.current.trim()
+    const text = field.textRef.current.trim()
     if (multiSelect) {
       const selected = checkedLabels()
       if (selected.length === 0 && text === '') {
@@ -589,7 +460,7 @@ export function AskUserQuestionPanel({
           })()
     return {
       selected,
-      ...(textRef.current !== '' ? { custom: textRef.current } : {}),
+      ...(field.textRef.current !== '' ? { custom: field.textRef.current } : {}),
     }
   }
 
@@ -599,9 +470,9 @@ export function AskUserQuestionPanel({
     event.stopImmediatePropagation()
   }
   const manualModelAtCaret = (): string => {
-    const points = [...textRef.current]
+    const points = [...field.textRef.current]
     const isSeparator = (char: string | undefined): boolean => char === undefined || /[,，\s]/u.test(char)
-    let at = Math.min(cursorRef.current, points.length)
+    let at = Math.min(field.cursorRef.current, points.length)
     if (at === points.length || isSeparator(points[at])) at -= 1
     while (at >= 0 && isSeparator(points[at])) at -= 1
     if (at < 0) return ''
@@ -662,8 +533,8 @@ export function AskUserQuestionPanel({
     // pastes; the flattened text may also be empty → nothing to insert).
     if (key.isPasted === true) {
       if (!hideCustomInput && input !== '') {
-        const result = insertPastedText(input, inputFocused)
-        setError(result === 'too-long' ? pasteTooLongError() : null)
+        const result = field.insertPasted(input, inputFocused, appendPasteAttachment)
+        setError(result === 'too-long' ? t('question-paste-too-long', { n: ANSWER_PASTE_MAX_POINTS }) : null)
       }
       return
     }
@@ -671,7 +542,7 @@ export function AskUserQuestionPanel({
     // binding, remappable in /settings): raw mode hands the key to the
     // app, so the clipboard is read here (mirrors the composer's arm).
     if (actionMatches('paste', input, key)) {
-      if (!hideCustomInput) pasteFromClipboard()
+      if (!hideCustomInput) field.pasteFromClipboard(inputFocused, setError, appendPasteAttachment)
       return
     }
 
@@ -686,186 +557,14 @@ export function AskUserQuestionPanel({
         event.stopImmediatePropagation()
         return
       }
-      // ── macOS / readline editing (the composer's key contract) ────────
-      // The caret and every offset below are CODE POINTS: the array is the
-      // one the render slices, so an emoji is one step and a word scan can
-      // never land inside a surrogate pair.
-      const points = [...textRef.current]
-      const at = cursorRef.current
-      const lineStartAt = (): number => {
-        let index = at
-        while (index > 0 && points[index - 1] !== '\n') index -= 1
-        return index
-      }
-      const lineEndAt = (): number => {
-        let index = at
-        while (index < points.length && points[index] !== '\n') index += 1
-        return index
-      }
-      // Readline's whitespace-delimited rule (Alt+B/F, Ctrl+W): the same one
-      // inputWordBoundary.ts applies for the composer, spelled on points.
-      const wordBackAt = (): number => {
-        let index = at
-        while (index > 0 && /\s/u.test(points[index - 1]!)) index -= 1
-        while (index > 0 && !/\s/u.test(points[index - 1]!)) index -= 1
-        return index
-      }
-      const wordForwardAt = (): number => {
-        let index = at
-        while (index < points.length && !/\s/u.test(points[index]!)) index += 1
-        while (index < points.length && /\s/u.test(points[index]!)) index += 1
-        return index
-      }
-      const moveCaretTo = (next: number): void => {
-        applyText(textRef.current, Math.max(0, Math.min([...textRef.current].length, next)))
-      }
-      /** Drop [start, end) in code points and park the caret at `start`. */
-      const deleteAnswerRange = (start: number, end: number): void => {
-        if (start >= end) return
-        const live = [...textRef.current]
-        const next = live.slice(0, start).concat(live.slice(end)).join('')
-        if (next === '') placeAttached(null)
-        applyText(next, start)
-        setError(null)
-      }
-      const insertAnswerNewline = (): void => {
-        const live = [...textRef.current]
-        const caret = cursorRef.current
-        live.splice(caret, 0, '\n')
-        applyText(live.join(''), caret + 1)
-        setError(null)
-      }
-      /** ±1 logical line at the same column, clamped at the text edges. */
-      const lineStepCaret = (delta: -1 | 1): number => {
-        const start = lineStartAt()
-        const column = at - start
-        if (delta === -1) {
-          if (start === 0) return at
-          const prevEnd = start - 1
-          let prevStart = prevEnd
-          while (prevStart > 0 && points[prevStart - 1] !== '\n') prevStart -= 1
-          return prevStart + Math.min(column, prevEnd - prevStart)
-        }
-        const end = lineEndAt()
-        if (end >= points.length) return at
-        const nextStart = end + 1
-        let nextEnd = nextStart
-        while (nextEnd < points.length && points[nextEnd] !== '\n') nextEnd += 1
-        return nextStart + Math.min(column, nextEnd - nextStart)
-      }
-      // Shift+Enter / Option+Enter / Ctrl+J break the answer into a new line
-      // and never submit it. A bare Enter still submits below, and Ctrl+K
-      // stays the panel fold (matched before this branch).
-      if (key.return && (key.shift || key.meta)) {
-        insertAnswerNewline()
-        return
-      }
-      if (key.ctrl && !key.shift && !key.meta && !key.super && input === 'j') {
-        insertAnswerNewline()
-        return
-      }
-      // Word jumps: Alt/Option+←/→ and Ctrl+←/→. Ghostty hands Option+arrows
-      // as ESC b / ESC f (most terminals' parser folds those into meta+←/→;
-      // the literal b/f arm covers the rest), which is why both spellings
-      // are matched — same pair as the launchpad.
-      const escapeJump = key.meta && !key.ctrl && (input === 'b' || input === 'f')
-      if (escapeJump || ((isMod(key) || key.meta) && (key.leftArrow || key.rightArrow))) {
-        const back = escapeJump ? input === 'b' : key.leftArrow === true
-        moveCaretTo(back ? wordBackAt() : wordForwardAt())
-        return
-      }
-      // Line edges: Ctrl+A/E, plus the Cmd+←/→ that Ghostty delivers as
-      // Ctrl+A/E. Home/End are line-scoped in a multi-line answer.
-      if (isMod(key) && input === 'a') {
-        moveCaretTo(lineStartAt())
-        return
-      }
-      if (isMod(key) && input === 'e') {
-        moveCaretTo(lineEndAt())
-        return
-      }
-      // Deletions: Ctrl+W / Option+Backspace take the previous word, Ctrl+U
-      // takes the line prefix (Ctrl+K stays fold — see the module header).
-      if ((isMod(key) && input === 'w') || (key.meta && key.backspace)) {
-        deleteAnswerRange(wordBackAt(), at)
-        return
-      }
-      if (isMod(key) && input === 'u') {
-        deleteAnswerRange(lineStartAt(), at)
-        return
-      }
-      // Caret motion between lines is Ctrl+↑/↓: plain ↑/↓ keep navigating the
-      // list and Alt+↑/↓ keep scrolling the question body (both documented).
-      if (isMod(key) && (key.upArrow || key.downArrow)) {
-        moveCaretTo(lineStepCaret(key.upArrow ? -1 : 1))
-        return
-      }
-      if (key.upArrow) {
-        moveFocus(-1)
-        return
-      }
-      if (key.downArrow) {
-        moveFocus(1)
-        return
-      }
-      if (isPlainReturnInput(input, key)) {
-        submitInput()
-        return
-      }
-      if (key.backspace && !key.meta) {
-        backspaceText()
-        return
-      }
-      if (key.delete) {
-        const live = [...textRef.current]
-        const caret = cursorRef.current
-        if (caret < live.length) {
-          live.splice(caret, 1)
-          const next = live.join('')
-          if (next === '') placeAttached(null)
-          applyText(next, caret)
-        }
-        return
-      }
-      if (key.leftArrow) {
-        // Plain ← at the start of the answer switches questions; anywhere
-        // else (and modified arrows) stays a caret step.
-        if (isPlainArrow(key) && cursorRef.current === 0 && onBack !== undefined) {
-          onBack(currentDraft())
-          return
-        }
-        applyText(textRef.current, Math.max(0, cursorRef.current - 1))
-        return
-      }
-      if (key.rightArrow) {
-        const length = [...textRef.current].length
-        if (isPlainArrow(key) && cursorRef.current >= length && onForward !== undefined) {
-          onForward(currentDraft())
-          return
-        }
-        applyText(textRef.current, Math.min(length, cursorRef.current + 1))
-        return
-      }
-      // Home/End are line-scoped like the composer's: one logical line is
-      // the editing unit of a multi-line answer (a single-line answer is
-      // unchanged — its line IS the whole text).
-      if (key.home) {
-        moveCaretTo(lineStartAt())
-        return
-      }
-      if (key.end) {
-        moveCaretTo(lineEndAt())
-        return
-      }
-      if (!key.ctrl && !key.meta && !key.super && input) {
-        // Ordinary typing at the live caret (a text run may carry several
-        // characters in one event — e.g. an unbracketed terminal paste).
-        const live = [...textRef.current]
-        const caret = cursorRef.current
-        live.splice(caret, 0, ...input)
-        applyText(live.join(''), caret + [...input].length)
-        setError(null)
-      }
+      field.handleKey(input, key, {
+        onMoveFocus: moveFocus,
+        onSubmit: submitInput,
+        onBack: onBack === undefined ? undefined : () => onBack(currentDraft()),
+        onForward: onForward === undefined ? undefined : () => onForward(currentDraft()),
+        onEmpty: () => placeAttached(null),
+        onEdit: () => setError(null),
+      })
       return
     }
 
@@ -908,13 +607,14 @@ export function AskUserQuestionPanel({
     }
     if (key.backspace) {
       // Edit the input row without leaving the option list.
-      if (!hideCustomInput && textRef.current !== '') backspaceText()
+      if (!hideCustomInput && field.text !== '') field.backspace()
       return
     }
     // Typing on an option appends into the input row; single-select also
     // attaches this option's label so Enter carries label + text (#9).
     if (!hideCustomInput && !key.ctrl && !key.meta && !key.super && input) {
-      appendText(input)
+      field.append(input)
+      setError(null)
       if (!multiSelect) placeAttached(options[focusRef.current]?.label ?? null)
     }
   })
@@ -927,17 +627,6 @@ export function AskUserQuestionPanel({
    *  flattened the same way windowedOptions flattens labels). */
   const questionText = question.question.split('\n')[0]?.replace(/\s+/gu, ' ').trim() ?? ''
 
-  // The caret counts code points (see the module header), so the visual
-  // split indexes the painted window's point array — never raw UTF-16
-  // offsets, which could land inside a surrogate pair. A caret parked ON a
-  // newline keeps that newline in the tail: the inverted blank cell closes
-  // the line, and the painted line break must not collapse under it.
-  const caretOnNewline = inputFocused
-    && answerCaret < answerWindowMasked.length
-    && answerWindowMasked[answerCaret] === '\n'
-  const caretTailStart = inputFocused && answerCaret < answerWindowMasked.length && !caretOnNewline
-    ? answerCaret + 1
-    : answerCaret
   /** Mouse: click the input row to focus it (same as Tab). */
   const focusInputRow = (): void => {
     if (hideCustomInput) return
@@ -957,7 +646,7 @@ export function AskUserQuestionPanel({
     }
     const label = options[index]?.label
     if (label === undefined) return
-    const text = textRef.current.trim()
+    const text = field.text.trim()
     onAnswer({ selected: [label], ...(text !== '' ? { custom: text } : {}) })
   }
   const [hoverIndex, setHoverIndex] = React.useState(-1)
@@ -990,7 +679,7 @@ export function AskUserQuestionPanel({
           <Text color="suggestion">{t('question-attached-label', { label: attached })}</Text>
         )}
         <Text dimColor>：</Text>
-        {customText === '' && !inputFocused ? (
+        {field.text === '' && !inputFocused ? (
           // The IME anchor must sit on a cell styled exactly like the answer
           // text the user is about to commit: the terminal draws the preedit
           // at the physical cursor USING THAT CELL'S STYLE, so an anchor over
@@ -1005,13 +694,11 @@ export function AskUserQuestionPanel({
           </>
         ) : (
           <>
-            <Text wrap="wrap">{answerWindowMasked.slice(0, answerCaret).join('')}</Text>
+            <Text wrap="wrap">{answerSplit.head}</Text>
             {/* Leave the native caret's glyph plain so the terminal can
                 animate it and paint IME preedit with the input's style. */}
-            {inputFocused
-              ? <Text ref={caretRef} inverse={!nativeCursor}>{answerCaretGlyph}</Text>
-              : <Text ref={caretRef}>▏</Text>}
-            <Text wrap="wrap">{answerWindowMasked.slice(inputFocused ? caretTailStart : answerCaret).join('')}</Text>
+            <Text ref={caretRef} inverse={!nativeCursor && inputFocused}>{answerSplit.glyph}</Text>
+            <Text wrap="wrap">{answerSplit.tail}</Text>
           </>
         )}
       </Box>

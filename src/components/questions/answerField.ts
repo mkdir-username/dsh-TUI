@@ -10,7 +10,7 @@
  * ←/→/⌫/Del and a paste boundary must never split a surrogate pair.
  */
 
-import { flattenPasteInline } from '../../dsh-adapter/sanitize.js'
+import { flattenPasteInline } from '../../channel/sanitize.js'
 
 /** Paste cap for one answer field, in code points. Typing is naturally
  *  bounded; a stray Ctrl+V of a file/log must not inflate the row or ship a
