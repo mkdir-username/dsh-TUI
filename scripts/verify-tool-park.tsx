@@ -1,15 +1,16 @@
 /**
- * Background key regression: Ctrl+B on a running shell card moves that call to
- * the background instead of toggling the side panel.
+ * Background key regression: Ctrl+B (⌘B) on a running shell card moves that
+ * call to the background; with nothing waiting the same key is the side-panel
+ * toggle it used to be.
  *
  * The park itself happens inside the core bash tool (a local patch publishes a
  * per-call ticket on `globalThis`); this suite pins the TUI half of the
  * contract with the seam stubbed:
  *
  *  - the key asks the harness to park, and the toast names the parked
- *    command; a key with nothing waiting is consumed and raises no toast;
- *  - the side panel never opens on the key, whether a call was parked or not
- *    (it has no default combo of its own any more);
+ *    command; a key with nothing waiting is consumed silently — no toast;
+ *  - a parked call never touches the side panel, an empty park falls through
+ *    to the toggle (wide fullscreen only — a narrow split has no panel);
  *  - a backend with no park seam says nothing;
  *  - the running card carries the hint, a settled one does not.
  *
@@ -163,21 +164,23 @@ async function mount(harness: ReturnType<typeof makeHarness>, channel: Record<st
 let notices: string[] = []
 
 /** Mount one transcript state, press Ctrl+B once, report what the key did. */
-async function press(rows: readonly unknown[], jobControl: unknown, parked: { callId: string; command: string } | null = { callId: 'call-1', command: 'bats suite.bats' }, layout: { cols?: number; rows?: number; fullscreen?: boolean } = {}) {
+async function press(rows: readonly unknown[], jobControl: unknown, parked: { callId: string; command: string } | null = { callId: 'call-1', command: 'bats suite.bats' }, layout: { cols?: number; rows?: number; fullscreen?: boolean } = {}, resetPanel = true, taps = 1) {
   notices = []
   const parks: Array<{ callId: string; command: string } | null> = []
   const control = jobControl === 'passthrough'
     ? { kill: () => false, parkAny: () => { parks.push(parked); return parked } }
     : jobControl
-  prefs.applySidePanelOpen(false)
+  if (resetPanel) prefs.applySidePanelOpen(false)
   const harness = makeHarness(layout.cols ?? 100, layout.rows ?? 30)
   const instance = await mount(harness, makeChannel(rows, control), layout.fullscreen === true)
   // 固定窗:探针 卡片绘制与键盘处理器挂上之间没有可观测完成条件。
   await sleep(120)
   const before = harness.screen()
-  harness.stdin.write(CTRL_B)
-  // 固定窗:探针 键后重绘没有可观测完成条件（车位是桩，不产生行变化）。
-  await sleep(160)
+  for (let tap = 0; tap < taps; tap += 1) {
+    harness.stdin.write(CTRL_B)
+    // 固定窗:探针 键后重绘没有可观测完成条件（车位是桩，不产生行变化）。
+    await sleep(160)
+  }
   const after = harness.screen()
   instance.unmount()
   instances.delete(process.stdout)
@@ -201,16 +204,21 @@ const BACKGROUND_CARD = toolRow({
   check('the running card advertises the key', after.includes(HINT), after.split('\n').find(line => line.includes('Running')) ?? '')
 }
 
-// ── nothing waits: the key asks, says nothing, opens no panel ─────────────
+// ── nothing waits: the key falls through to the side-panel toggle ─────────
 {
   const { parks, notices } = await press([RUNNING], 'passthrough', null)
   check('a key with nothing waiting still asks the harness', parks.length === 1, JSON.stringify(parks))
   check('nothing waiting raises no toast', notices.length === 0, JSON.stringify(notices))
-  // 宽屏 fullscreen 下侧栏本来可分栏——旧行为在这里会打开面板。
-  await press([RUNNING], 'passthrough', null, { cols: 120, rows: 30, fullscreen: true })
-  check('an empty park leaves the side panel closed', !prefs.getSidePanelOpen())
-  await press([RUNNING], 'passthrough', undefined, { cols: 120, rows: 30, fullscreen: true })
-  check('parking a call does not open the side panel', !prefs.getSidePanelOpen())
+  check('an empty park keeps the panel closed at narrow width', !prefs.getSidePanelOpen())
+  // 宽屏 fullscreen 下侧栏本来可分栏：空 park 不再吞键，同一个字节交给开关。
+  const wide = { cols: 120, rows: 30, fullscreen: true }
+  await press([RUNNING], 'passthrough', null, wide)
+  check('an empty park opens the side panel', prefs.getSidePanelOpen())
+  // 三态开关走完一个来回必须留在同一个挂载里：重挂会重置焦点位。
+  await press([RUNNING], 'passthrough', null, wide, true, 2)
+  check('a second tap in the same mount closes it', !prefs.getSidePanelOpen())
+  await press([RUNNING], 'passthrough', undefined, wide)
+  check('a parked call never touches the panel', !prefs.getSidePanelOpen())
 }
 
 // ── a settled card carries no hint ─────────────────────────────────────────

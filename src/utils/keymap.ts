@@ -251,12 +251,14 @@ export const SHORTCUT_ACTIONS: readonly ShortcutActionSpec[] = [
   // it on macOS; the combo stays remappable through /settings like any other.
   { id: 'undo', defaults: ['ctrl+z'], exactPrimary: true },
   // 后台键：把等待中的 foreground shell 调用转入后台（Claude CLI 的 Ctrl+B）。
-  // 没有可转的调用时按键不做事——它不再兼作侧栏开关。
+  // 没有可转的调用时按键不再被吞掉——它落到下面的侧栏开关键上。
   { id: 'toolPark', defaults: ['ctrl+b'] },
-  // 侧栏三态开关：关闭 → 打开并聚焦右栏 → 焦点回 Chat → 关闭。默认不绑键：
-  // Ctrl+B 归后台键，tmux 前缀又会吞掉它；需要热键的在 /settings → Shortcuts
-  // 自己绑一个，/panel 与点击标签照旧可用。
-  { id: 'sidePanel', defaults: [] },
+  // 侧栏三态开关：关闭 → 打开并聚焦右栏 → 焦点回 Chat → 关闭。
+  // Local: shared `ctrl+b` is deliberate. Chat asks toolPark first, so Ctrl+B
+  // parks only while a call is actually waiting; otherwise the same byte
+  // reaches this toggle. The macOS alias makes ⌘B hit it as well, which is the
+  // key the user presses in Ghostty. /panel and the tab click keep working.
+  { id: 'sidePanel', defaults: ['ctrl+b'] },
   { id: 'sidePanelZoom', defaults: ['alt+z'] },
 ]
 

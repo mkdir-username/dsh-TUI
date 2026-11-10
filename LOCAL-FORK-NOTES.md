@@ -1,7 +1,7 @@
 # Локальный форк dsh-TUI — состояние на 2026-11-08 (миграция завершена)
 
 **`ds()` запускает форк.** Профиль `~/.dsh/profiles/dsh-tui` держит зависимость
-`"@deepseek-harness-tui/dsh-tui": "link:/Users/username/Docs/dsh-tui-spike/fork"`,
+`"@deepseek-harness-tui/dsh-tui": "link:/Users/username/Docs/dsh-tui-fork"`,
 поэтому TUI приезжает из этого дерева (`pnpm compile` → `lib/types`), а
 `~/.dsh/bin/patch-dsh-tui.sh` работает в режиме форка: ставит только ядровые
 патчи (`bin.js`, env-guard, transport-cause, ядровая часть plan-mode) и гоняет
@@ -18,7 +18,7 @@
 Форк клонирован, чтобы локальные патчи жили в git, а не в `sed` по собранному
 `lib/types` установленного пакета.
 
-- Клон: `/Users/username/Docs/dsh-tui-spike/fork` (upstream `ccch1mneyyy/dsh-TUI`, 0.19.0)
+- Клон: `/Users/username/Docs/dsh-tui-fork` (upstream `ccch1mneyyy/dsh-TUI`, 0.19.0)
 - Ремоуты: `mine` = `mkdir-username/dsh-TUI` (личный, private) — пушим туда, ветка
   `main` отслеживает `mine/main`; `origin` = upstream, только fetch/merge
 - Ветка одна, коммит порта: `25a15d4` («портированы локальные патчи ctrl-enter,
@@ -95,7 +95,7 @@ statusline dsh»), ей отправлено указание править `sr
 ## Сборка и проверки
 
 ```bash
-cd /Users/username/Docs/dsh-tui-spike/fork
+cd /Users/username/Docs/dsh-tui-fork
 pnpm install --frozen-lockfile     # ~54 с, prepare сразу компилит; нужен pnpm 11.21 и сабмодуль vendor/dsh-std
 pnpm compile                       # ~13 с — src/ → lib/types/, после каждой правки
 pnpm typecheck                     # ~10 с
@@ -120,14 +120,14 @@ pnpm smoke                         # прочие гейты: boundary, source-h
 
 ## Профиль уже смотрит в форк (2026-11-08)
 
-`~/.dsh/profiles/dsh-tui/package.json` → `link:/Users/username/Docs/dsh-tui-spike/fork`,
+`~/.dsh/profiles/dsh-tui/package.json` → `link:/Users/username/Docs/dsh-tui-fork`,
 `pnpm-lock.yaml` закрепляет тот же link; `node_modules/@deepseek-harness-tui/dsh-tui`
 — симлинк на клон. Проверки:
 
 - `bash ~/.dsh/bin/patch-dsh-tui.sh` — режим fork: ядровые патчи + `паритет форка: 14/14`;
   скрипт сам отказывается запускать TUI, если `src/**` новее сборки.
 - `node --input-type=module -e "console.log(import.meta.resolve('@deepseek-harness-tui/dsh-tui'))"`
-  из каталога профиля → `file:///Users/username/Docs/dsh-tui-spike/fork/lib/types/index.js`.
+  из каталога профиля → `file:///Users/username/Docs/dsh-tui-fork/lib/types/index.js`.
 
 Откат на реестровый пакет (обратимо): вернуть
 `/Users/username/.dsh/profiles/dsh-tui/package.json.bak-20261108-1730-registry`,

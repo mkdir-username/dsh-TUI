@@ -29,8 +29,8 @@ Fullscreen text selection belongs to its starting pane (chat, sidebar or one dif
 | `Ctrl+D` | Same ladder as `Ctrl+C`: interrupt while working (press again to force-exit if the interrupt stalls); press twice while idle to exit |
 | `Ctrl+O` | Toggle transcript/verbose detail, including full reasoning and tool arguments/output; also the escape hatch for the **long-line fold** (a single line over 1000 chars is clipped to 1000 with a `… N chars folded` marker — see the user guide §5). Clicking the folded row (or the tool card face) toggles it too |
 | `Ctrl+P` | Toggle the loaded-context panel shown at startup (while it is on screen) |
-| `Ctrl+B` | The background key: moves a waiting foreground shell call to the background (the turn stops waiting for it — see the next row). With nothing waiting the key does nothing; the panel is not opened by it — use `/panel`, a tab click, or a `sidePanel` combo bound under `/settings` → `Shortcuts` |
-| `Ctrl+B` (command running) | Moves that call to the background: the turn stops waiting, the command becomes a background job and its card keeps going as a job card (`promoted`), and the model continues with the job id; with nothing waiting the key does nothing |
+| `Ctrl+B` | The background key: moves a waiting foreground shell call to the background (the turn stops waiting for it — see the next row). With nothing waiting the same key opens or closes the side panel (also `/panel` or a tab click; remappable as `sidePanel` under `/settings` → `Shortcuts`) |
+| `Ctrl+B` (command running) | Moves that call to the background: the turn stops waiting, the command becomes a background job and its card keeps going as a job card (`promoted`), and the model continues with the job id; with nothing waiting the same key toggles the side panel |
 | `Alt+Z` | Zoom the active side panel (the chat column keeps its minimum width); press again to restore |
 | `Ctrl+T` | Open the trajectory scene (same as `/trace`); `q`/`Esc` returns to the conversation |
 | `Ctrl+R` | Open input-history search; repeat or press `Down` for the next result |

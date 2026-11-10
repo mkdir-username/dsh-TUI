@@ -94,6 +94,11 @@ check('mac alias: ctrl+v paste also matches super+v', actionMatches('paste', 'v'
 check('mac alias: a remapped editor combo matches super+g', actionMatches('editor', 'g', { super: true }, true))
 check('mac alias: super+z does NOT match undo (exactPrimary)', !actionMatches('undo', 'z', { super: true }, true))
 check('mac alias: ctrl+z still matches undo', actionMatches('undo', 'z', { ctrl: true }, true))
+// ⌘B: the side-panel toggle shares ctrl+b with toolPark on purpose — Chat asks
+// the park seam first, so the panel only sees the byte when nothing is waiting.
+check('default side panel matches ctrl+b', actionMatches('sidePanel', 'b', { ctrl: true }))
+check('default side panel matches ⌘B (super)', actionMatches('sidePanel', 'b', { super: true }, true))
+check('side panel display string', effectiveComboString('sidePanel') === 'ctrl+b', effectiveComboString('sidePanel'))
 check('no alias on linux: super+v does NOT match paste', !actionMatches('paste', 'v', { super: true }, false))
 check('default paste display string', effectiveComboString('paste') === 'ctrl+v, alt+v', effectiveComboString('paste'))
 
