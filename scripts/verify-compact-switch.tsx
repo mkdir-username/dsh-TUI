@@ -132,6 +132,23 @@ function makeCompaction(script: Script) {
   }
 }
 
+function holdRestructPlan() {
+  let finish!: (result: unknown) => void
+  const result = new Promise(resolve => { finish = resolve })
+  let signal: AbortSignal | undefined
+  return {
+    finish,
+    get signal() { return signal },
+    service: {
+      getProvider: (name: string) => name === 'fork' ? {} : undefined,
+      async startActivation(request: { signal: AbortSignal }) {
+        signal = request.signal
+        return { result }
+      },
+    },
+  }
+}
+
 // ---- 组装 ctx：source snapshot / agents.create 记录调用顺序 -----------------
 function assemble(script: Script, subagents?: {
   getProvider(name: string): unknown
@@ -481,26 +498,20 @@ const toasts = (channel: { notifications: readonly { text: string }[] }) =>
 
 // ==== Rewind retires the old preflight before adopting a new binding ====
 {
-  let finishFork!: (result: unknown) => void
-  const result = new Promise(resolve => { finishFork = resolve })
-  let forkSignal: AbortSignal | undefined
-  const { channel, compaction, agent } = assemble({ kind: 'hang-until-abort' }, {
-    getProvider: name => name === 'fork' ? {} : undefined,
-    async startActivation({ signal }) {
-      forkSignal = signal
-      return { result }
-    },
-  })
+  const fork = holdRestructPlan()
+  const { channel, compaction, agent } = assemble({ kind: 'hang-until-abort' }, fork.service)
   const rpDone = { stopReason: 'completed', output: [{ type: 'text', text: 'RP_SKIP original fork' }] }
   try {
     channel.compact()
     check('scene15: /compact opens preflight on the original session',
-      await settle(() => forkSignal !== undefined && channel.manualCompactionStage?.phase === 'restruct-plan'))
+      await settle(() => fork.signal !== undefined && channel.manualCompactionStage?.phase === 'restruct-plan'))
     const rewound = await channel.rewindTo({ seq: 5, text: '回答 1' })
     check('scene15: rewind adopts a replacement session', rewound === '回答 1' && channel.agentId !== agent.id, toasts(channel))
     check('scene15: replacement starts without progress from the old session',
       channel.manualCompactionStage === undefined && channel.compaction === undefined)
-    check('scene15: rewinding aborts the old preparation', forkSignal?.aborted === true)
+    check('scene15: rewinding aborts the old preparation', fork.signal?.aborted === true)
+    check('scene15: rewinding a preparing session announces cancellation',
+      toasts(channel).includes('已取消并切换会话'))
     channel.compact('--pure')
     check('scene15: the replacement can begin compaction before the old fork responds',
       await settle(() => compaction.calls.length === 1 && compaction.calls[0].agentId === channel.agentId))
@@ -508,7 +519,7 @@ const toasts = (channel: { notifications: readonly { text: string }[] }) =>
     const isHeld = () => channel.pending.some(item => item.heldCompact && item.text === 'queued for the replacement')
     check('scene15: replacement holds input while compacting', await settle(isHeld))
     const row = channel.compaction
-    finishFork(rpDone)
+    fork.finish(rpDone)
     await sleep(150) // 固定窗:探针 Allow the retired fork to report its late result.
     check('scene15: late preflight does not change the replacement progress',
       row !== undefined && channel.compaction === row && compaction.calls.length === 1)
@@ -516,20 +527,16 @@ const toasts = (channel: { notifications: readonly { text: string }[] }) =>
     compaction.calls[0]?.finish()
     check('scene15: replacement releases its input after compaction', await settle(() => !isHeld()))
   } finally {
-    finishFork(rpDone)
+    fork.finish(rpDone)
     channel.releaseContributions()
   }
 }
 
 // ==== Returning to a preparing session holds new input in its new binding ====
 {
-  let finishFork!: (result: unknown) => void
-  const result = new Promise(resolve => { finishFork = resolve })
+  const fork = holdRestructPlan()
   const rpDone = { stopReason: 'completed', output: [{ type: 'text', text: 'RP_SKIP resumed fork' }] }
-  const { channel, agent, compaction } = assemble({ kind: 'hang-until-abort' }, {
-    getProvider: () => ({}),
-    async startActivation() { return { result } },
-  })
+  const { channel, agent, compaction } = assemble({ kind: 'hang-until-abort' }, fork.service)
   try {
     channel.compact()
     await channel.backgroundCurrent()
@@ -539,46 +546,79 @@ const toasts = (channel: { notifications: readonly { text: string }[] }) =>
     channel.submit('queued after return')
     const isHeld = () => channel.pending.some(item => item.heldCompact && item.text === 'queued after return')
     check('scene16: restored preparation holds new input', await settle(isHeld))
-    finishFork(rpDone)
+    fork.finish(rpDone)
     await settle(() => compaction.calls.length === 1)
     compaction.calls[0]?.finish()
     check('scene16: restored cycle releases input only after compaction', await settle(() => !isHeld()))
   } finally {
-    finishFork(rpDone)
+    fork.finish(rpDone)
     channel.releaseContributions()
   }
 }
 
 // ==== Rejected rewind leaves the live agent available for a new cycle ====
 {
-  let finishFork!: (result: unknown) => void
-  const result = new Promise(resolve => { finishFork = resolve })
-  let forkSignal: AbortSignal | undefined
-  const { channel, compaction, agent } = assemble({ kind: 'hang-until-abort' }, {
-    getProvider: () => ({}),
-    async startActivation({ signal }) {
-      forkSignal = signal
-      return { result }
-    },
-  })
+  const fork = holdRestructPlan()
+  const { channel, compaction, agent } = assemble({ kind: 'hang-until-abort' }, fork.service)
   const verdict = { stopReason: 'completed', output: [{ type: 'text', text: 'RP_SKIP retired fork' }] }
   try {
     channel.compact()
     check('scene17: the original preflight starts',
-      await settle(() => forkSignal !== undefined && channel.manualCompactionStage?.phase === 'restruct-plan'))
+      await settle(() => fork.signal !== undefined && channel.manualCompactionStage?.phase === 'restruct-plan'))
     const rewound = await channel.rewindTo({ seq: 1, text: '问题 0' })
     check('scene17: rejected first-turn rewind aborts preflight and keeps the agent',
-      rewound === null && forkSignal?.aborted === true && channel.agentId === agent.id)
+      rewound === null && fork.signal?.aborted === true && channel.agentId === agent.id)
+    channel.submit('send after the rejected rewind')
+    await new Promise<void>(resolve => setImmediate(resolve))
+    check('scene17: the rejected rewind abandons the retired input hold',
+      !channel.pending.some(item => item.heldCompact && item.text === 'send after the rejected rewind'))
     channel.compact('--pure')
     check('scene17: the same agent starts a new compaction',
       await settle(() => compaction.calls.length === 1 && channel.compaction?.cancellable === true))
     const stage = channel.manualCompactionStage
-    finishFork(verdict)
+    fork.finish(verdict)
     await new Promise<void>(resolve => setImmediate(resolve))
     check('scene17: late preflight keeps the new stage on the same agent',
       stage !== undefined && channel.manualCompactionStage === stage)
   } finally {
-    finishFork(verdict)
+    fork.finish(verdict)
+    channel.releaseContributions()
+  }
+}
+
+// ==== Stopping a background agent must only release its own preparation ====
+{
+  const fork = holdRestructPlan()
+  const { channel, compaction, agent } = assemble({ kind: 'hang-until-abort' }, fork.service)
+  const verdict = { stopReason: 'completed', output: [{ type: 'text', text: 'RP_SKIP disposed fork' }] }
+  try {
+    channel.compact()
+    check('scene18: preparation starts on the original agent', await settle(() => fork.signal !== undefined))
+    const parked = await channel.backgroundCurrent()
+    check('scene18: the preparing agent goes to the background', parked.ok && parked.backgroundedSessionId === agent.session.id)
+    channel.compact('--pure')
+    check('scene18: the foreground starts its own compaction', await settle(() => compaction.calls.length === 1))
+    check('scene18: stopping a preparing agent aborts its fork',
+      await channel.stopBackgroundAgent(agent.session.id) && fork.signal?.aborted === true)
+    channel.submit('keep in the foreground hold')
+    check('scene18: stopping a background agent keeps the foreground input hold',
+      await settle(() => channel.pending.some(item => item.heldCompact && item.text === 'keep in the foreground hold')))
+    fork.finish(verdict)
+    await new Promise<void>(resolve => setImmediate(resolve))
+    check('scene18: the stopped fork cannot start another summary', compaction.calls.length === 1)
+  } finally {
+    fork.finish(verdict)
+    channel.releaseContributions()
+  }
+}
+
+{
+  const { channel } = assemble({ kind: 'hang-until-abort' })
+  try {
+    const rewound = await channel.rewindTo({ seq: 5, text: '回答 1' })
+    check('scene19: rewinding an idle session does not announce compaction cancellation',
+      rewound === '回答 1' && !toasts(channel).includes('已取消并切换会话'), toasts(channel))
+  } finally {
     channel.releaseContributions()
   }
 }
