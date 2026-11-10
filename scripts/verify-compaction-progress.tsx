@@ -414,6 +414,19 @@ async function renderRow(compaction, cols, activityPreset) {
     }
   }
   setLang(savedLang)
+
+  const columns = 100
+  const { screen } = renderToScreen(
+    <ui.ThemeProvider theme="dark">
+      <TerminalSizeContext.Provider value={{ columns, rows: 10 }}>
+        <CompactionStatusRow compaction={{ startedAt: Date.now() - 26_000, phase: 'checking' }} />
+      </TerminalSizeContext.Provider>
+    </ui.ThemeProvider>,
+    columns,
+  )
+  const checkingRow = Array.from({ length: columns }, (_, x) => cellAt(screen, x, 1)?.char ?? ' ').join('').trimEnd()
+  check('scene6: checking shows only the phase and elapsed time',
+    /^[·•●] 正在检查压缩条件… · 26s$/u.test(checkingRow), checkingRow)
 }
 
 // ==== 场景 7：挂真实 Chat —— 行在屏上，Esc 真的打到 cancelCompact ============
