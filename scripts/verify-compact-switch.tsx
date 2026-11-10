@@ -359,10 +359,13 @@ const toasts = (channel: { notifications: readonly { text: string }[] }) =>
   channel.compact('--pure')
   check('scene9: another live agent can compact independently', await settle(() => compaction.calls.length === 2))
   const foregroundRow = channel.compaction
+  const foregroundStage = channel.manualCompactionStage
   const notices = channel.notifications.length
   compaction.calls[0].finish()
   await settle(() => compaction.calls[0].finished)
   check('scene9: background completion does not clear foreground progress', channel.compaction === foregroundRow && foregroundRow !== undefined)
+  check('scene9: background completion keeps the foreground stage',
+    foregroundStage !== undefined && channel.manualCompactionStage === foregroundStage)
   check('scene9: background completion does not announce success for the foreground', channel.notifications.length === notices)
   channel.cancelCompact()
   check('scene9: explicit cancel targets the foreground request', await settle(() => compaction.calls[1]?.abortedAt !== undefined))
@@ -542,6 +545,40 @@ const toasts = (channel: { notifications: readonly { text: string }[] }) =>
     check('scene16: restored cycle releases input only after compaction', await settle(() => !isHeld()))
   } finally {
     finishFork(rpDone)
+    channel.releaseContributions()
+  }
+}
+
+// ==== Rejected rewind leaves the live agent available for a new cycle ====
+{
+  let finishFork!: (result: unknown) => void
+  const result = new Promise(resolve => { finishFork = resolve })
+  let forkSignal: AbortSignal | undefined
+  const { channel, compaction, agent } = assemble({ kind: 'hang-until-abort' }, {
+    getProvider: () => ({}),
+    async startActivation({ signal }) {
+      forkSignal = signal
+      return { result }
+    },
+  })
+  const verdict = { stopReason: 'completed', output: [{ type: 'text', text: 'RP_SKIP retired fork' }] }
+  try {
+    channel.compact()
+    check('scene17: the original preflight starts',
+      await settle(() => forkSignal !== undefined && channel.manualCompactionStage?.phase === 'restruct-plan'))
+    const rewound = await channel.rewindTo({ seq: 1, text: '问题 0' })
+    check('scene17: rejected first-turn rewind aborts preflight and keeps the agent',
+      rewound === null && forkSignal?.aborted === true && channel.agentId === agent.id)
+    channel.compact('--pure')
+    check('scene17: the same agent starts a new compaction',
+      await settle(() => compaction.calls.length === 1 && channel.compaction?.cancellable === true))
+    const stage = channel.manualCompactionStage
+    finishFork(verdict)
+    await new Promise<void>(resolve => setImmediate(resolve))
+    check('scene17: late preflight keeps the new stage on the same agent',
+      stage !== undefined && channel.manualCompactionStage === stage)
+  } finally {
+    finishFork(verdict)
     channel.releaseContributions()
   }
 }
