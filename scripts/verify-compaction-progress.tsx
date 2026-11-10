@@ -19,8 +19,10 @@
  *     后缀徽标而不是第二行。
  *
  * 运行：node --import tsx/esm scripts/verify-compaction-progress.tsx
+ * mutation 测试可加 --fail-fast，避免断言失败后继续等待后续帧。
  */
 import './lib/fake-home.mjs'
+import { writeSync } from 'node:fs'
 
 process.env.DSH_TUI_LANG = 'zh'
 
@@ -41,9 +43,16 @@ const [{ createChannel }, { settled, viewportLines }, { Writable, PassThrough },
     import('../src/dsh-adapter/activity-store.js'),
   ])
 
+const failFast = process.argv.includes('--fail-fast')
 let failed = 0
 function check(name, ok, extra = '') {
-  console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}${extra ? `  (${extra})` : ''}`)
+  const message = `${ok ? 'PASS' : 'FAIL'}  ${name}${extra ? `  (${extra})` : ''}`
+  if (!ok && failFast) {
+    // Exiting immediately can truncate output buffered by the command runner's pipe.
+    writeSync(process.stdout.fd, `${message}\n`)
+    process.exit(1)
+  }
+  console.log(message)
   if (!ok) failed += 1
 }
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms))
