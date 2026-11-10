@@ -356,8 +356,11 @@ function signatureParts(
       // height inputs on user rows too — same rationale as the default arm.
       signatureScratch.push(expanded, expandedRows.has(row.id))
       break
+    case 'notice':
+      signatureScratch.push(row.controllerTitle ?? '', expanded, expandedRows.has(row.id))
+      break
     default:
-      // notice / interrupt / local / local-output: height follows
+      // interrupt / local / local-output: height follows
       // text + columns alone (selection/background never change height) —
       // EXCEPT the long-line fold: expanding a folded row swaps ~10 rows of
       // folded text for the raw line (thousands), so both expansion switches
@@ -1583,6 +1586,7 @@ export function MessageList({
               selectionAttached={row.selectionAttached}
               sender={teamSenderOf(row)}
               rowAction={row.action}
+              controllerTitle={row.controllerTitle}
               streaming={displayStreaming}
               thinkingOpen={row.thinkingOpen === true}
               durationMs={row.durationMs}
@@ -1669,6 +1673,7 @@ type MemoRowProps = {
   sender: ChatRow['sender']
   /** Click action carried by the row itself (the controller marker). */
   rowAction: ChatRow['action']
+  controllerTitle: ChatRow['controllerTitle']
   /** Session cwd for the indicator's display-path relativization (T-FIX-01). */
   sessionCwd: string | undefined
   streaming: boolean
@@ -1778,6 +1783,7 @@ function TranscriptRow({
   selectionAttached,
   sender,
   rowAction,
+  controllerTitle,
   sessionCwd,
   streaming,
   thinkingOpen,
@@ -2051,6 +2057,19 @@ function TranscriptRow({
       )
     }
     case 'notice':
+      if (controllerTitle !== undefined) {
+        return (
+          <Box marginTop={1} flexDirection="column" ref={ref}>
+            <Box onClick={rowAction === undefined ? undefined : () => onRowCommand?.(rowAction)}>
+              <Divider title={` ${controllerTitle} `} />
+            </Box>
+            <Box paddingLeft={2} flexDirection="column" onClick={foldClickable ? foldOnClick : undefined}>
+              <Text dimColor>Сообщение Stop-хуков</Text>
+              <Text wrap="wrap">{displayText}</Text>
+            </Box>
+          </Box>
+        )
+      }
       // A row carrying an action (the controller marker) is a control, not a
       // fold: the click runs the command even when the text is long enough to
       // fold.

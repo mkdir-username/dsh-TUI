@@ -115,6 +115,7 @@ export interface ChatRow {
   /** A click on this row dispatches a local command through the screen's
    *  dispatcher (the controller marker is the only producer today). */
   action?: { command: string; input?: string }
+  controllerTitle?: string
   text: string
   /** Durable session image blocks, loaded lazily through the attachment store. */
   images?: readonly TranscriptImage[]

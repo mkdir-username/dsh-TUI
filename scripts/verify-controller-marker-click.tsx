@@ -30,8 +30,8 @@ const [{ Context }, { CommandRuntime }, { Session, SessionId }, { createExternal
   import('../src/dsh-adapter/channel/owner.js'),
 ])
 
-const COLS = 100
-const ROWS = 30
+const COLS = 68
+const ROWS = 44
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
 
 let failed = 0
@@ -100,13 +100,21 @@ const listeners = new Set<() => void>()
 const markerRow = {
   id: 1,
   kind: 'notice',
-  text: '⚖ Контролёр №4: MISSED_ACTION 0.9 · клик — оценить',
-  action: { command: 'handoff-rate', input: '4' },
+  text: 'Почему: [точная причина](literal) ' + 'проверка '.repeat(8) + 'перенос\n\n'
+    + 'Действие: продолжить\nДлинная строка ' + 'x'.repeat(1020) + ' Длинный хвост\n'
+    + 'Последняя строка',
+  controllerTitle: '⚖ Контролёр №4: MISSED_ACTION 0.9 · клик — оценить',
+  action: { command: 'handoff-rate', input: '4 @0' },
+  seq: 0,
 }
 const channel: any = {
   whaleIdle: false,
   version: 0,
-  rows: [markerRow],
+  rows: [
+    { id: 0, kind: 'assistant', text: 'Ответ до контролёра' },
+    markerRow,
+    { id: 2, kind: 'assistant', text: 'Ответ после контролёра' },
+  ],
   status: 'idle',
   ready: true,
   agentBindingGeneration: 0,
@@ -155,7 +163,7 @@ const inst = await render(
 await sleep(600)
 
 const lines = screenLines()
-const rowIdx = lines.findIndex(l => l.includes('Контролёр'))
+const rowIdx = lines.findIndex(l => l.includes('⚖ Контролёр'))
 check('маркер контролёра виден в чате', rowIdx >= 0, rowIdx >= 0 ? `строка ${rowIdx}: ${lines[rowIdx]!.trim()}` : '')
 if (rowIdx < 0) {
   console.log('=== экран ===')
@@ -164,21 +172,47 @@ if (rowIdx < 0) {
 }
 check('до клика команда не вызывалась', calls.length === 0, JSON.stringify(calls))
 
-// Клик по заголовку строки: та же клетка, что видит человек.
-const col1 = lines[rowIdx]!.indexOf('Контролёр') + 1
-clickCell(col1, rowIdx + 1)
-// Two single clicks must be farther apart than the terminal's 500ms double-click window.
+const whyIdx = lines.findIndex(l => l.includes('Почему: [точная причина](literal)'))
+const wrapIdx = lines.findIndex(l => l.includes('перенос'))
+const actionIdx = lines.findIndex(l => l.includes('Действие: продолжить'))
+const tailIdx = lines.findIndex(l => l.includes('Последняя строка'))
+const beforeIdx = lines.findIndex(l => l.includes('Ответ до контролёра'))
+const afterIdx = lines.findIndex(l => l.includes('Ответ после контролёра'))
+check('до клика видны причина, перенос, действие и конец между ответами',
+  beforeIdx >= 0 && beforeIdx < rowIdx && rowIdx < whyIdx && whyIdx < wrapIdx
+    && wrapIdx < actionIdx && actionIdx < tailIdx && tailIdx < afterIdx)
+check('сверхдлинная строка свёрнута', !lines.some(l => l.includes('Длинный хвост')))
+
+if (whyIdx >= 0) {
+  clickCell(lines[whyIdx]!.indexOf('Почему') + 1, whyIdx + 1)
+  await sleep(650)
+}
+check('клик по телу раскрывает длинную строку без вызова оценки',
+  screenLines().some(l => l.includes('Длинный хвост')) && calls.length === 0, JSON.stringify(calls))
+
+const clickedLines = screenLines()
+const clickedRow = clickedLines.findIndex(l => l.includes('⚖ Контролёр'))
+const col1 = clickedLines[clickedRow]!.indexOf('Контролёр') + 1
+clickCell(col1, clickedRow + 1)
 await sleep(650)
 
-check('клик по строке вызвал handoff-rate 4',
-  calls.length === 1 && calls[0] === '4', JSON.stringify(calls))
+check('клик по заголовку вызвал handoff-rate 4 @0',
+  calls.length === 1 && calls[0] === '4 @0', JSON.stringify(calls))
 
-// Второй клик — повторный вход, а не потерянный: окно оценки открывается снова.
-clickCell(col1, rowIdx + 1)
+clickCell(col1, clickedRow + 1)
 await sleep(500)
-check('повторный клик снова вызвал handoff-rate 4',
-  calls.length === 2 && calls[1] === '4', JSON.stringify(calls))
+check('повторный клик снова вызвал handoff-rate 4 @0',
+  calls.length === 2 && calls[1] === '4 @0', JSON.stringify(calls))
 check('оба клика прошли без уведомлений', notifications.length === 0, JSON.stringify(notifications))
+
+stdin.write('\x0f')
+await sleep(200)
+stdin.write('/')
+await sleep(200)
+stdin.write('Контролёр №4')
+await sleep(250)
+const searchLine = screenLines().find(line => line.includes('/Контролёр №4'))
+check('поиск по заголовку находит один блок контролёра', searchLine?.includes('1/1') === true, searchLine)
 
 await inst.unmount()
 unregister()

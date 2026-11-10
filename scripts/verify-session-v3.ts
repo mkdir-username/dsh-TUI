@@ -198,20 +198,66 @@ try {
       'Цитата: ПОДСКАЗКА КОНТРОЛЁРА СДАЧИ ХОДА №16 (вердикт SHELVED, уверенность 0.7):',
       'Цитата: ОБЯЗАТЕЛЬСТВО ПРОШЛОГО ХОДА НЕ ЗАКРЫТО №17 (hook stop-handoff-control, попытка 1):',
     ]
-    for (const text of headers) {
+    const reason = '\n\n  Почему: [точная причина](literal)\nДействие:\tпродолжить\n\n  Последняя строка  \n'
+    const plainHeaders = headers.map(header => header.replace(/\x1b\[[\d;]*m/g, ''))
+    const controllerBodies = plainHeaders.map((header, index) =>
+      header + reason + ([1, 2].includes(index) ? `Цитата внутри причины: ${headers[0]}\n` : ''))
+    const delivered = headers.map((header, index) => header + controllerBodies[index]!.slice(plainHeaders[index]!.length))
+    delivered[0] = delivered[0]!.replace('MISSED_ACTION', '\x1b]8;;file:///fixture\x1b\\MISSED_ACTION\x1b]8;;\x1b\\')
+      .replaceAll('\n', '\r\n') + '\x07'
+
+    const before = answer(s, 'before controller')
+    p.projector.renderEvent(before)
+    const events = delivered.map(text => {
       const message = createUserMessage({ content: [{ type: 'text', text }], source: { kind: 'hooks-claude-code' } })
-      p.projector.renderEvent(s.append('user/message', message, { surfaceOp: 'append' }))
-    }
-    assert.deepEqual(p.state.rows.map(({ kind, text, action }) => ({ kind, text, action })), [
-      { kind: 'notice', text: '⚖ Контролёр №3: MISSED_ACTION 0.9 · клик — оценить', action: { command: 'handoff-rate', input: '3 @1' } },
-      { kind: 'notice', text: '⚖ Контролёр №4: SHELVED 0.7 · клик — оценить', action: { command: 'handoff-rate', input: '4 @2' } },
-      { kind: 'notice', text: '⚖ Контролёр №5: OBLIGATION · клик — оценить', action: { command: 'handoff-rate', input: '5 @3' } },
-      { kind: 'notice', text: '⚖ Контролёр №14: SHELVED 0.7 · клик — оценить', action: { command: 'handoff-rate', input: '14 @4' } },
-      { kind: 'notice', text: '⚖ Контролёр №15: OBLIGATION · клик — оценить', action: { command: 'handoff-rate', input: '15 @5' } },
-    ], 'controller actions identify the original event and leave unrelated hook context hidden')
+      const event = s.append('user/message', message, { surfaceOp: 'append' })
+      p.projector.renderEvent(event)
+      return event
+    })
+    const lookalike = createUserMessage({
+      content: [{ type: 'text', text: headers[0] + '\nUNRELATED SOURCE BODY' }],
+      source: { kind: 'tool-jobs' } as never,
+    })
+    const foreign = s.append('user/message', lookalike, { surfaceOp: 'append' })
+    p.projector.renderEvent(foreign)
+    const quote = createUserMessage({
+      content: [{ type: 'text', text: 'Цитата: ' + headers[0] + '\nQUOTED BODY' }],
+      source: { kind: 'hooks-claude-code' },
+    })
+    const quoted = s.append('user/message', quote, { surfaceOp: 'append' })
+    p.projector.renderEvent(quoted)
+    const after = answer(s, 'after controller', '', 2)
+    p.projector.renderEvent(after)
+
+    const summaries = [
+      '⚖ Контролёр №3: MISSED_ACTION 0.9 · клик — оценить',
+      '⚖ Контролёр №4: SHELVED 0.7 · клик — оценить',
+      '⚖ Контролёр №5: OBLIGATION · клик — оценить',
+      '⚖ Контролёр №14: SHELVED 0.7 · клик — оценить',
+      '⚖ Контролёр №15: OBLIGATION · клик — оценить',
+    ]
+    const numbers = [3, 4, 5, 14, 15]
+    assert.deepEqual(p.state.rows.map(({ kind, text, action, seq, ...row }) => ({
+      kind, text, action, seq, controllerTitle: (row as { controllerTitle?: string }).controllerTitle,
+    })), [
+      { kind: 'assistant', text: 'before controller', seq: before.seq, action: undefined, controllerTitle: undefined },
+      ...summaries.map((title, index) => ({
+        kind: 'notice',
+        text: controllerBodies[index],
+        seq: events[index]!.seq,
+        action: { command: 'handoff-rate', input: `${numbers[index]} @${events[index]!.seq}` },
+        controllerTitle: title,
+      })),
+      ...[foreign, quoted].map(event => ({
+        kind: 'notice', text: summaries[0], seq: event.seq,
+        action: { command: 'handoff-rate', input: `3 @${event.seq}` }, controllerTitle: undefined,
+      })),
+      { kind: 'assistant', text: 'after controller', seq: after.seq, action: undefined, controllerTitle: undefined },
+    ], 'controller text and actions follow the original events and leave unrelated bodies hidden')
     const replay = projection(s)
     replay.projector.replayEvents(s.snapshotEvents())
-    assert.deepEqual(replay.state.rows, p.state.rows, 'numbered controller actions survive replay')
+    const transcript = (rows: typeof p.state.rows) => rows.map(({ fresh: _fresh, ...row }) => row)
+    assert.deepEqual(transcript(replay.state.rows), transcript(p.state.rows), 'controller transcript survives replay')
   }
   console.log('PASS hard, soft and obligation controller markers on live and replay')
 

@@ -311,6 +311,7 @@ export function createDshTranslator(deps: DshTranslatorDeps) {
   const translateUserMessage = (event: SessionEvent<'user/message'>): readonly AgentEvent[] => {
     // compat(dsh 0.2.0, log): a 0.2.0 mailbox delivery reads as the relay it became.
     const data = teamMailboxAsRelay(event.data)
+    const sourceKind = (data.source as { kind: string }).kind
     const base = { id: data.id, anchor: String(event.seq), seq: event.seq, time: event.time, blocks: data.content }
     // Both legacy and V4 checkpoints render as a folded summary rather than
     // disappearing with the other injected context.
@@ -323,7 +324,7 @@ export function createDshTranslator(deps: DshTranslatorDeps) {
     // transcript bubbles — they drive the goal panel's projection (replayed on
     // resume/rewind like every other event; the snapshot itself arrives as
     // the top-level `goal/change` event).
-    if ((data.source as { kind: string }).kind === 'goal') {
+    if (sourceKind === 'goal') {
       const source = data.source as unknown as { round: number; change?: GoalChangePayload }
       if (source.round > 0) return [{ type: 'goal.change', operation: 'round', round: source.round }]
       const change = source.change
@@ -331,7 +332,7 @@ export function createDshTranslator(deps: DshTranslatorDeps) {
       if (change === undefined || change.kind !== 'goal/change') return NO_EVENTS
       return [goalChange(change)]
     }
-    if ((data.source as { kind: string }).kind === 'model-selection') {
+    if (sourceKind === 'model-selection') {
       return [{ type: 'notice', level: 'info', text: textOf(data.content) }]
     }
     // An Agent Teams peer message: a bubble labelled with its sender.
@@ -343,7 +344,10 @@ export function createDshTranslator(deps: DshTranslatorDeps) {
     // transcript-facing text.
     // Local: the handoff controller's injected verdict is shown in the chat, so the
     // text has to survive translation.
-    if (data.source.kind !== 'user') return [{ type: 'user.message', ...base, source: 'injected', text: textOf(data.content) }]
+    if (data.source.kind !== 'user') return [{
+      type: 'user.message', ...base, source: 'injected', text: textOf(data.content),
+      ...(sourceKind === 'hooks-claude-code' ? { label: 'dsh-hook' } : {}),
+    }]
     // compat(dsh 0.2.0, log): a 0.2.0 teammate's first prompt drops its identity block.
     const content = promptSeen ? data.content : withoutTeammateReminder(data).content
     promptSeen = true

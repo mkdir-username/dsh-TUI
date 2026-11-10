@@ -361,6 +361,8 @@ function searchableText(row: ChatRow): string {
       return row.tool
         ? `${row.tool.name} ${row.tool.argsText} ${row.tool.resultText ?? ''} ${row.tool.errorText ?? ''}`
         : ''
+    case 'notice':
+      return row.controllerTitle === undefined ? row.text : `${row.controllerTitle}\n${row.text}`
     default:
       return row.text
   }

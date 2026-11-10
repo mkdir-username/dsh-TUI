@@ -13,6 +13,7 @@
  * plugin renderer seam. The order of wall-clock reads is part of that
  * contract (the goldens pin `startedAt`/`durationMs` with a stepping clock).
  */
+import stripAnsi from 'strip-ansi'
 import type { ChannelUi } from '../adapter/ports/channel-ui.js'
 import type { ChatRow, SelectionAttachment, TodoPanelItem, ToolCallView, TurnOutcome, TurnUsageSummary } from '../adapter/ports/channel-view.js'
 import { markChannelReadDirty } from '../adapter/channel/read-view.js'
@@ -861,19 +862,27 @@ export function createChannelProjection(state: ProjectionState, deps: ChannelPro
       deps.rowIds.value += 1
       return
     }
-    // Local: dsh renders no text for hook-injected context, so the controller's
-    // verdict got a marker row of its own (the rating plugin still opens its window).
     if (event.source === 'injected' && event.text) {
-      const plain = event.text.replace(/\x1b\][^\x1b]*\x1b\\/g, '').replace(/\x1b\[[\d;]*m/g, '')
-      const mark = /КОНТРОЛЬ СДАЧИ ХОДА №(\d+) \(hook stop-handoff-control[^,]*, вердикт (\w+), уверенность ([\d.]+)/.exec(plain)
-        ?? /^ПОДСКАЗКА КОНТРОЛЁРА СДАЧИ ХОДА №(\d+) \(вердикт (\w+), уверенность ([\d.]+)/.exec(plain)
-      const number = mark?.[1] ?? /^ОБЯЗАТЕЛЬСТВО ПРОШЛОГО ХОДА НЕ ЗАКРЫТО №(\d+) \(hook stop-handoff-control(?:-dsh)?, попытка \d+\):/.exec(plain)?.[1]
+      const [block] = event.blocks
+      const delivered = event.label === 'dsh-hook' && event.blocks.length === 1 && block?.type === 'text' && block.text !== undefined
+        ? stripAnsi(block.text).replace(/\r\n/g, '\n').replace(/[\x00-\x08\x0b-\x1f\x7f-\x9f]/g, '')
+        : undefined
+      const plain = delivered?.trim() ?? event.text.replace(/\x1b\][^\x1b]*\x1b\\/g, '').replace(/\x1b\[[\d;]*m/g, '')
+      const hard = /КОНТРОЛЬ СДАЧИ ХОДА №(\d+) \(hook stop-handoff-control[^,]*, вердикт (\w+), уверенность ([\d.]+)/.exec(plain)
+      const heading = hard?.index === 0 ? hard
+        : /^ПОДСКАЗКА КОНТРОЛЁРА СДАЧИ ХОДА №(\d+) \(вердикт (\w+), уверенность ([\d.]+)/.exec(plain)
+      const obligation = /^ОБЯЗАТЕЛЬСТВО ПРОШЛОГО ХОДА НЕ ЗАКРЫТО №(\d+) \(hook stop-handoff-control(?:-dsh)?, попытка \d+\):/.exec(plain)?.[1]
+      const mark = heading ?? (obligation === undefined ? hard : null)
+      const number = mark?.[1] ?? obligation
       if (number !== undefined) {
         const verdict = mark === null ? 'OBLIGATION' : `${mark[2]} ${mark[3]}`
+        const title = `⚖ Контролёр №${number}: ${verdict} · клик — оценить`
+        const controllerText = heading !== null || obligation !== undefined ? delivered : undefined
         appendRow({
           id: deps.rowIds.value,
           kind: 'notice',
-          text: `⚖ Контролёр №${number}: ${verdict} · клик — оценить`,
+          text: controllerText ?? title,
+          ...(controllerText === undefined ? {} : { controllerTitle: title }),
           action: { command: 'handoff-rate', input: `${number} @${event.seq}` },
           seq: event.seq,
         })
