@@ -681,4 +681,46 @@ const toasts = (channel: { notifications: readonly { text: string }[] }) =>
   }
 }
 
+// ==== The parked preflight stops polling when the foreground changes ====
+{
+  const fork = holdRestructPlan()
+  const { channel, compaction, agent, emit, live } = assemble({ kind: 'hang-until-abort' }, fork.service)
+  const verdict = { stopReason: 'completed', output: [{ type: 'text', text: 'RP_SKIP parked waiter' }] }
+  const realSetTimeout = globalThis.setTimeout
+  const polls: Array<() => void> = []
+  globalThis.setTimeout = ((callback, ms, ...args) => {
+    if (ms === 250 && callback.name === 'tick') {
+      polls.push(callback)
+      return { unref() {} }
+    }
+    return realSetTimeout(callback, ms, ...args)
+  }) as typeof setTimeout
+  try {
+    channel.compact()
+    agent.status = 'running'
+    emit('session/event', agent.session, ev('turn/start', { turn: 2 }))
+    fork.finish(verdict)
+    check('original working agent waits', await settle(() => channel.working &&
+      channel.manualCompactionStage?.phase === 'wait-idle' && polls.length === 1))
+
+    const parked = await channel.backgroundCurrent()
+    const foreground = live.get(channel.sessionId)
+    check('original parks behind another agent', parked.ok && foreground !== undefined && foreground !== agent)
+    if (foreground !== undefined) {
+      foreground.status = 'running'
+      emit('session/event', foreground.session, ev('turn/start', { turn: 0 }))
+    }
+    check('new foreground also has an active turn', channel.working)
+    polls.shift()?.()
+    await new Promise<void>(resolve => setImmediate(resolve))
+    check('parked old waiter stops polling a busy new foreground', polls.length === 0)
+    check('old waiter does not notify a timeout or start a summary',
+      !toasts(channel).includes('ход не освободился') && compaction.calls.length === 0)
+  } finally {
+    globalThis.setTimeout = realSetTimeout
+    fork.finish(verdict)
+    channel.releaseContributions()
+  }
+}
+
 process.exit(failed)
