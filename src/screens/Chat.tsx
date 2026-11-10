@@ -4396,7 +4396,9 @@ export function Chat({
     runCommandRef.current = runCommand
   })
   const runRowCommand = React.useCallback((action: { command: string; input?: string }): void => {
-    void runCommandRef.current(action.command, action.input ?? '')
+    const input = action.input ?? ''
+    const rawInput = /^[^\t\n\r ]/u.test(input) ? ` ${input}` : input
+    void runCommandRef.current(action.command, rawInput)
   }, [])
 
   // === Message-selection mode (Shift+↑ message actions) ===
@@ -7295,6 +7297,7 @@ export function Chat({
                 {React.createElement(view.component, {
                   React,
                   ui: STATUS_VIEW_UI,
+                  sessionId: channel.sessionId,
                 })}
               </Box>
             </Box>

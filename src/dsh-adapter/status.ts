@@ -101,6 +101,8 @@ export interface TuiStatusViewUi {
 export interface TuiStatusViewProps {
   readonly React: typeof React
   readonly ui: TuiStatusViewUi
+  /** Bound session ID, when supplied by the host. */
+  readonly sessionId?: string
 }
 
 /** Cleanup handle returned for an admitted rich status registration. */

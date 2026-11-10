@@ -3,14 +3,14 @@
  *
  * Строка `⚖ Контролёр №N` несёт `action: { command: 'handoff-rate', input: 'N' }`
  * (см. src/channel/projection.ts). Регрессия монтирует настоящий Chat с такой
- * строкой и шлёт SGR press+release в её ячейку: клик обязан дойти до
- * `channel.runExternalCommandOutcome('handoff-rate', 'N')` — того же пути, что у
- * набранной команды. Без этого маркер остаётся декоративным текстом.
+ * строкой и шлёт SGR press+release в её ячейку. Реальный реестр DSH должен
+ * выполнить `handoff-rate` с номером из строки при каждом клике.
  *
  * 运行：node --import tsx/esm scripts/verify-controller-marker-click.tsx
  */
 process.env.FORCE_COLOR = '3'
 process.env.DSH_TUI_THEME = 'dark'
+process.env.DSH_TUI_LANG = 'en'
 
 const [{ PassThrough, Writable }, React, { Terminal: XTerm }, { render, AlternateScreen }, { Chat }, { QuestionStore }, { completeCommands, LOCAL_COMMANDS }] = await Promise.all([
   import('node:stream'),
@@ -20,6 +20,14 @@ const [{ PassThrough, Writable }, React, { Terminal: XTerm }, { render, Alternat
   import('../src/screens/Chat.js'),
   import('../src/dsh-adapter/questions.js'),
   import('../src/commands.js'),
+])
+const [{ Context }, { CommandRuntime }, { Session, SessionId }, { createExternalCommandInvoker }, { createComposerImages }, { createChannelOwner }] = await Promise.all([
+  import('@deepseek-ai/cordis'),
+  import('@deepseek-ai/dsh-commands'),
+  import('@deepseek-ai/dsh-session'),
+  import('../src/dsh-adapter/channel/external-commands.js'),
+  import('../src/dsh-adapter/channel/composer-images.js'),
+  import('../src/dsh-adapter/channel/owner.js'),
 ])
 
 const COLS = 100
@@ -62,7 +70,32 @@ function clickCell(col1: number, row1: number): void {
   stdin.write(`\x1b[<0;${col1};${row1}m`)
 }
 
-const calls: Array<{ name: string; input: string }> = []
+const calls: string[] = []
+const notifications: string[] = []
+const ctx = new Context()
+const commands = new CommandRuntime(ctx)
+const session = Session.create(SessionId('controller-marker-click'))
+const agent = { id: session.id, session, ctx }
+const owner = createChannelOwner()
+const unregister = commands.register({
+  name: 'handoff-rate',
+  description: 'Rate the controller verdict',
+  handler({ rawInput }) {
+    calls.push(rawInput.trim())
+    return { kind: 'success' }
+  },
+})
+const { invoke } = createExternalCommandInvoker(ctx, {
+  commandService: commands,
+  runtime: { mode: 'legacy', slices: [] },
+  agent: () => agent as never,
+  capture: () => 0,
+  bindingCurrent: () => true,
+  allows: () => true,
+  composer: createComposerImages(ctx, owner, { generation: () => 0 }),
+  attachments: () => undefined,
+  notify: text => notifications.push(text),
+})
 const listeners = new Set<() => void>()
 const markerRow = {
   id: 1,
@@ -102,7 +135,7 @@ const channel: any = {
   submit: () => {},
   cancel: () => {},
   clear: () => {},
-  notify: () => {},
+  notify: (text: string) => notifications.push(text),
   listModels: () => Promise.resolve([]),
   listSessions: () => [],
   setResumeTarget: () => {},
@@ -110,10 +143,7 @@ const channel: any = {
   mcpStatus: () => [],
   pushLocal: () => {},
   commandCompletions: (input: string) => completeCommands(input),
-  runExternalCommandOutcome: (name: string, rawInput: string) => {
-    calls.push({ name, input: rawInput })
-    return Promise.resolve({ kind: 'success', text: 'окно оценки для блока №4', consumeDraft: false })
-  },
+  runExternalCommandOutcome: invoke,
 }
 
 const inst = await render(
@@ -137,18 +167,21 @@ check('до клика команда не вызывалась', calls.length =
 // Клик по заголовку строки: та же клетка, что видит человек.
 const col1 = lines[rowIdx]!.indexOf('Контролёр') + 1
 clickCell(col1, rowIdx + 1)
-await sleep(500)
+// Two single clicks must be farther apart than the terminal's 500ms double-click window.
+await sleep(650)
 
 check('клик по строке вызвал handoff-rate 4',
-  calls.length === 1 && calls[0]!.name === 'handoff-rate' && calls[0]!.input === '4',
-  JSON.stringify(calls))
+  calls.length === 1 && calls[0] === '4', JSON.stringify(calls))
 
 // Второй клик — повторный вход, а не потерянный: окно оценки открывается снова.
 clickCell(col1, rowIdx + 1)
 await sleep(500)
 check('повторный клик снова вызвал handoff-rate 4',
-  calls.length === 2 && calls[1]!.input === '4', JSON.stringify(calls))
+  calls.length === 2 && calls[1] === '4', JSON.stringify(calls))
+check('оба клика прошли без уведомлений', notifications.length === 0, JSON.stringify(notifications))
 
 await inst.unmount()
+unregister()
+owner.dispose()
 console.log(failed === 0 ? 'verify-controller-marker-click: all checks passed' : `verify-controller-marker-click: ${failed} failed`)
 process.exit(failed === 0 ? 0 : 1)

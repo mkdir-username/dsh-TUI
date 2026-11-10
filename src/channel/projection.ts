@@ -866,12 +866,15 @@ export function createChannelProjection(state: ProjectionState, deps: ChannelPro
     if (event.source === 'injected' && event.text) {
       const plain = event.text.replace(/\x1b\][^\x1b]*\x1b\\/g, '').replace(/\x1b\[[\d;]*m/g, '')
       const mark = /КОНТРОЛЬ СДАЧИ ХОДА №(\d+) \(hook stop-handoff-control[^,]*, вердикт (\w+), уверенность ([\d.]+)/.exec(plain)
-      if (mark !== null) {
+        ?? /^ПОДСКАЗКА КОНТРОЛЁРА СДАЧИ ХОДА №(\d+) \(вердикт (\w+), уверенность ([\d.]+)/.exec(plain)
+      const number = mark?.[1] ?? /^ОБЯЗАТЕЛЬСТВО ПРОШЛОГО ХОДА НЕ ЗАКРЫТО №(\d+) \(hook stop-handoff-control(?:-dsh)?, попытка \d+\):/.exec(plain)?.[1]
+      if (number !== undefined) {
+        const verdict = mark === null ? 'OBLIGATION' : `${mark[2]} ${mark[3]}`
         appendRow({
           id: deps.rowIds.value,
           kind: 'notice',
-          text: '⚖ Контролёр №' + mark[1] + ': ' + mark[2] + ' ' + mark[3] + ' · клик — оценить',
-          action: { command: 'handoff-rate', input: mark[1] },
+          text: `⚖ Контролёр №${number}: ${verdict} · клик — оценить`,
+          action: { command: 'handoff-rate', input: `${number} @${event.seq}` },
           seq: event.seq,
         })
         deps.rowIds.value += 1

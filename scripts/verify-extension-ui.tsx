@@ -743,11 +743,13 @@ const plugin = pluginCtx
 // ── C. Chat UI integration ───────────────────────────────────────────────
 const LOCAL_COMMANDS: never[] = []
 function makeChannel() {
+  const listeners = new Set<() => void>()
   return {
     version: 0,
     rows: [],
     status: 'idle' as const,
     sessionTitle: 'probe',
+    sessionId: 'status-session-first',
     agentId: 'probe',
     model: 'model-00',
     provider: 'fake-provider',
@@ -768,7 +770,15 @@ function makeChannel() {
     commandList: LOCAL_COMMANDS,
     notifications: [],
     contextSegments: { system: 0, prompt: 0, assistant: 0, thinking: 0, tools: 0 },
-    subscribe: () => () => {},
+    subscribe(listener: () => void) {
+      listeners.add(listener)
+      return () => { listeners.delete(listener) }
+    },
+    switchSession(sessionId: string) {
+      this.sessionId = sessionId
+      this.version += 1
+      for (const listener of listeners) listener()
+    },
     submitCalls: [] as string[],
     submit(text: string) { this.submitCalls.push(text) },
     steer() {},
@@ -1014,9 +1024,13 @@ const screen = (back = 30) => plainText(stdout.frames.slice(-back))
   }
   const getSnapshot = () => value
   let receivedKit = ''
+  let receivedSessionId: string | undefined
+  let mounts = 0
   let leakedKeyEvents = 0
-  const RichStatus = ({ React: HostReact, ui }: import('../src/dsh-adapter/status.js').TuiStatusViewProps) => {
+  const RichStatus = ({ React: HostReact, ui, sessionId }: import('../src/dsh-adapter/status.js').TuiStatusViewProps) => {
     receivedKit = Object.keys(ui).sort().join(',')
+    receivedSessionId = sessionId
+    HostReact.useEffect(() => { mounts += 1 }, [])
     const current = HostReact.useSyncExternalStore(subscribe, getSnapshot)
     const { columns } = ui.useTerminalSize()
     return HostReact.createElement(
@@ -1054,6 +1068,12 @@ const screen = (back = 30) => plainText(stdout.frames.slice(-back))
     }), plainText(stdout.frames.slice(richMark)).slice(-500))
   check('ui: rich status view receives only Box/Image/Text/useTerminalSize',
     receivedKit === 'Box,Image,Text,useTerminalSize', receivedKit)
+  check('ui: rich status view receives the active session ID',
+    receivedSessionId === 'status-session-first', String(receivedSessionId))
+  channel.switchSession('status-session-next')
+  check('ui: rich status view receives the new session ID without remounting',
+    await settled(() => receivedSessionId === 'status-session-next') && mounts === 1,
+    `sessionId=${receivedSessionId} mounts=${mounts}`)
   check('ui: rich status view is clipped to its declared maxRows',
     !plainText(stdout.frames.slice(richMark)).includes('THIS-ROW-MUST-BE-CLIPPED'),
     plainText(stdout.frames.slice(richMark)).slice(-500))

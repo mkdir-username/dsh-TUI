@@ -186,6 +186,36 @@ try {
   console.log('PASS V3 anchors, failed attempts, reattachment and canonical settlement')
 
   {
+    const s = session('controller-markers')
+    const p = projection(s)
+    const headers = [
+      'КОНТРОЛЬ СДАЧИ ХОДА №3 (hook stop-handoff-control, вердикт MISSED_ACTION, уверенность 0.9):',
+      'ПОДСКАЗКА КОНТРОЛЁРА СДАЧИ ХОДА №4 (вердикт SHELVED, уверенность 0.7 — приглашение пересмотреть, не приказ):',
+      'ОБЯЗАТЕЛЬСТВО ПРОШЛОГО ХОДА НЕ ЗАКРЫТО №5 (hook stop-handoff-control, попытка 1):',
+      'ПОДСКАЗКА КОНТРОЛЁРА СДАЧИ ХОДА №14 (вердикт \x1b[1mSHELVED\x1b[0m, уверенность 0.7 — приглашение пересмотреть, не приказ):',
+      'ОБЯЗАТЕЛЬСТВО ПРОШЛОГО ХОДА НЕ ЗАКРЫТО №15 (hook stop-handoff-control, попытка 10):',
+      'Другая подсказка хука №6 (вердикт SHELVED, уверенность 0.7):',
+      'Цитата: ПОДСКАЗКА КОНТРОЛЁРА СДАЧИ ХОДА №16 (вердикт SHELVED, уверенность 0.7):',
+      'Цитата: ОБЯЗАТЕЛЬСТВО ПРОШЛОГО ХОДА НЕ ЗАКРЫТО №17 (hook stop-handoff-control, попытка 1):',
+    ]
+    for (const text of headers) {
+      const message = createUserMessage({ content: [{ type: 'text', text }], source: { kind: 'hooks-claude-code' } })
+      p.projector.renderEvent(s.append('user/message', message, { surfaceOp: 'append' }))
+    }
+    assert.deepEqual(p.state.rows.map(({ kind, text, action }) => ({ kind, text, action })), [
+      { kind: 'notice', text: '⚖ Контролёр №3: MISSED_ACTION 0.9 · клик — оценить', action: { command: 'handoff-rate', input: '3 @1' } },
+      { kind: 'notice', text: '⚖ Контролёр №4: SHELVED 0.7 · клик — оценить', action: { command: 'handoff-rate', input: '4 @2' } },
+      { kind: 'notice', text: '⚖ Контролёр №5: OBLIGATION · клик — оценить', action: { command: 'handoff-rate', input: '5 @3' } },
+      { kind: 'notice', text: '⚖ Контролёр №14: SHELVED 0.7 · клик — оценить', action: { command: 'handoff-rate', input: '14 @4' } },
+      { kind: 'notice', text: '⚖ Контролёр №15: OBLIGATION · клик — оценить', action: { command: 'handoff-rate', input: '15 @5' } },
+    ], 'controller actions identify the original event and leave unrelated hook context hidden')
+    const replay = projection(s)
+    replay.projector.replayEvents(s.snapshotEvents())
+    assert.deepEqual(replay.state.rows, p.state.rows, 'numbered controller actions survive replay')
+  }
+  console.log('PASS hard, soft and obligation controller markers on live and replay')
+
+  {
     const s = session('child-stream')
     const store = new SubagentActivityStore()
     const id = 'child'
