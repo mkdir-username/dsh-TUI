@@ -761,5 +761,53 @@ function screenBottom(chat) {
   }
 }
 
+// ==== An active turn outlives the preflight's idle deadline ====
+{
+  const fork = holdRestructPlan()
+  const { channel, compaction, agent, handlers } = assemble('hang-until-abort', [], fork.service)
+  const verdict = { stopReason: 'completed', output: [{ type: 'text', text: 'RP_SKIP timed-out waiter' }] }
+  const realNow = Date.now
+  const realSetTimeout = globalThis.setTimeout
+  const polls: Array<() => void> = []
+  let unsubscribe: (() => void) | undefined
+  globalThis.setTimeout = ((callback, ms, ...args) => {
+    if (ms === 250 && callback.name === 'tick') {
+      polls.push(callback)
+      return { unref() {} }
+    }
+    return realSetTimeout(callback, ms, ...args)
+  }) as typeof setTimeout
+  try {
+    channel.compact()
+    check('fork activation begins', fork.requests.length === 1)
+    agent.status = 'running'
+    handlers.get('session/event')(agent.session, ev('turn/start', { turn: 2 }))
+    check('foreground turn runs', channel.working)
+    fork.finish(verdict)
+    check('preflight waits and queues exactly one real polling callback',
+      await settle(() => channel.manualCompactionStage?.phase === 'wait-idle' && polls.length === 1))
+
+    const phases: string[] = []
+    unsubscribe = channel.subscribe(() => phases.push(channel.manualCompactionStage?.phase ?? 'cleared'))
+    Date.now = () => realNow() + 300_001
+    polls.shift()?.()
+    await new Promise<void>(resolve => setImmediate(resolve))
+    Date.now = realNow
+
+    const warnings = channel.notifications.filter(note => note.text.includes('ход не освободился'))
+    const expiry = warnings[0]
+    check('deadline emits one 5-minute warning for 12 seconds', warnings.length === 1 &&
+      expiry?.text.includes('за 5 минут') && expiry.color === 'warning' && expiry.timeoutMs === 12_000)
+    check('deadline never enters checking or runs a summary', channel.working &&
+      !phases.includes('checking') && compaction.calls.length === 0 && channel.manualCompactionStage === undefined)
+  } finally {
+    unsubscribe?.()
+    Date.now = realNow
+    globalThis.setTimeout = realSetTimeout
+    fork.finish(verdict)
+    channel.releaseContributions()
+  }
+}
+
 console.log(failed === 0 ? '\nOK: compaction progress row' : `\n${failed} FAILED`)
 process.exit(failed)
