@@ -623,4 +623,28 @@ const toasts = (channel: { notifications: readonly { text: string }[] }) =>
   }
 }
 
+// ==== A completed background preflight cannot replace the active stage ====
+{
+  const fork = holdRestructPlan()
+  const { channel, compaction, agent } = assemble({ kind: 'hang-until-abort' }, fork.service)
+  const verdict = { stopReason: 'completed', output: [{ type: 'text', text: 'RP_SKIP parked fork' }] }
+  try {
+    channel.compact()
+    check('scene20: the original preflight starts before parking', await settle(() => fork.signal !== undefined))
+    const parked = await channel.backgroundCurrent()
+    check('scene20: the preparing agent parks', parked.ok && parked.backgroundedSessionId === agent.session.id)
+    channel.compact('--pure')
+    check('scene20: the foreground compaction starts', await settle(() => compaction.calls.length === 1))
+    const stage = channel.manualCompactionStage
+    fork.finish(verdict)
+    await new Promise<void>(resolve => setImmediate(resolve))
+    check('scene20: the parked fork cannot replace the foreground stage',
+      stage !== undefined && channel.manualCompactionStage === stage)
+    check('scene20: the parked fork cannot start another summary', compaction.calls.length === 1)
+  } finally {
+    fork.finish(verdict)
+    channel.releaseContributions()
+  }
+}
+
 process.exit(failed)
