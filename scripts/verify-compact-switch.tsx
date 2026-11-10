@@ -633,6 +633,12 @@ const toasts = (channel: { notifications: readonly { text: string }[] }) =>
     check('scene20: the original preflight starts before parking', await settle(() => fork.signal !== undefined))
     const parked = await channel.backgroundCurrent()
     check('scene20: the preparing agent parks', parked.ok && parked.backgroundedSessionId === agent.session.id)
+    check('scene20: the fresh foreground starts without another session’s stage',
+      channel.manualCompactionStage === undefined && channel.compaction === undefined)
+    channel.submit('first input in the fresh foreground')
+    await new Promise<void>(resolve => setImmediate(resolve))
+    check('scene20: the fresh foreground does not hold input before compacting',
+      !channel.pending.some(item => item.heldCompact && item.text === 'first input in the fresh foreground'))
     channel.compact('--pure')
     check('scene20: the foreground compaction starts', await settle(() => compaction.calls.length === 1))
     const stage = channel.manualCompactionStage
