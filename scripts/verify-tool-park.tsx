@@ -164,7 +164,7 @@ async function mount(harness: ReturnType<typeof makeHarness>, channel: Record<st
 let notices: string[] = []
 
 /** Mount one transcript state, press Ctrl+B once, report what the key did. */
-async function press(rows: readonly unknown[], jobControl: unknown, parked: { callId: string; command: string } | null = { callId: 'call-1', command: 'bats suite.bats' }, layout: { cols?: number; rows?: number; fullscreen?: boolean } = {}, resetPanel = true, taps = 1) {
+async function press(rows: readonly unknown[], jobControl: unknown, parked: { callId: string; command: string } | null = { callId: 'call-1', command: 'bats suite.bats' }, layout: { cols?: number; rows?: number; fullscreen?: boolean } = {}, resetPanel = true, taps = 1, bytes = CTRL_B) {
   notices = []
   const parks: Array<{ callId: string; command: string } | null> = []
   const control = jobControl === 'passthrough'
@@ -177,7 +177,7 @@ async function press(rows: readonly unknown[], jobControl: unknown, parked: { ca
   await sleep(120)
   const before = harness.screen()
   for (let tap = 0; tap < taps; tap += 1) {
-    harness.stdin.write(CTRL_B)
+    harness.stdin.write(bytes)
     // 固定窗:探针 键后重绘没有可观测完成条件（车位是桩，不产生行变化）。
     await sleep(160)
   }
@@ -217,6 +217,10 @@ const BACKGROUND_CARD = toolRow({
   // 三态开关走完一个来回必须留在同一个挂载里：重挂会重置焦点位。
   await press([RUNNING], 'passthrough', null, wide, true, 2)
   check('a second tap in the same mount closes it', !prefs.getSidePanelOpen())
+  // Ghostty шлёт ⌘B как CSI-u с битом super (9 = 1 + 8): парсер и матчер
+  // обязаны довести его до того же переключателя, что и Ctrl+B.
+  await press([RUNNING], 'passthrough', null, wide, true, 1, '\x1b[98;9u')
+  check('⌘B through the kitty encoding opens the panel too', prefs.getSidePanelOpen())
   await press([RUNNING], 'passthrough', undefined, wide)
   check('a parked call never touches the panel', !prefs.getSidePanelOpen())
 }
