@@ -655,4 +655,30 @@ const toasts = (channel: { notifications: readonly { text: string }[] }) =>
   }
 }
 
+// ==== Disposing the preparing agent retires its input hold ====
+{
+  const fork = holdRestructPlan()
+  const { channel, agent, emit } = assemble({ kind: 'hang-until-abort' }, fork.service)
+  try {
+    channel.compact()
+    check('live preparation starts',
+      await settle(() => fork.signal !== undefined && channel.manualCompactionStage?.phase === 'restruct-plan'))
+    channel.submit('input before disposal')
+    check('preparation holds input before disposal',
+      await settle(() => channel.pending.some(item => item.heldCompact && item.text === 'input before disposal')))
+
+    emit('agent/disposed', { agent })
+    channel.submit('input after disposal')
+    check('disposing held cycle abandons its hold',
+      await settle(() => channel.pending.some(item => item.text === 'input after disposal' &&
+        item.docked === true && item.heldCompact !== true)))
+    check('disposing held cycle aborts preparation with its cause',
+      fork.signal?.aborted === true && fork.signal.reason?.message === 'agent disposed')
+    check('disposing held cycle clears its stage', channel.manualCompactionStage === undefined)
+  } finally {
+    fork.finish({ stopReason: 'completed', output: [{ type: 'text', text: 'RP_SKIP disposed' }] })
+    channel.releaseContributions()
+  }
+}
+
 process.exit(failed)
