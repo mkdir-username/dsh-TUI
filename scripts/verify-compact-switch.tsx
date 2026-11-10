@@ -641,6 +641,8 @@ const toasts = (channel: { notifications: readonly { text: string }[] }) =>
     check('scene20: the parked fork cannot replace the foreground stage',
       stage !== undefined && channel.manualCompactionStage === stage)
     check('scene20: the parked fork cannot start another summary', compaction.calls.length === 1)
+    check('scene20: the parked fork does not publish a notice in the foreground',
+      !toasts(channel).includes('RP_SKIP parked fork'), toasts(channel))
   } finally {
     fork.finish(verdict)
     channel.releaseContributions()
