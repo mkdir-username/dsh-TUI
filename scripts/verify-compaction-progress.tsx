@@ -779,7 +779,9 @@ function screenBottom(chat) {
   }) as typeof setTimeout
   try {
     channel.compact()
-    check('fork activation begins', fork.requests.length === 1)
+    // The plugin decision is asked before the fork; the turn below must land
+    // while the fork already runs, or the cycle would refuse it as busy.
+    check('fork activation begins', await settle(() => fork.requests.length === 1))
     agent.status = 'running'
     handlers.get('session/event')(agent.session, ev('turn/start', { turn: 2 }))
     check('foreground turn runs', channel.working)

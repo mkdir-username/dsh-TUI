@@ -697,6 +697,9 @@ const toasts = (channel: { notifications: readonly { text: string }[] }) =>
   }) as typeof setTimeout
   try {
     channel.compact()
+    // The plugin decision is asked before the fork; the turn below must land
+    // while the fork already runs, or the cycle would refuse it as busy.
+    await settle(() => fork.signal !== undefined)
     agent.status = 'running'
     emit('session/event', agent.session, ev('turn/start', { turn: 2 }))
     fork.finish(verdict)
