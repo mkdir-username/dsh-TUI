@@ -1,5 +1,5 @@
 /** DSH-only read adapter, mounted by the official profile loader (no UI). */
-import { createSessionFork, latestTitle } from './fork.mjs'
+import { createSessionFork, latestTitle, titleText } from './fork.mjs'
 import { ownerOf, readSessionOwners } from './mounts.mjs'
 
 export const name = 'dst-cli-management'
@@ -33,7 +33,7 @@ async function withTitles(query, page) {
   try {
     const results = await query.readTitleSnapshots(page.map(row => row.sessionId))
     for (const result of results) {
-      if (result.status === 'fulfilled') titles.set(result.sessionId, result.value?.title?.text ?? null)
+      if (result.status === 'fulfilled') titles.set(result.sessionId, titleText(result.value))
     }
   } catch {
     // Titles are a convenience: an unavailable fold must not fail the listing.
@@ -48,7 +48,8 @@ function sessionKind(header) {
 }
 
 function trimmedText(event) {
-  const content = event.data?.message?.content
+  // A user message carries its blocks in `content`, an assistant one in `message.content`.
+  const content = event.data?.content ?? event.data?.message?.content
   if (!Array.isArray(content)) return undefined
   const text = content.filter(block => block?.type === 'text').map(block => block.text).join('')
   if (text === '') return undefined

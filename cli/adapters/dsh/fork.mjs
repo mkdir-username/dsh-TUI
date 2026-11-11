@@ -23,12 +23,19 @@ function coded(code, message) {
   return Object.assign(new Error(message), { code })
 }
 
+/** Title text of a `SessionTitleObservation`: `title` is the folded snapshot, itself carrying the text. */
+export function titleText(observation) {
+  const snapshot = observation?.title
+  const text = typeof snapshot === 'string' ? snapshot : snapshot?.title
+  return typeof text === 'string' && text !== '' ? text : null
+}
+
 /** Latest title text for a session, or `null`; a failing fold is not an error. */
 export async function latestTitle(query, sessionId) {
   try {
     const results = await query.readTitleSnapshots([sessionId])
     const result = results.find(entry => entry.sessionId === sessionId && entry.status === 'fulfilled')
-    return result?.value?.title?.text ?? null
+    return titleText(result?.value)
   } catch {
     return null
   }

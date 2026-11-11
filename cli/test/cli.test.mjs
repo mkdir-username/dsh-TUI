@@ -139,7 +139,7 @@ test('status and tail describe one session without shipping the whole log', asyn
   ]
   const ctx = context({ sessionQuery: {
     readSession: async () => ({ session: { id: 's-1', cwd: '/tmp', createdAt: 1, isSeeded: true, parentSession: 'p', delegationDepth: 0 }, inheritedEventCount: 3, events }),
-    readTitleSnapshots: async ids => ids.map(sessionId => ({ sessionId, status: 'fulfilled', value: { title: { text: 'Заголовок', source: 'user' } } })),
+    readTitleSnapshots: async ids => ids.map(sessionId => ({ sessionId, status: 'fulfilled', value: { session: { id: 's-1' }, title: { title: 'Заголовок', messageSeqs: [], source: { kind: 'user' }, eventSeq: 4, updatedAt: 5 } } })),
   } })
   const status = await manage(ctx, { kind: 'session', action: 'status', sessionId: 's-1' })
   assert.equal(status.kind, 'fork')
@@ -154,6 +154,18 @@ test('status and tail describe one session without shipping the whole log', asyn
   assert.deepEqual(tail.rows.map(row => row.type), ['assistant/message', 'turn/end', 'session/title'])
   assert.equal(tail.cursor, 4)
   assert(tail.rows[0].text.endsWith('…'))
+})
+
+test('tail keeps the text of a user message', async () => {
+  const events = [
+    { seq: 0, type: 'user/message', time: 1, data: { role: 'user', content: [{ type: 'text', text: 'Починить заголовок' }] } },
+    { seq: 1, type: 'assistant/message', time: 2, data: { message: { content: [{ type: 'text', text: 'Готово' }] } } },
+  ]
+  const ctx = context({ sessionQuery: {
+    readSession: async () => ({ session: { id: 's-4', cwd: '/tmp', createdAt: 1, isSeeded: false, delegationDepth: 0 }, inheritedEventCount: 0, events }),
+  } })
+  const tail = await manage(ctx, { kind: 'session', action: 'tail', sessionId: 's-4' })
+  assert.deepEqual(tail.rows.map(row => row.text), ['Починить заголовок', 'Готово'])
 })
 
 test('fork boundary stops at the last closed turn', () => {
@@ -204,6 +216,20 @@ test('session fork writes the child through persistence and verifies it', async 
   assert.deepEqual(appended.map(entry => `${entry.seq}:${entry.type}`), ['0:turn/end', '1:session/end-seed', '2:session/title'])
 })
 
+test('session fork titles the child after the source title', async () => {
+  const snapshot = { session: { type: 'session', version: 4, id: 's-1', cwd: '/tmp', createdAt: 1, isSeeded: false, delegationDepth: 0 }, events: [{ seq: 0, type: 'turn/end', time: 1, data: {} }] }
+  const appended = []
+  const ctx = context({
+    sessionQuery: {
+      readSession: async id => id === 's-1' ? snapshot : { session: { ...snapshot.session, id, parentSession: 's-1', isSeeded: true }, inheritedEventCount: 1, events: appended },
+      readTitleSnapshots: async ids => ids.map(sessionId => ({ sessionId, status: 'fulfilled', value: { session: { id: sessionId }, title: { title: 'Исправление заголовка', messageSeqs: [], source: { kind: 'provider' }, eventSeq: 1, updatedAt: 2 } } })),
+    },
+    sessionPersistence: { create: async () => ({ append: async events => { appended.push(...events) }, flush: async () => {}, close: async () => {} }) },
+  })
+  const child = await manage(ctx, { kind: 'session', action: 'fork', sessionId: 's-1' })
+  assert.equal(child.title, 'Fork: Исправление заголовка')
+})
+
 test('session fork refuses a source without a closed turn', async () => {
   const ctx = context({
     sessionQuery: {
@@ -229,7 +255,7 @@ test('list marks root, fork and the live owner; titles only on request', async (
     ]
     const ctx = context({ sessionQuery: {
       listSessions: async () => rows,
-      readTitleSnapshots: async ids => ids.map(sessionId => ({ sessionId, status: 'fulfilled', value: { title: { text: `t-${sessionId}` } } })),
+      readTitleSnapshots: async ids => ids.map(sessionId => ({ sessionId, status: 'fulfilled', value: { session: { id: sessionId }, title: { title: `t-${sessionId}`, messageSeqs: [], source: { kind: 'user' }, eventSeq: 1, updatedAt: 1 } } })),
     } })
     const plain = await manage(ctx, { kind: 'session', action: 'list', cwd: 'here' })
     assert.equal(plain.find(row => row.sessionId === 'root-1').kind, 'root')
