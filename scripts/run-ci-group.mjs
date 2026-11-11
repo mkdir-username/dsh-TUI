@@ -699,6 +699,8 @@ const GROUPS = {
     ["verify-clean-render-text", ['node', '--import', 'tsx/esm', 'scripts/verify-clean-render-text.tsx']],
     // 流式片段的帧预算：3000 行规模下 cpu/frame 门槛 12ms（修复前 18ms）
     ["verify-transcript-delta-cost", ['node', '--import', 'tsx/esm', 'scripts/verify-transcript-delta-cost.tsx']],
+    // rail 之后的空闲：burst 结束必须 0 帧、CPU ≤5%（冻结会话的症状）
+    ["verify-idle-quiescence", ['node', '--import', 'tsx/esm', 'scripts/verify-idle-quiescence.tsx']],
 // 会话标题回归：选择器标题宽容读取（带未标记第三方事件的日志
 // 不能让标题退化成目录名），/rename 的最后一条 session/title 优先。
     ["verify-session-titles", ['node', 'scripts/verify-session-titles.mjs']],
