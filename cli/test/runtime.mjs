@@ -39,6 +39,16 @@ try {
   assert.equal(run(['run', '--continue', 'keyless third turn']).sessionId, first.sessionId)
   assert.equal(run(['session', 'list']).data[0].sessionId, first.sessionId)
   assert.equal(run(['session', 'show', first.sessionId]).data.session.id, first.sessionId)
+  const status = run(['session', 'status', first.sessionId]).data
+  assert.equal(status.sessionId, first.sessionId)
+  assert.equal(status.working, false)
+  assert.equal(status.lastEventType, 'turn/end')
+  assert(status.eventCount > 0)
+  assert.equal(status.ownerPid, null)
+  const tail = run(['session', 'tail', first.sessionId]).data
+  assert.equal(tail.cursor, status.lastSeq)
+  assert(tail.rows.length > 0 && tail.rows.length <= 20)
+  assert(tail.rows.every(row => typeof row.type === 'string'))
   assert.match(run(['session', 'export', first.sessionId]).data, /CLI_RUNTIME_OK/u)
   assert(Array.isArray(run(['models', 'list']).data))
   assert(Array.isArray(run(['skills', 'list']).data))

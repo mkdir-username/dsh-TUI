@@ -1,5 +1,11 @@
 /** DSH-only read adapter, mounted by the official profile loader (no UI). */
+import { ownerOf, readSessionOwners } from './mounts.mjs'
+
 export const name = 'dst-cli-management'
+
+const TAIL_DEFAULT = 20
+const TAIL_MAX = 200
+const TAIL_TEXT_MAX = 500
 
 function service(ctx, key) {
   const value = ctx.get(key)
@@ -15,6 +21,73 @@ function headerDto(record) {
     ...(h.agentPreset === undefined ? {} : { agentPreset: h.agentPreset }),
     persisted: record.persisted, live: record.live,
   }
+}
+
+function sessionKind(header) {
+  if (header.origin === 'subagent') return 'subagent'
+  if (header.isSeeded === true && header.parentSession !== undefined) return 'fork'
+  return 'root'
+}
+
+function trimmedText(event) {
+  const content = event.data?.message?.content
+  if (!Array.isArray(content)) return undefined
+  const text = content.filter(block => block?.type === 'text').map(block => block.text).join('')
+  if (text === '') return undefined
+  return text.length > TAIL_TEXT_MAX ? `${text.slice(0, TAIL_TEXT_MAX)}…` : text
+}
+
+async function titleOf(query, sessionId) {
+  try {
+    const results = await query.readTitleSnapshots([sessionId])
+    const result = results.find(entry => entry.sessionId === sessionId && entry.status === 'fulfilled')
+    return result?.value?.title?.text ?? null
+  } catch {
+    // A title is presentation detail: a failing title fold must not fail the read.
+    return null
+  }
+}
+
+async function describe(ctx, request) {
+  const query = service(ctx, 'sessionQuery')
+  const snapshot = await query.readSession(request.sessionId)
+  const header = snapshot.session
+  const events = snapshot.events ?? []
+  const last = events.at(-1)
+  const lastTurnEnd = events.findLast(event => event.type === 'turn/end')
+  const owner = ownerOf(readSessionOwners(), request.sessionId)
+  return {
+    sessionId: header.id,
+    title: await titleOf(query, request.sessionId),
+    cwd: header.cwd ?? null,
+    createdAt: header.createdAt,
+    parentSession: header.parentSession ?? null,
+    agentPreset: header.agentPreset ?? null,
+    kind: sessionKind(header),
+    inheritedEventCount: snapshot.inheritedEventCount ?? 0,
+    eventCount: events.length,
+    lastSeq: last?.seq ?? null,
+    lastEventType: last?.type ?? null,
+    working: last === undefined ? false : last.type !== 'turn/end',
+    lastTurnEndSeq: lastTurnEnd?.seq ?? null,
+    ownerPid: owner === undefined ? null : owner.pid,
+    persisted: true,
+  }
+}
+
+async function tail(ctx, request) {
+  const query = service(ctx, 'sessionQuery')
+  const snapshot = await query.readSession(request.sessionId)
+  const events = snapshot.events ?? []
+  const limit = Math.min(TAIL_MAX, request.limit ?? TAIL_DEFAULT)
+  const rows = events.slice(-limit).map(event => {
+    const row = { seq: event.seq, type: event.type, time: event.time }
+    const text = trimmedText(event)
+    if (text !== undefined) row.text = text
+    if (event.type === 'tool/call') row.tool = event.data?.name ?? null
+    return row
+  })
+  return { sessionId: snapshot.session.id, cursor: events.at(-1)?.seq ?? null, returned: rows.length, rows }
 }
 
 function compatible(snapshot, cwd) {
@@ -39,6 +112,8 @@ function markdown(snapshot) {
 export async function manage(ctx, request) {
   if (request.kind === 'session') {
     const query = service(ctx, 'sessionQuery')
+    if (request.action === 'status') return describe(ctx, request)
+    if (request.action === 'tail') return tail(ctx, request)
     if (request.action === 'show') return query.readSession(request.sessionId)
     if (request.action === 'export') return markdown(await query.readSurface(request.sessionId))
     const rows = (await query.listSessions()).filter(row => request.all || row.header.cwd === request.cwd)

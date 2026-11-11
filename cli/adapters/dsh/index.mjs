@@ -84,7 +84,7 @@ export function createDshAdapter({ locate = locateDsh, start = startProcess, dia
       return {
         adapter: 'dsh-headless', runtimeVersion: runtime.version,
         validated: validated.has(runtime.version),
-        operations: ['run', 'session.list', 'session.show', 'session.export', 'continue', 'models.list', 'skills.list', 'mcp.status', 'auth.status', 'dsh'],
+        operations: ['run', 'session.list', 'session.show', 'session.export', 'session.status', 'session.tail', 'continue', 'models.list', 'skills.list', 'mcp.status', 'auth.status', 'dsh'],
         output: ['text', 'json', 'stream-json'],
         limits: { inputBytes: 8 * 1024 * 1024, recordBytes: 32 * 1024 * 1024 },
         limitations: ['committed-message-stream-not-token-stream', 'official-headless-resume-restrictions', 'profile-not-tui-preferences', 'mcp-registered-tools-not-connection-health', 'no-credential-values-or-login', 'profile-code-is-trusted'],

@@ -11,9 +11,10 @@ const valueFlags = new Map([
 ])
 const kinds = new Set(['run', 'session', 'models', 'skills', 'mcp', 'auth', 'capabilities', 'dsh'])
 const management = {
-  session: ['list', 'show', 'export'], models: ['list'], skills: ['list'],
+  session: ['list', 'show', 'export', 'status', 'tail'], models: ['list'], skills: ['list'],
   mcp: ['status'], auth: ['status'],
 }
+const sessionById = ['show', 'export', 'status', 'tail']
 
 function usage(message) { throw new CliError('INVALID_ARGUMENT', message, 2) }
 
@@ -78,15 +79,16 @@ export function parse(argv, cwd = process.cwd()) {
   } else if (management[kind]) {
     request.action = positional.shift() ?? management[kind][0]
     if (!management[kind].includes(request.action)) usage(`Unknown ${kind} action ${request.action}`)
-    if (kind === 'session' && ['show', 'export'].includes(request.action)) {
+    if (kind === 'session' && sessionById.includes(request.action)) {
       if (request.sessionId || !positional[0]) usage(`session ${request.action} requires one positional session id`)
       request.sessionId = positional.shift()
     }
     if (positional.length) usage('Unexpected positional arguments')
     if (request.continue || request.model || request.permission) usage('Run-only option used outside run mode')
     if (request.provider && kind !== 'models') usage('--provider is a models list option')
-    if ((request.all || request.limit) && !(kind === 'session' && request.action === 'list')) usage('--all/--limit require session list')
-    if (request.sessionId && !(kind === 'session' && ['show', 'export'].includes(request.action))) usage('--session-id is a run option')
+    if (request.all && !(kind === 'session' && request.action === 'list')) usage('--all requires session list')
+    if (request.limit !== undefined && !(kind === 'session' && ['list', 'tail'].includes(request.action))) usage('--limit requires session list or tail')
+    if (request.sessionId && !(kind === 'session' && sessionById.includes(request.action))) usage('--session-id is a run option')
   } else {
     if (positional.length || request.continue || request.sessionId || request.model || request.provider || request.permission || request.all || request.limit) usage('Unexpected capability arguments')
   }
@@ -123,6 +125,8 @@ Commands:
   session list            List sessions (current cwd; --all, --limit N)
   session show <id>        Read the validated durable session log
   session export <id>      Export visible text as Markdown (JSON with --json)
+  session status <id>      Activity, kind, owner and counters for one session
+  session tail <id>        Recent events with trimmed text (--limit N)
   models list             List registered provider models (--provider ID)
   skills list             List global profile skills for this cwd
   mcp status              Report registered MCP tools, not connection health
