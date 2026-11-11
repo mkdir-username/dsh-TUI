@@ -5834,7 +5834,8 @@ export function Chat({
       // CLEARS a non-empty prompt (single press) and only arms the
       // double-press exit when the input is empty; ctrl+d keeps the
       // time-based double-press exit regardless.
-      if (input === 'c' && !channel.working && channel.compaction?.cancellable === true) {
+      if (input === 'c' && !channel.working
+        && (channel.compaction?.cancellable === true || channel.manualCompactionStage?.cancellable === true)) {
         // Ctrl+C during a manual compaction stops the compaction instead of
         // arming the double-press exit: exiting the process mid-bracket is how
         // a session log ends up with an unmatched `compaction/start`. Ctrl+D

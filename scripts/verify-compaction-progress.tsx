@@ -619,6 +619,19 @@ async function mountChat(channel, cols = 100, rows = 30, activityStore) {
   await lineChat.instance.unmount()
 }
 
+// ==== 场景 7b：Ctrl+C 在 restruct-plan 期间也停整个 цикл ==================
+{
+  const stage = makeChatChannel({
+    manualCompactionStage: { phase: 'restruct-plan', startedAt: Date.now() - 2_000, cancellable: true },
+  })
+  const stageChat = await mountChat(stage.channel, 44)
+  await sleep(120) // 固定窗:pacing 等按键处理器挂载
+  stageChat.stdin.write('\x03')
+  check('scene7b: Ctrl+C during restruct-plan reaches cancelCompact',
+    await settled(() => stage.calls.cancelCompact === 1, { timeoutMs: 2000 }), String(stage.calls.cancelCompact))
+  await stageChat.instance.unmount()
+}
+
 function holdRestructPlan() {
   let finish
   const result = new Promise(resolve => { finish = resolve })
