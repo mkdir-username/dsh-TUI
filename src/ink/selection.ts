@@ -48,6 +48,17 @@ export type SelectionRow = {
 }
 
 /**
+ * Content columns of the ScrollBox a selection belongs to. Selection
+ * coordinates are screen-buffer cells, but only cells INSIDE this span can
+ * hold the content the selection was made on: the right gutter (timeline
+ * rail / scrollbar) and any ScrollBox padding are outside it. Follow
+ * attribution checks the anchor column against the same span
+ * (pickFollowForSelection), so every column reset here must stay inside —
+ * a screen-edge reset silently drops all later follow events.
+ */
+export type SelectionViewportColumns = { left: number; right: number }
+
+/**
  * Selection state for fullscreen mode: the anchor/focus cell pair plus
  * the off-screen row accumulators captured during drag-to-scroll.
  */
@@ -696,7 +707,10 @@ export function moveFocus(s: SelectionState, col: number, row: number): void {
  * @param dRow - signed row offset to shift by.
  * @param minRow - lowest allowed row (viewport top).
  * @param maxRow - highest allowed row (viewport bottom).
- * @param width - screen width, used for the clamp-edge column.
+ * @param width - screen width, used for the clamp-edge column fallback.
+ * @param viewport - content columns of the owning ScrollBox; a clamped
+ *   point's column is reset to THIS edge, not the screen edge, so follow
+ *   attribution keeps accepting the anchor (see SelectionViewportColumns).
  */
 export function shiftSelection(
   s: SelectionState,
@@ -704,6 +718,7 @@ export function shiftSelection(
   minRow: number,
   maxRow: number,
   width: number,
+  viewport?: SelectionViewportColumns,
 ): void {
   if (!s.anchor || !s.focus) return
   // Virtual rows track pre-clamp positions so reverse scrolls restore
@@ -762,10 +777,15 @@ export function shiftSelection(
   }
   // Clamp col depends on which EDGE (not dRow direction): virtual tracking
   // means a top-clamped point can stay top-clamped during a dRow>0 reverse
-  // shift — dRow-based clampCol would give it the bottom col.
+  // shift — dRow-based clampCol would give it the bottom col. The edge is
+  // the owning ScrollBox's content edge, not the screen edge: a screen-edge
+  // column sits in the gutter, outside the viewport pickFollowForSelection
+  // checks, and kills follow attribution for the rest of the gesture.
+  const edgeLo = viewport?.left ?? 0
+  const edgeHi = viewport?.right ?? width - 1
   const shift = (p: Point, vRow: number): Point => {
-    if (vRow < minRow) return { col: 0, row: minRow }
-    if (vRow > maxRow) return { col: width - 1, row: maxRow }
+    if (vRow < minRow) return { col: edgeLo, row: minRow }
+    if (vRow > maxRow) return { col: edgeHi, row: maxRow }
     return { col: p.col, row: vRow }
   }
   s.anchor = shift(s.anchor, vAnchor)
@@ -778,8 +798,8 @@ export function shiftSelection(
   if (s.anchorSpan) {
     const sp = (p: Point): Point => {
       const r = p.row + dRow
-      if (r < minRow) return { col: 0, row: minRow }
-      if (r > maxRow) return { col: width - 1, row: maxRow }
+      if (r < minRow) return { col: edgeLo, row: minRow }
+      if (r > maxRow) return { col: edgeHi, row: maxRow }
       return { col: p.col, row: r }
     }
     s.anchorSpan = {
@@ -1075,6 +1095,8 @@ export function shiftSelectionForViewportTranslation(
  * @param oldBottom - viewport bottom before this frame's layout.
  * @param newTop - viewport top after this frame's layout.
  * @param newBottom - viewport bottom after this frame's layout.
+ * @param viewport - content columns of the owning ScrollBox; captured bands
+ *   and clamped endpoints stay inside it (see captureScrolledRows).
  */
 export function shiftSelectionForViewportResize(
   s: SelectionState,
@@ -1083,6 +1105,7 @@ export function shiftSelectionForViewportResize(
   oldBottom: number,
   newTop: number,
   newBottom: number,
+  viewport?: SelectionViewportColumns,
 ): void {
   if (!s.anchor) return
   // Degenerate ranges. A ScrollBox can fully collapse — chrome taller than
@@ -1113,9 +1136,9 @@ export function shiftSelectionForViewportResize(
     const drop = Math.min(oldTop - newTop, s.scrolledOffAbove.length)
     s.scrolledOffAbove.length -= drop
   }
-  if (newTop > oldTop) captureScrolledRows(s, screen, oldTop, newTop - 1, 'above')
+  if (newTop > oldTop) captureScrolledRows(s, screen, oldTop, newTop - 1, 'above', 0, viewport)
   if (newBottom < oldBottom)
-    captureScrolledRows(s, screen, newBottom + 1, oldBottom, 'below')
+    captureScrolledRows(s, screen, newBottom + 1, oldBottom, 'below', 0, viewport)
   if (!s.focus) {
     // Bare press (no drag motion yet, focus still null): shiftSelection
     // needs both ends — clamp the anchor alone so a chrome mount can't
@@ -1125,7 +1148,7 @@ export function shiftSelectionForViewportResize(
     s.virtualAnchorRow = raw < newTop || raw > newBottom ? raw : undefined
     return
   }
-  shiftSelection(s, 0, newTop, newBottom, screen.width)
+  shiftSelection(s, 0, newTop, newBottom, screen.width, viewport)
 }
 
 /** A scroll event reported by a ScrollBox this frame (follow or wheel
@@ -1722,11 +1745,17 @@ export function getSelectedText(s: SelectionState, screen: Screen): string {
  *
  * side='above': rows scrolling out the top (dragging down, anchor=start).
  * side='below': rows scrolling out the bottom (dragging up, anchor=end).
+ * The anchor-column reset goes to the owning ScrollBox's CONTENT edge
+ * (viewport), never the screen edge: the right gutter sits outside the
+ * viewport that pickFollowForSelection checks by column, so a screen-edge
+ * column would silently stop every later follow event.
  * @param s - the selection state to update.
  * @param screen - the screen buffer to read rows from.
  * @param firstRow - first viewport row that is about to scroll out.
  * @param lastRow - last viewport row that is about to scroll out.
  * @param side - which viewport edge the rows scroll out of.
+ * @param screenRowOffset - current rows map to previous screen rows by this.
+ * @param viewport - content columns of the owning ScrollBox.
  */
 export function captureScrolledRows(
   s: SelectionState,
@@ -1735,6 +1764,7 @@ export function captureScrolledRows(
   lastRow: number,
   side: 'above' | 'below',
   screenRowOffset = 0,
+  viewport?: SelectionViewportColumns,
 ): void {
   const b = selectionBounds(s)
   if (!b || firstRow > lastRow) return
@@ -1746,15 +1776,15 @@ export function captureScrolledRows(
   if (lo > hi) return
 
   const width = screen.width
-  const edgeLo = s.fence?.colStart ?? 0
-  const edgeHi = s.fence?.colEnd ?? width - 1
+  const edgeLo = s.fence?.colStart ?? viewport?.left ?? 0
+  const edgeHi = s.fence?.colEnd ?? viewport?.right ?? width - 1
   const captured: SelectionRow[] = []
   for (let row = lo; row <= hi; row++) {
     const screenRow = row - screenRowOffset
     const pane = paneSpan(s, screen, screenRow)
     if (s.paneId !== undefined && !pane) continue
-    const colStart = Math.max(row === start.row ? start.col : 0, pane?.start ?? s.fence?.colStart ?? 0)
-    const colEnd = Math.min(row === end.row ? end.col : width - 1, pane ? pane.end - 1 : s.fence?.colEnd ?? width - 1)
+    const colStart = Math.max(row === start.row ? start.col : 0, pane?.start ?? s.fence?.colStart ?? viewport?.left ?? 0)
+    const colEnd = Math.min(row === end.row ? end.col : width - 1, pane ? pane.end - 1 : s.fence?.colEnd ?? viewport?.right ?? width - 1)
     if (colStart > colEnd || (s.paneId !== undefined && (screen.noSelect.subarray(screenRow * width + colStart, screenRow * width + colEnd + 1).every(bit => bit === 1) || pane?.excluded?.some(range => range.start <= colStart && range.end > colEnd)))) continue
     captured.push(extractRowText(
       screen, screenRow, colStart, colEnd,

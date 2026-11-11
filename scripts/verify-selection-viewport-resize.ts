@@ -443,6 +443,47 @@ function applyFollowDrain(
   check('C15 focus remains at the mouse after both changes', sel.focus, { col: 0, row: 5 })
 }
 
+// ── Case 16: resize reset keeps the anchor column inside the CONTENT
+// viewport (narrower than the screen by the right gutter) ──
+{
+  const screen = buildScreen(
+    Object.fromEntries(
+      Array.from({ length: 14 }, (_, row) => [row, rowText(`O${String(row).padStart(2, '0')}`)]),
+    ),
+  )
+  const viewport = { left: 0, right: W - 3 } // two gutter columns
+  const sel = makeSelection({ col: 3, row: 9 }, { col: 1, row: 5 }, true)
+  // Chrome below shrinks the viewport [0..9] → [0..7]: the bottom band
+  // [8..9] leaves, and its end (the anchor row) resets the anchor column.
+  shiftSelectionForViewportResize(sel, screen, 0, 9, 0, 7, viewport)
+  check('C16 band captured from the PRE frame', texts(sel.scrolledOffBelow), [
+    rowText('O08'),
+    'O09', // end row keeps the anchor's col constraint (cols 0..3)
+  ])
+  check('C16 anchor column reset to the CONTENT right edge', sel.anchor, {
+    col: viewport.right,
+    row: 7,
+  })
+  check('C16 clamps track the pre-clamp row', sel.virtualAnchorRow, 9)
+  check(
+    'C16 follow attribution still accepts the reset anchor',
+    pickFollowForSelection(
+      [
+        {
+          delta: -1,
+          viewportTop: 0,
+          viewportBottom: 7,
+          viewportLeft: viewport.left,
+          viewportRight: viewport.right,
+        },
+      ],
+      sel.anchor!.row,
+      sel.anchor!.col,
+    ) !== null,
+    true,
+  )
+}
+
 if (failures > 0) {
   console.error(`\nverify-selection-viewport-resize: ${failures} failure(s)`)
   process.exit(1)

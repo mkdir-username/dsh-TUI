@@ -43,7 +43,7 @@ import { applyPositionedHighlight, type MatchPosition, scanPositions } from './r
 import createRenderer, { type Renderer } from './renderer.js';
 import { CellWidth, CharPool, cellAt, createScreen, HyperlinkPool, isEmptyCellAt, migrateScreenPools, StylePool } from './screen.js';
 import { applySearchHighlight } from './transcript-highlight.js';
-import { applySelectionOverlay, captureScrolledRows, clearSelection, createSelectionState, extendSelection, type FocusMove, findPlainTextUrlAt, getSelectedText, getSelectionCursor, hasSelection, moveFocus, pickFollowForSelection, refreshSelectionFingerprint, refreshSelectionPane, type SelectionState, selectLineAt, selectWordAt, shiftAnchor, shiftSelection, shiftSelectionForFollow, shiftSelectionForViewportResize, shiftSelectionForViewportTranslation, startSelection, updateSelection } from './selection.js';
+import { applySelectionOverlay, captureScrolledRows, clearSelection, createSelectionState, extendSelection, type FocusMove, findPlainTextUrlAt, getSelectedText, getSelectionCursor, hasSelection, moveFocus, pickFollowForSelection, refreshSelectionFingerprint, refreshSelectionPane, type SelectionState, type SelectionViewportColumns, selectLineAt, selectWordAt, shiftAnchor, shiftSelection, shiftSelectionForFollow, shiftSelectionForViewportResize, shiftSelectionForViewportTranslation, startSelection, updateSelection } from './selection.js';
 import { isDecstbmSafe, SYNC_OUTPUT_SUPPORTED, serializeDiff, supportsCursorStyleReset, supportsDecrqmProbe, supportsExtendedKeys, supportsWin32InputMode, type Terminal, writeDiffToTerminal } from './terminal.js';
 import { CURSOR_HOME, cursorMove, cursorPosition, cursorStyle, DISABLE_KITTY_KEYBOARD, DISABLE_MODIFY_OTHER_KEYS, DISABLE_WIN32_INPUT_MODE, ENABLE_KITTY_KEYBOARD, ENABLE_MODIFY_OTHER_KEYS, ENABLE_WIN32_INPUT_MODE, ERASE_SCREEN, ERASE_SCROLLBACK, SGR_RESET } from './termio/csi.js';
 import { DBP, DFE, DISABLE_MOUSE_TRACKING, ENABLE_MOUSE_TRACKING, ENTER_ALT_SCREEN, ESU, EXIT_ALT_SCREEN, HIDE_CURSOR, SHOW_CURSOR } from './termio/dec.js';
@@ -858,6 +858,10 @@ export default class Ink {
             resize.prevBottom,
             resize.top,
             resize.bottom,
+            {
+              left: resize.contentLeft ?? 0,
+              right: resize.contentRight ?? this.frontFrame.screen.width - 1,
+            },
           );
           selectionCoordinated = true;
           // Both-ends-covered clear must notify React-land so useHasSelection
@@ -921,7 +925,10 @@ export default class Ink {
       // each shift branch so the pairing can't be broken by a new guard.
       if (this.selection.isDragging) {
         if (hasSelection(this.selection)) {
-          captureScrolledRows(this.selection, this.frontFrame.screen, firstRow, lastRow, side, follow.screenRowOffset);
+          captureScrolledRows(this.selection, this.frontFrame.screen, firstRow, lastRow, side, follow.screenRowOffset, {
+            left: follow.contentLeft ?? follow.viewportLeft ?? 0,
+            right: follow.contentRight ?? follow.viewportRight ?? this.frontFrame.screen.width - 1,
+          });
           // Record the viewport bounds for finishSelection's deferred
           // commit-time check: the in-flight drag never clears (a wheel
           // must not kill the gesture), so a drag that wheeled fully
@@ -947,7 +954,10 @@ export default class Ink {
       // old screen row.
       !this.selection.focus || this.selection.focus.row >= viewportTop && this.selection.focus.row <= viewportBottom) {
         if (hasSelection(this.selection)) {
-          captureScrolledRows(this.selection, this.frontFrame.screen, firstRow, lastRow, side, follow.screenRowOffset);
+          captureScrolledRows(this.selection, this.frontFrame.screen, firstRow, lastRow, side, follow.screenRowOffset, {
+            left: follow.contentLeft ?? follow.viewportLeft ?? 0,
+            right: follow.contentRight ?? follow.viewportRight ?? this.frontFrame.screen.width - 1,
+          });
         }
         const cleared = shiftSelectionForFollow(this.selection, shift, viewportTop, viewportBottom);
         selectionCoordinated = true;
@@ -2368,8 +2378,8 @@ export default class Ink {
    * screen buffer still holds the outgoing content. Accumulated into
    * the selection state and joined back in by getSelectedText.
    */
-  captureScrolledRows(firstRow: number, lastRow: number, side: 'above' | 'below'): void {
-    captureScrolledRows(this.selection, this.frontFrame.screen, firstRow, lastRow, side);
+  captureScrolledRows(firstRow: number, lastRow: number, side: 'above' | 'below', viewport?: SelectionViewportColumns): void {
+    captureScrolledRows(this.selection, this.frontFrame.screen, firstRow, lastRow, side, 0, viewport);
   }
 
   /**

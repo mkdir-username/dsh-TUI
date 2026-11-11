@@ -4,6 +4,7 @@ import instances from '../instances.js'
 import {
   type FocusMove,
   type SelectionState,
+  type SelectionViewportColumns,
   shiftAnchor,
 } from '../selection.js'
 
@@ -39,6 +40,7 @@ export function useSelection(): {
     firstRow: number,
     lastRow: number,
     side: 'above' | 'below',
+    viewport?: SelectionViewportColumns,
   ) => void
   /** Set the selection highlight bg color (theme-piping; solid bg
    *  replaces the old SGR-7 inverse so syntax highlighting stays readable
@@ -81,8 +83,8 @@ export function useSelection(): {
       shiftSelection: (dRow, minRow, maxRow) =>
         ink.shiftSelectionForScroll(dRow, minRow, maxRow),
       moveFocus: (move: FocusMove) => ink.moveSelectionFocus(move),
-      captureScrolledRows: (firstRow, lastRow, side) =>
-        ink.captureScrolledRows(firstRow, lastRow, side),
+      captureScrolledRows: (firstRow, lastRow, side, viewport) =>
+        ink.captureScrolledRows(firstRow, lastRow, side, viewport),
       setSelectionBgColor: (color: string) => ink.setSelectionBgColor(color),
     }
   }, [ink])

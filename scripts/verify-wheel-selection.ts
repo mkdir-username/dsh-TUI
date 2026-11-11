@@ -103,6 +103,7 @@ function applyScroll(
   sel: SelectionState,
   screen: Screen,
   delta: number,
+  viewport?: { left: number; right: number },
 ): boolean {
   const rows = Math.abs(delta)
   const up = delta > 0
@@ -111,7 +112,7 @@ function applyScroll(
   const side: 'above' | 'below' = up ? 'above' : 'below'
   const shift = up ? -rows : rows
   if (hasSelection(sel)) {
-    captureScrolledRows(sel, screen, firstRow, lastRow, side)
+    captureScrolledRows(sel, screen, firstRow, lastRow, side, 0, viewport)
   }
   return shiftSelectionForFollow(sel, shift, VIEWPORT_TOP, VIEWPORT_BOTTOM)
 }
@@ -240,6 +241,56 @@ function applyScroll(
   )
   check('T7 no events -> null', pickFollowForSelection([], 5), null)
   check('T7 null anchor -> null', pickFollowForSelection([transcript], null), null)
+}
+
+// ── Test 8: content viewport narrower than the screen (right gutter) ──
+// The anchor-column reset after a capture must land inside the ScrollBox
+// content viewport: follow attribution checks anchorCol against
+// viewportLeft/Right, so a screen-edge reset (width-1) silently drops every
+// later event — the drag then keeps scrolling while the selection freezes,
+// and the copy holds only the final viewport.
+{
+  const screen = buildScreen()
+  const viewport = { left: 0, right: W - 3 } // 17: two gutter columns
+  const sel = makeSelection({ col: 1, row: 8 }, { col: 4, row: 2 })
+  // Content moves down (drag-scroll up): nothing selected leaves the bottom
+  // until the anchor reaches the viewport bottom.
+  applyScroll(sel, screen, -3, viewport)
+  check('T8 anchor walks to the viewport bottom', sel.anchor, { col: 1, row: 11 })
+  // One more row: the anchor row itself leaves through the bottom edge.
+  applyScroll(sel, screen, -1, viewport)
+  check('T8 anchor column reset to the CONTENT right edge', sel.anchor, {
+    col: viewport.right,
+    row: 11,
+  })
+  const anchor = sel.anchor!
+  check(
+    'T8 follow attribution still accepts the reset anchor',
+    pickFollowForSelection(
+      [
+        {
+          delta: -1,
+          viewportTop: VIEWPORT_TOP,
+          viewportBottom: VIEWPORT_BOTTOM,
+          viewportLeft: viewport.left,
+          viewportRight: viewport.right,
+        },
+      ],
+      anchor.row,
+      anchor.col,
+    ) !== null,
+    true,
+  )
+  // A frozen selection would stop capturing here; the fixed one keeps both
+  // the capture and the shift, so the accumulator and the virtual debt grow.
+  const capturedBefore = sel.scrolledOffBelow.length
+  applyScroll(sel, screen, -2, viewport)
+  check(
+    'T8 later frames keep capturing',
+    sel.scrolledOffBelow.length > capturedBefore,
+    true,
+  )
+  check('T8 later frames keep shifting', sel.virtualAnchorRow, 14)
 }
 
 if (failures > 0) {

@@ -355,6 +355,16 @@ export type FollowScroll = {
   viewportBottom: number
   viewportLeft?: number
   viewportRight?: number
+  /**
+   * Content (inside ScrollBox padding) column span — the only cells an
+   * active selection may occupy. Selection bookkeeping resets swallowed
+   * columns to THIS edge: the paint bounds above include the right gutter
+   * (timeline rail / scrollbar), and a screen-edge column lands outside the
+   * viewport pickFollowForSelection checks, which stops follow attribution
+   * for the rest of the gesture.
+   */
+  contentLeft?: number
+  contentRight?: number
   /** Current viewport rows map to PREVIOUS screen rows by this offset. */
   screenRowOffset?: number
 }
@@ -1557,6 +1567,8 @@ function renderNodeToOutput(
             viewportTop: prevViewportTop,
             viewportLeft: Math.floor(x),
             viewportRight: Math.floor(x + width) - 1,
+            contentLeft: node.scrollViewportLeft,
+            contentRight: node.scrollViewportRight,
             viewportBottom: prevViewportBottom,
             kind,
             rowDelta: kind === 'translate' ? node.scrollViewportTop - prevViewportTop : 0,
@@ -1658,6 +1670,8 @@ function renderNodeToOutput(
             viewportTop: vpTop,
             viewportLeft: Math.floor(x),
             viewportRight: Math.floor(x + width) - 1,
+            contentLeft: node.scrollViewportLeft,
+            contentRight: node.scrollViewportRight,
             viewportBottom: vpTop + innerHeight - 1,
             screenRowOffset,
           })
@@ -1785,6 +1799,8 @@ function renderNodeToOutput(
             viewportTop: wheelVpTop,
             viewportLeft: Math.floor(x),
             viewportRight: Math.floor(x + width) - 1,
+            contentLeft: node.scrollViewportLeft,
+            contentRight: node.scrollViewportRight,
             viewportBottom: wheelVpTop + innerHeight - 1,
             screenRowOffset,
           })
