@@ -568,6 +568,10 @@ export function MessageList({
     /** Turn-usage row toggle: flipping it adds/removes turn-summary rows
      *  from the visible window without touching the row array. */
     turnRowOn: boolean
+    /** Source-row index → position in `out`, `-1` when filtered or folded.
+     *  Lets a content-only delta replace just the rows that moved instead of
+     *  rebuilding the whole window. */
+    rowPos: Int32Array
   } | null>(null)
   /** Generation counter for the visibleRows cache (timeline memo key). */
   const visGenRef = React.useRef(0)
@@ -596,15 +600,61 @@ export function MessageList({
     if (row.kind !== 'job' || row.job === undefined) continue
     jobsSig = (jobsSig * 33 + row.id + jobStatusCode(row.job.status) + (expandedRows.has(row.id) ? 7 : 0)) | 0
   }
+  // Streaming deltas mutate one row and re-freeze the row array, so the
+  // identity-keyed cache below rebuilt the whole visible window — slice,
+  // filters, group decoration and a margins Map over every row — on every
+  // 16 ms chunk of a reply. When the change is content-only (same ids, kinds,
+  // membership and streaming bits), the window is the previous one with the
+  // touched rows swapped in.
+  const rendersEmptyAssistant = (row: ChatRow): boolean =>
+    row.kind === 'assistant' &&
+    row.streaming !== true &&
+    assistantDisplayText(row).trim() === '' &&
+    (row.images?.length ?? 0) === 0
+  let contentOnly = visibleCache !== null &&
+    visibleCache.rowsLength === rows.length &&
+    visibleCache.showAll === (showAll || hiddenCount <= 0) &&
+    visibleCache.thinkingVisible === thinkingVisible &&
+    visibleCache.jobsSig === jobsSig &&
+    visibleCache.turnRowOn === turnUsageRow &&
+    streamBitsSame
+  if (contentOnly) {
+    const prev = visibleCache!
+    const pos = prev.rowPos
+    let touchedTurn = false
+    for (let i = 0; i < rows.length && contentOnly; i++) {
+      const before = prev.rows[i]
+      const now = rows[i]!
+      if (before === now) continue
+      // Membership, kind or the empty-assistant boundary moved: the window
+      // layout itself changes, so fall back to the full rebuild.
+      if (before === undefined || before.id !== now.id || before.kind !== now.kind) contentOnly = false
+      else if (rendersEmptyAssistant(before) !== rendersEmptyAssistant(now)) contentOnly = false
+      // A decorated copy (job-group rail) is not the row object itself.
+      else if (pos[i]! < 0 || prev.out[pos[i]!] !== before) contentOnly = false
+      else if (isTurnRow(now)) touchedTurn = true
+    }
+    if (contentOnly) {
+      const next = prev.out.slice()
+      for (let i = 0; i < rows.length; i++) {
+        if (prev.rows[i] !== rows[i]) next[pos[i]!] = rows[i]!
+      }
+      prev.out = next
+      prev.rows = rows
+      // Only a turn row feeds the rail preview; other rows cannot change it.
+      if (touchedTurn) visGenRef.current++
+    }
+  }
   if (
-    visibleCache === null ||
+    !contentOnly &&
+    (visibleCache === null ||
     visibleCache.rows !== rows ||
     visibleCache.rowsLength !== rows.length ||
     visibleCache.showAll !== (showAll || hiddenCount <= 0) ||
     visibleCache.thinkingVisible !== thinkingVisible ||
     visibleCache.jobsSig !== jobsSig ||
     visibleCache.turnRowOn !== turnUsageRow ||
-    !streamBitsSame
+    !streamBitsSame)
   ) {
     const sliced = showAll || hiddenCount <= 0
       ? rows
@@ -621,11 +671,6 @@ export function MessageList({
     // Filtering, measurement and rendering share the same display text.
     // A settled narration-only reply has real content; only truly empty
     // text-only rows disappear. Image-only rows retain their own content.
-    const rendersEmptyAssistant = (row: ChatRow): boolean =>
-      row.kind === 'assistant' &&
-      row.streaming !== true &&
-      assistantDisplayText(row).trim() === '' &&
-      (row.images?.length ?? 0) === 0
     let hasEmptyAssistant = false
     for (const row of sliced) {
       if (rendersEmptyAssistant(row)) {
@@ -765,7 +810,16 @@ export function MessageList({
       }
     }
     const streamBits = new Uint8Array(rows.length)
-    for (let i = 0; i < rows.length; i++) streamBits[i] = rows[i]!.streaming === true ? 1 : 0
+    const sourceIndex = new Map<number, number>()
+    for (let i = 0; i < rows.length; i++) {
+      streamBits[i] = rows[i]!.streaming === true ? 1 : 0
+      sourceIndex.set(rows[i]!.id, i)
+    }
+    const rowPos = new Int32Array(rows.length).fill(-1)
+    for (let i = 0; i < visibleOut.length; i++) {
+      const at = sourceIndex.get(visibleOut[i]!.id)
+      if (at !== undefined) rowPos[at] = i
+    }
     visibleRowsCacheRef.current = {
       rows,
       rowsLength: rows.length,
@@ -776,6 +830,7 @@ export function MessageList({
       streamBits,
       jobsSig,
       turnRowOn: turnUsageRow,
+      rowPos,
     }
     visGenRef.current++
   }
@@ -901,9 +956,16 @@ export function MessageList({
   // render was O(rows) garbage per tick (3200-row session ⇒ several MB/s
   // into minor GC; the GC share of the scroll profile).
   const sigRef = React.useRef(new Map<number, Array<string | number | boolean>>())
+  /** Which row/global inputs each cached signature was computed from. A row
+   *  object that did not change and stable globals mean the parts vector is
+   *  the same by construction — the per-row scan over a 3000-row window only
+   *  needs the rows the delta actually touched. */
+  const sigMetaRef = React.useRef(new Map<number, { row: ChatRow; revealLen: number; globals: string; expandedRows: ReadonlySet<number>; streamView: ReadonlySet<number> }>())
   let growingStreamNeedsMeasure = false
   {
     const sigs = sigRef.current
+    const metas = sigMetaRef.current
+    const sigGlobals = `${columns}|${expanded}|${thinkingVisible}|${thinkingFold}|${diffLayout}|${foldTerminalCommand}|${model}|${fullscreen}|${smoothStreaming}|${sessionCwd}|${failureHintRowId ?? ''}|${failureHint ?? ''}`
     for (let i = 0; i < visibleRows.length; i++) {
       const row = visibleRows[i]!
       // Per-kind signature: only the inputs that row's OWN renderer consumes.
@@ -912,6 +974,12 @@ export function MessageList({
       // reasoning height at once, remounting the widened window over rows
       // whose rendering never changed (Yoga spike + measure churn for
       // nothing). Base parts cover the universal height inputs.
+      const revealLen = revealDisplayLen(row, smoothStreaming, revealScope)
+      const meta = metas.get(row.id)
+      if (
+        meta !== undefined && meta.row === row && meta.revealLen === revealLen &&
+        meta.globals === sigGlobals && meta.expandedRows === expandedRows && meta.streamView === streamViewToggledRows
+      ) continue
       const parts = signatureParts(
         row,
         columns,
@@ -925,7 +993,7 @@ export function MessageList({
         model,
         failureHintRowId,
         failureHint,
-        revealDisplayLen(row, smoothStreaming, revealScope),
+        revealLen,
         sessionCwd,
         fullscreen,
       )
@@ -937,13 +1005,17 @@ export function MessageList({
           if (parts[s] !== cachedParts[s]) { same = false; break }
         }
       }
-      if (same) continue
+      if (same) {
+        metas.set(row.id, { row, revealLen, globals: sigGlobals, expandedRows, streamView: streamViewToggledRows })
+        continue
+      }
       if (sigs.size >= HEIGHTS_CACHE_MAX) {
         const oldest = sigs.keys().next().value
         if (oldest !== undefined) sigs.delete(oldest)
       }
       // Copy out of the module-level scratch buffer — the next row reuses it.
       sigs.set(row.id, parts.slice())
+      metas.set(row.id, { row, revealLen, globals: sigGlobals, expandedRows, streamView: streamViewToggledRows })
       // Keep a streaming row's last measured extent when only its text grows.
       // If it leaves the mount window before the next measurement, falling
       // back to DEFAULT_ROW_HEIGHT would manufacture a content collapse.
