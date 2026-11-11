@@ -8,7 +8,7 @@ import { t } from '../i18n.js'
 import { formatDuration, formatTokens } from '../terminal-utils/format.js'
 import { SpinnerGlyph } from './Spinner/SpinnerGlyph.js'
 import { resolvePreset, type FramePreset } from './activityFrames.js'
-import type { CompactionStatus } from '../adapter/ports/channel-view.js'
+import type { CompactionStatus, ManualCompactionStage } from '../adapter/ports/channel-view.js'
 
 /** Field separator, matching the working spinner's row. */
 const SEP = ' · '
@@ -46,7 +46,7 @@ export function CompactionStatusRow({
   compaction,
   activityPreset,
 }: {
-  compaction: CompactionStatus
+  compaction: CompactionStatus | ManualCompactionStage
   /** `/activity` preset name to draw the indicator with; undefined keeps the
    *  classic dot family. */
   activityPreset?: string
@@ -73,11 +73,19 @@ export function CompactionStatusRow({
   // compaction runs, so the tick stops with it).
   const elapsed = formatDuration(Date.now() - compaction.startedAt)
   const frame = Math.floor(time / FRAME_MS)
-  const label = t('compact-working')
+  const label = (() => {
+    switch (compaction.phase) {
+      case 'restruct-plan': return t('compact-phase-restruct-plan')
+      case 'wait-idle': return t('compact-phase-wait-idle')
+      case 'checking': return t('compact-phase-checking')
+      case 'finalizing': return t('compact-phase-finalizing')
+      default: return t('compact-working')
+    }
+  })()
   const detail = compaction.phase === 'summary'
     ? `↓ ${formatTokens(Math.round(compaction.outputChars / 4))} tokens`
-    : t('compact-phase-prefill')
-  const hint = compaction.cancellable ? t('compact-esc-cancel') : undefined
+    : compaction.phase === 'prefill' ? t('compact-phase-prefill') : undefined
+  const hint = 'cancellable' in compaction && compaction.cancellable ? t('compact-esc-cancel') : undefined
 
   // The hint is actionable and the phase is informative, so a narrow terminal
   // drops the phase first and the hint only when even that does not fit.
@@ -86,9 +94,9 @@ export function CompactionStatusRow({
   const base = indicatorWidth + stringWidth(label)
   const elapsedWidth = stringWidth(SEP) + stringWidth(elapsed)
   const hintWidth = hint === undefined ? 0 : stringWidth(SEP) + stringWidth(hint)
-  const detailWidth = stringWidth(SEP) + stringWidth(detail)
+  const detailWidth = detail === undefined ? 0 : stringWidth(SEP) + stringWidth(detail)
   const showHint = hint !== undefined && base + elapsedWidth + hintWidth <= budget
-  const showDetail = base + elapsedWidth + hintWidth + detailWidth <= budget
+  const showDetail = detail !== undefined && base + elapsedWidth + hintWidth + detailWidth <= budget
   // Keep the timer atomic, then spend the remaining cells on whole graphemes.
   // Drop an oversized indicator before sacrificing an otherwise fitting timer.
   const showIndicator = indicatorWidth < budget

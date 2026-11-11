@@ -1,5 +1,6 @@
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import type { Context } from '@deepseek-ai/cordis'
+import type { ManualCompactionStage } from '../../adapter/ports/channel-view.js'
 import { t } from '../../i18n.js'
 import { WORKING_GATE_NOTICES } from '../../commands.js'
 import { dispatchTuiDecision, normalizeCancelDecision } from '../extension-events.js'
@@ -14,7 +15,12 @@ interface ManualCompaction {
   row: ChannelState['compaction']
 }
 
-type CompactionState = Pick<ChannelState, 'agentId' | 'agentBindingGeneration' | 'cwd' | 'working' | 'compaction' | 'emit' | 'emitStream'>
+interface CompactCycle {
+  stage: ManualCompactionStage
+  preparation: AbortController
+}
+
+type CompactionState = Pick<ChannelState, 'agentId' | 'agentBindingGeneration' | 'cwd' | 'working' | 'compaction' | 'manualCompactionStage' | 'emit' | 'emitStream'>
 type Notify = ChannelState['notify']
 
 /** The activation result shape the verdict reads (structural: the subagents
@@ -56,11 +62,38 @@ export function createManualCompaction(
   },
 ) {
   const active = new Map<Agent, ManualCompaction>()
+  const cycles = new WeakMap<Agent, CompactCycle>()
+  let holdOwner: CompactCycle | undefined
+
+  const closeCycle = (agent: Agent, cycle: CompactCycle): void => {
+    if (cycles.get(agent) !== cycle) return
+    cycles.delete(agent)
+    if (deps.agent() === agent) {
+      state.manualCompactionStage = undefined
+      state.emit()
+    }
+  }
+  const holdInputs = (cycle: CompactCycle): void => {
+    holdOwner = cycle
+    deps.holdCompact?.({ agentId: state.agentId, generation: state.agentBindingGeneration })
+  }
+  const abandonHold = (): void => {
+    holdOwner = undefined
+    deps.abandonCompact?.()
+  }
+  deps.owner.own(() => { state.manualCompactionStage = undefined })
+
   const cancelled = new WeakSet<AbortController>()
   /** Aborts the user asked for (Esc / Ctrl+C) rather than an ownership change:
    *  only those are reported as a cancellation instead of a failure. */
   const userCancelled = new WeakSet<AbortController>()
   deps.owner.own(ctx.on('agent/disposed', ({ agent }) => {
+    const cycle = cycles.get(agent)
+    if (cycle !== undefined) {
+      if (holdOwner === cycle) abandonHold()
+      closeCycle(agent, cycle)
+      cycle.preparation.abort(new Error('agent disposed'))
+    }
     const transaction = active.get(agent)
     if (transaction === undefined) return
     active.delete(agent)
@@ -70,16 +103,20 @@ export function createManualCompaction(
 
   const settle = async (): Promise<void> => {
     const agent = deps.agent()
-    preparing.delete(agent)
-    // Session switch: the hold queue is not delivered, its rows stay in the
-    // composer of the next session.
-    deps.abandonCompact?.()
+    const cycle = cycles.get(agent)
+    if (cycle !== undefined) {
+      closeCycle(agent, cycle)
+      cycle.preparation.abort(new Error('session switch'))
+    }
+    abandonHold()
     const transaction = active.get(agent)
+    if (cycle !== undefined || transaction !== undefined) {
+      deps.notify(t('compact-cancelled-switch'), { color: 'warning', timeoutMs: 4000 })
+    }
     if (transaction === undefined) return
     active.delete(agent)
     cancelled.add(transaction.controller)
     transaction.controller.abort(new Error('session switch'))
-    deps.notify(t('compact-cancelled-switch'), { color: 'warning', timeoutMs: 4000 })
     let timeout: ReturnType<typeof setTimeout> | undefined
     try {
       await Promise.race([
@@ -121,13 +158,11 @@ export function createManualCompaction(
   }
   const RP_PROMPT = 'Пользователь набрал /compact: это его явная команда выполнить restruct-plan сейчас, до сжатия контекста. Ты — форк этой сессии, запущенный TUI, история диалога тебе видна. Вызови Skill restruct-plan для плана .dev/<slug>/, над которым шла работа, и запиши на диск всё, что знает только диалог: прогресс, грабли, тупики, проверенные факты. Перед записью в .dev/ прочитай каталог плана — его сторожит гейт dev-docs. Вопросов не задавай, ответить некому. Ничего не коммить и не пушить. Последней строкой ответа выведи ровно RP_DONE <slug> или RP_SKIP <причина>.'
   const RP_TIMEOUT_MS = 15 * 60 * 1000
-  const preparing = new WeakSet<Agent>()
-  async function runRestructPlan(ctx: Context, agent: Agent): Promise<{ ok: true; notice: string } | { ok: false; reason: string }> {
+  async function runRestructPlan(ctx: Context, agent: Agent, preparation: AbortSignal): Promise<{ ok: true; notice: string } | { ok: false; reason: string }> {
     const subagents = (ctx.get('subagents') ?? (agent.ctx as Context).get('subagents')) as SubagentsService | undefined
     if (subagents === undefined) return { ok: false, reason: 'compact-rp: сервис subagents не смонтирован. Без restruct-plan: /compact --pure' }
     if (subagents.getProvider('fork') === undefined) return { ok: false, reason: 'compact-rp: провайдер «fork» не смонтирован. Без restruct-plan: /compact --pure' }
-    const signal = AbortSignal.any([deps.owner.signal, AbortSignal.timeout(RP_TIMEOUT_MS)])
-    deps.notify('compact-rp: restruct-plan в форке сессии — знание пишется в .dev/ до сжатия…', { timeoutMs: 6000 })
+    const signal = AbortSignal.any([deps.owner.signal, preparation, AbortSignal.timeout(RP_TIMEOUT_MS)])
     try {
       const activation = await subagents.startActivation({
         provider: 'fork',
@@ -148,10 +183,10 @@ export function createManualCompaction(
    *  instead of being thrown away. */
   const IDLE_WAIT_MS = 5 * 60 * 1000
   const IDLE_POLL_MS = 250
-  const waitUntilIdle = (originAgent: Agent): Promise<boolean> => new Promise((resolve) => {
+  const waitUntilIdle = (current: () => boolean): Promise<boolean> => new Promise((resolve) => {
     const deadline = Date.now() + IDLE_WAIT_MS
     const tick = (): void => {
-      if (deps.agent() !== originAgent || !deps.owner.current() || deps.owner.signal.aborted) return resolve(false)
+      if (!current()) return resolve(false)
       if (!state.working) return resolve(true)
       if (Date.now() >= deadline) return resolve(false)
       setTimeout(tick, IDLE_POLL_MS).unref?.()
@@ -170,49 +205,60 @@ export function createManualCompaction(
       deps.notify(t(WORKING_GATE_NOTICES.compact), { color: 'warning' })
       return
     }
-    if (preparing.has(originAgent)) {
+    if (cycles.has(originAgent)) {
       deps.notify('compact-rp: /compact уже выполняется', { color: 'warning', timeoutMs: 4000 })
       return
     }
-    preparing.add(originAgent)
-    // Everything bound for the model waits in the hold until the whole cycle
-    // (restruct-plan + compaction) has finished.
-    deps.holdCompact?.({ agentId: state.agentId, generation: state.agentBindingGeneration })
+    const cycle: CompactCycle = {
+      preparation: new AbortController(),
+      stage: { phase: input.kind === 'pure' ? 'checking' : 'restruct-plan', startedAt: Date.now() },
+    }
+    cycles.set(originAgent, cycle)
+    holdInputs(cycle)
+    state.manualCompactionStage = cycle.stage
+    state.emit()
+
+    const current = () => deps.owner.current() && deps.agent() === originAgent && cycles.get(originAgent) === cycle
     const finish = (): void => {
-      preparing.delete(originAgent)
-      // The cycle's tail must not fail on a notice: an unhandled rejection
-      // would take the TUI process down.
+      closeCycle(originAgent, cycle)
+      if (holdOwner !== cycle) return
+      holdOwner = undefined
       try { deps.releaseCompact?.() } catch {}
     }
-    if (input.kind === 'pure') {
-      Promise.resolve(compactNow()).then(finish, finish)
-      return
-    }
-    runRestructPlan(ctx, originAgent).then(async (verdict) => {
-      if (!verdict.ok) {
-        deps.notify(verdict.reason, { color: 'error', timeoutMs: 12000 })
-        return
-      }
-      deps.notify(verdict.notice)
-      if (state.working) deps.notify('compact-rp: идёт ход — сожму, как только он закончится', { color: 'warning', timeoutMs: 6000 })
-      if (!await waitUntilIdle(originAgent)) {
-        if (deps.agent() !== originAgent) {
-          deps.notify('compact-rp: сессия сменилась, сжатие отменено', { color: 'warning', timeoutMs: 6000 })
+    const run = async (): Promise<void> => {
+      if (input.kind === 'restruct') {
+        const verdict = await runRestructPlan(ctx, originAgent, cycle.preparation.signal)
+        if (!current()) return
+        if (!verdict.ok) {
+          deps.notify(verdict.reason, { color: 'error', timeoutMs: 12000 })
           return
         }
-        deps.notify(`compact-rp: ход не освободился за ${IDLE_WAIT_MS / 60000} минут — сжатие отменено. Повтори /compact`, { color: 'warning', timeoutMs: 12000 })
-        return
+        deps.notify(verdict.notice)
+        if (state.working) {
+          cycle.stage = { ...cycle.stage, phase: 'wait-idle' }
+          state.manualCompactionStage = cycle.stage
+          state.emit()
+          if (!await waitUntilIdle(current)) {
+            if (current()) {
+              deps.notify(`compact-rp: ход не освободился за ${IDLE_WAIT_MS / 60000} минут — сжатие отменено. Повтори /compact`, { color: 'warning', timeoutMs: 12000 })
+            }
+            return
+          }
+        }
+        if (!current()) return
+        cycle.stage = { ...cycle.stage, phase: 'checking' }
+        state.manualCompactionStage = cycle.stage
+        state.emit()
       }
-      await compactNow()
-    }, (error: unknown) => {
-      deps.notify(`compact-rp: ${error instanceof Error ? error.message : String(error)}`, { color: 'error', timeoutMs: 12000 })
-    }).catch((error: unknown) => {
-      deps.notify(`compact-rp: ${error instanceof Error ? error.message : String(error)}`, { color: 'error', timeoutMs: 12000 })
+      if (current()) await compactNow(originAgent, cycle)
+    }
+    void run().catch((error: unknown) => {
+      if (current()) {
+        deps.notify(`compact-rp: ${error instanceof Error ? error.message : String(error)}`, { color: 'error', timeoutMs: 12000 })
+      }
     }).finally(finish)
   }
-  const compactNow = (): Promise<void> => {
-    if (!deps.owner.current() || deps.owner.signal.aborted) return Promise.resolve()
-    const originAgent = deps.agent()
+  const compactNow = (originAgent: Agent, cycle: CompactCycle): Promise<void> => {
     if (active.has(originAgent)) return Promise.resolve()
     const compactService = serviceForAgent<{
       compactNow(agent: unknown, signal: AbortSignal): Promise<unknown>
@@ -229,6 +275,7 @@ export function createManualCompaction(
     const transaction: ManualCompaction = { controller, settled: Promise.resolve(), row: undefined }
     const isLive = () => deps.owner.current()
       && !deps.owner.signal.aborted
+      && cycles.get(originAgent) === cycle
       && !cancelled.has(controller)
     const isCurrent = () => isLive() && deps.agent() === originAgent
     let disposeStream: (() => void) | undefined
@@ -261,17 +308,18 @@ export function createManualCompaction(
           if (isCurrent()) deps.notify(t(WORKING_GATE_NOTICES.compact), { color: 'warning' })
           return
         }
-        // The status row replaces the old 4s toast: a real compaction runs for
-        // tens of seconds (measured: median ~25s, p90 ~70s), and the toast was
-        // gone for all but the first four of them.
         const row = {
-          startedAt: Date.now(),
+          startedAt: cycle.stage.startedAt,
           phase: 'prefill' as const,
           outputChars: 0,
           cancellable: true,
         }
         transaction.row = row
+        // The native row masks this stage until the bracket closes. The
+        // service still has to flush the checkpoint after compaction/end.
+        cycle.stage = { ...cycle.stage, phase: 'finalizing' }
         if (isCurrent()) {
+          state.manualCompactionStage = cycle.stage
           state.compaction = row
           state.emit()
         }
@@ -368,11 +416,16 @@ export function createManualCompaction(
     transaction.controller.abort(new Error('user cancelled compaction'))
   }
 
-  /** Restore only this live agent's row; settled/replayed brackets stay closed. */
+  /** Rebinding restores only the foreground agent's live work. */
   const restore = (): void => {
-    const transaction = active.get(deps.agent())
-    if (transaction === undefined) return
-    state.compaction = transaction.row
+    const agent = deps.agent()
+    const cycle = cycles.get(agent)
+    const stage = cycle?.stage
+    const transaction = active.get(agent)
+    if (cycle !== undefined) holdInputs(cycle)
+    if (state.manualCompactionStage === stage && transaction === undefined) return
+    state.manualCompactionStage = stage
+    if (transaction !== undefined) state.compaction = transaction.row
     state.emit()
   }
 

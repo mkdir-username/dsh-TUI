@@ -2824,6 +2824,12 @@ export async function apply(ctx: Context, runtimeConfig: RuntimeConfig<Config>, 
     // no longer runs a second activity tracker of its own.
     activityStore,
     extensionShortcuts: getHostShortcuts(ctx.get('tuiShortcuts') as TuiShortcutRuntime | undefined),
+    onCancelPendingResume: () => {
+      if (rawChannel.sessionRef.backendId !== 'dsh' || rawChannel.agentId === '') return false
+      const resume = ctx.get('turnResume') as { cancelPending(session: Agent['session']): boolean } | undefined
+      const session = dshAgentOn(ctx, rawChannel.agentId)?.session
+      return session !== undefined && resume?.cancelPending(session) === true
+    },
     themeHost: liveThemeHost(),
     // Full-screen surfaces inside Chat — the trajectory scene and the session
     // browser — enter the alt screen themselves in inline mode; in fullscreen

@@ -420,6 +420,10 @@ const dict = {
   },
   // 压缩状态行（prompt 上方的 spinner 槽位）。压缩只暴露两个可观测阶段：
   // 首块输出前是在重放上下文（无可计数），之后才有生成量。
+  'compact-phase-restruct-plan': { zh: '正在运行 restruct-plan…', en: 'Running restruct-plan…' },
+  'compact-phase-wait-idle': { zh: '等待当前回合结束…', en: 'Waiting for the current turn…' },
+  'compact-phase-checking': { zh: '正在检查压缩条件…', en: 'Checking compaction…' },
+  'compact-phase-finalizing': { zh: '正在完成压缩…', en: 'Finishing compaction…' },
   'compact-phase-prefill': { zh: '读取上下文…', en: 'reading context…' },
   'compact-esc-cancel': { zh: 'Esc 取消', en: 'Esc cancels' },
   'compact-cancelled': { zh: '压缩已取消', en: 'Compaction cancelled' },
