@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url'
 import { locateDsh } from '../adapters/dsh/locate.mjs'
 
 const bin = process.env.DST_TEST_DSH_BIN
-if (!bin) throw new Error('Set DST_TEST_DSH_BIN to an installed DSH 0.2.0-rc.2, 0.2.1-rc.2, 0.2.1-rc.3, 0.2.1-rc.4 or 0.2.1-rc.5 built JS bin')
+if (!bin) throw new Error('Set DST_TEST_DSH_BIN to an installed DSH 0.2.0-rc.2, 0.2.1-rc.2, 0.2.1-rc.3, 0.2.1-rc.4, 0.2.1-rc.5 or 0.2.2-rc.1 built JS bin')
 const temporary = mkdtempSync(join(tmpdir(), 'dst-real-'))
 const workspace = join(temporary, 'workspace')
 const root = fileURLToPath(new URL('../../', import.meta.url))
@@ -43,8 +43,8 @@ try {
   assert(Array.isArray(run(['models', 'list']).data))
   assert(Array.isArray(run(['skills', 'list']).data))
   assert.equal(run(['mcp', 'status']).data.connectionHealth, 'unavailable')
-  // DSH 0.2.1 headless intentionally omits the interactive credential store.
-  if (/^0\.2\.1-/u.test(runtime.version)) assert.equal(run(['auth', 'status'], 3).error.code, 'CAPABILITY_UNAVAILABLE')
+  // DSH 0.2.1 and 0.2.2 headless both omit the interactive credential store.
+  if (/^0\.2\.[12]-/u.test(runtime.version)) assert.equal(run(['auth', 'status'], 3).error.code, 'CAPABILITY_UNAVAILABLE')
   else assert.equal(typeof run(['auth', 'status']).data.configured, 'boolean')
   const credentialsOverlay = join(temporary, 'credentials.json')
   writeFileSync(credentialsOverlay, JSON.stringify([{ id: 'credentials', disabled: false }]))

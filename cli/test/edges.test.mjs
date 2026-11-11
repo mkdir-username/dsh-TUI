@@ -139,7 +139,7 @@ test('unvalidated versions fail before starting a task; native forwarding is ret
 })
 
 test('every validated version passes the contract gate and reports itself', async () => {
-  for (const version of ['0.2.0-rc.2', '0.2.1-rc.2', '0.2.1-rc.3', '0.2.1-rc.4', '0.2.1-rc.5']) {
+  for (const version of ['0.2.0-rc.2', '0.2.1-rc.2', '0.2.1-rc.3', '0.2.1-rc.4', '0.2.1-rc.5', '0.2.2-rc.1']) {
     let launches = 0
     const adapter = createDshAdapter({ locate: () => ({ path: fixture, version }), start: () => { launches++; throw new Error('launched') } })
     const described = io([])
