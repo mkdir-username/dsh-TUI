@@ -2177,16 +2177,19 @@ export function Chat({
   // how many rows past that anchor lie below the viewport and reports it.
   const lastSeenRowIdRef = React.useRef<number | null>(null)
   const [unseenCount, setUnseenCount] = React.useState(0)
+  // Keyed on the LAST row id, not on the projected array: every delta hands
+  // the UI a fresh frozen array, so an identity dep re-ran this effect once
+  // per streamed chunk (and with it a setState round-trip) even though only
+  // an append can move the anchor.
+  const lastRowId = channel.rows.length ? channel.rows[channel.rows.length - 1]!.id : -1
   React.useEffect(() => {
     if (isSticky) {
       lastSeenRowIdRef.current = null
       setUnseenCount(0)
     } else if (lastSeenRowIdRef.current === null) {
-      lastSeenRowIdRef.current = channel.rows.length
-        ? channel.rows[channel.rows.length - 1]!.id
-        : -1
+      lastSeenRowIdRef.current = lastRowId
     }
-  }, [isSticky, channel.rows])
+  }, [isSticky, lastRowId])
   // The pill shows whenever the view is off the bottom (one-click return
   // home): with unseen rows it counts them, otherwise it is the plain
   // "return to bottom" affordance (Enter/End/click all land it).

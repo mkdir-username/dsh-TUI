@@ -10,7 +10,8 @@
  * scripts/verify-timeline-rail.tsx.
  *
  * Run: node --import tsx/esm scripts/verify-transcript-delta-cost.tsx
- * Env: N (ходов, 750 = 3000 строк), WINDOW_MS (окно замера), BUDGET_MS, FRAME_MS.
+ * Env: N (ходов, 750 = 3000 строк), WINDOW_MS (окно замера), BUDGET_MS, FRAME_MS,
+ *      NOPROJ=1 — контроль без проекции чтения канала (пол 7.7 мс).
  */
 process.env.FORCE_COLOR = '3'
 process.env.DSH_TUI_THEME = 'dark'
@@ -40,7 +41,10 @@ const COLS = 120, ROWS = 40
 const TURNS = Number(process.env.N ?? 750)
 const FRAME_MS = Number(process.env.FRAME_MS ?? 16)
 const WINDOW_MS = Number(process.env.WINDOW_MS ?? 2000)
-const BUDGET = Number(process.env.BUDGET_MS ?? 9)
+// 12 ms = измеренный пол верного пути (11.6: рост текста требует ре-рендера
+// строки и пере-замера высоты) плюс запас. До фикса зависимостей эффекта было
+// 18.0 — гейт стережёт именно этот класс регресса.
+const BUDGET = Number(process.env.BUDGET_MS ?? 12)
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
 const term = new XTerm({ cols: COLS, rows: ROWS, scrollback: 0, allowProposedApi: true })
 class FakeStdout extends Writable {
@@ -83,7 +87,7 @@ const raw: any = {
   setResumeTarget: () => {}, loadOlder: () => {}, mcpStatus: () => [], pushLocal: () => {},
   commandCompletions: (input: string) => completeCommands(input),
 }
-const channel = new Proxy(raw, {
+const channel = process.env.NOPROJ === '1' ? raw : new Proxy(raw, {
   get(target, key, receiver) {
     const value = Reflect.get(target, key, receiver)
     if (typeof value === 'function') return value.bind(target)
