@@ -57,7 +57,7 @@ export function createDshAdapter({ locate = locateDsh, start = startProcess, dia
         }
         if (event.type === 'status' && event.phase === 'turn_end') completed = event.reason?.kind === 'completed'
         if (event.type === 'error') {
-          const code = ['SESSION_NOT_FOUND', 'PROVIDER_NOT_FOUND', 'CAPABILITY_UNAVAILABLE'].includes(event.code) ? event.code : 'TASK_FAILED'
+          const code = ['SESSION_NOT_FOUND', 'PROVIDER_NOT_FOUND', 'CAPABILITY_UNAVAILABLE', 'SESSION_FORK_UNAVAILABLE'].includes(event.code) ? event.code : 'TASK_FAILED'
           pendingFailure = new CliError(code, 'DSH could not complete the requested operation', code === 'TASK_FAILED' ? 1 : 3)
           yield { type: 'error', code, message: pendingFailure.message }
         } else if (event.type === 'final') yield { ...event, ok: request.kind !== 'run' || completed }
@@ -84,7 +84,7 @@ export function createDshAdapter({ locate = locateDsh, start = startProcess, dia
       return {
         adapter: 'dsh-headless', runtimeVersion: runtime.version,
         validated: validated.has(runtime.version),
-        operations: ['run', 'session.list', 'session.show', 'session.export', 'session.status', 'session.tail', 'continue', 'models.list', 'skills.list', 'mcp.status', 'auth.status', 'dsh'],
+        operations: ['run', 'session.list', 'session.show', 'session.export', 'session.status', 'session.tail', 'session.fork', 'continue', 'models.list', 'skills.list', 'mcp.status', 'auth.status', 'dsh'],
         output: ['text', 'json', 'stream-json'],
         limits: { inputBytes: 8 * 1024 * 1024, recordBytes: 32 * 1024 * 1024 },
         limitations: ['committed-message-stream-not-token-stream', 'official-headless-resume-restrictions', 'profile-not-tui-preferences', 'mcp-registered-tools-not-connection-health', 'no-credential-values-or-login', 'profile-code-is-trusted'],

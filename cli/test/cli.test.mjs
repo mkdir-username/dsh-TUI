@@ -7,6 +7,7 @@ import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { parse } from '../args.mjs'
 import { manage } from '../adapters/dsh/management-plugin.mjs'
+import { buildForkArtifact, latestCompletedPrefixBoundary } from '../adapters/dsh/fork.mjs'
 import { records } from '../process.mjs'
 import { Readable, Writable } from 'node:stream'
 import { execute } from '../engine.mjs'
@@ -153,6 +154,65 @@ test('status and tail describe one session without shipping the whole log', asyn
   assert.deepEqual(tail.rows.map(row => row.type), ['assistant/message', 'turn/end', 'user/message'])
   assert.equal(tail.cursor, 4)
   assert(tail.rows[0].text.endsWith('…'))
+})
+
+test('fork boundary stops at the last closed turn', () => {
+  const event = (seq, type, extra = {}) => ({ seq, type, time: seq, data: {}, ...extra })
+  assert.equal(latestCompletedPrefixBoundary([event(0, 'turn/start'), event(1, 'turn/end')]), 1)
+  assert.equal(latestCompletedPrefixBoundary([event(0, 'turn/end'), event(1, 'step/end'), event(2, 'turn/start')]), 1)
+  assert.equal(latestCompletedPrefixBoundary([event(0, 'turn/end'), event(1, 'user/message', { surfaceOp: 'append' })]), 0)
+  assert.equal(latestCompletedPrefixBoundary([event(0, 'user/message')]), undefined)
+  assert.equal(latestCompletedPrefixBoundary([]), undefined)
+})
+
+test('fork artifact copies the closed prefix and marks the inherited cut', () => {
+  const snapshot = { session: { type: 'session', version: 4, id: 's-1', cwd: '/x', createdAt: 1, isSeeded: false, delegationDepth: 0, origin: 'subagent' }, events: [{ seq: 0, type: 'turn/end', time: 1, data: {} }] }
+  const artifact = buildForkArtifact({ snapshot, childId: 'session-new', title: 'Fork: s-1', now: 5 })
+  assert.equal(artifact.boundary, 0)
+  assert.equal(artifact.inheritedEventCount, 1)
+  assert.deepEqual(artifact.events.map(entry => `${entry.seq}:${entry.type}`), ['0:turn/end', '1:session/end-seed', '2:session/title'])
+  assert.equal(artifact.header.parentSession, 's-1')
+  assert.equal(artifact.header.isSeeded, true)
+  assert.equal(artifact.header.createdAt, 5)
+  assert.equal('origin' in artifact.header, false)
+  assert.equal(buildForkArtifact({ snapshot: { ...snapshot, events: [] }, childId: 'x', title: 't', now: 1 }), undefined)
+})
+
+test('session fork writes the child through persistence and verifies it', async () => {
+  const snapshot = { session: { type: 'session', version: 4, id: 's-1', cwd: '/tmp', createdAt: 1, isSeeded: false, delegationDepth: 0 }, events: [{ seq: 0, type: 'turn/end', time: 1, data: {} }] }
+  const appended = []
+  const created = []
+  const ctx = context({
+    sessionQuery: {
+      readSession: async id => id === 's-1' ? snapshot : { session: { ...snapshot.session, id, parentSession: 's-1', isSeeded: true }, inheritedEventCount: 1, events: appended },
+      readTitleSnapshots: async () => [],
+    },
+    sessionPersistence: { create: async (header, options) => {
+      created.push([header, options])
+      return { append: async events => { appended.push(...events) }, flush: async () => {}, close: async () => {} }
+    } },
+  })
+  const child = await manage(ctx, { kind: 'session', action: 'fork', sessionId: 's-1' })
+  assert.match(child.sessionId, /^session-/u)
+  assert.equal(child.sourceSessionId, 's-1')
+  assert.equal(child.boundary, 0)
+  assert.equal(child.inheritedEventCount, 1)
+  assert.equal(child.events, 3)
+  assert.equal(child.title, 'Fork: s-1')
+  assert.equal(created.length, 1)
+  assert.equal(created[0][1].inheritedEventCount, 1)
+  assert.deepEqual(appended.map(entry => `${entry.seq}:${entry.type}`), ['0:turn/end', '1:session/end-seed', '2:session/title'])
+})
+
+test('session fork refuses a source without a closed turn', async () => {
+  const ctx = context({
+    sessionQuery: {
+      readSession: async () => ({ session: { id: 's-2', cwd: '/tmp', createdAt: 1, isSeeded: false, delegationDepth: 0 }, inheritedEventCount: 0, events: [{ seq: 0, type: 'user/message', time: 1, data: {} }] }),
+      readTitleSnapshots: async () => [],
+    },
+    sessionPersistence: { create: async () => { throw new Error('must not write') } },
+  })
+  await assert.rejects(manage(ctx, { kind: 'session', action: 'fork', sessionId: 's-2' }), /no completed turn/u)
 })
 
 test('read commands whitelist credential output and label MCP observation honestly', async () => {

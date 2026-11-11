@@ -49,6 +49,14 @@ try {
   assert.equal(tail.cursor, status.lastSeq)
   assert(tail.rows.length > 0 && tail.rows.length <= 20)
   assert(tail.rows.every(row => typeof row.type === 'string'))
+  const child = run(['session', 'fork', first.sessionId]).data
+  assert.match(child.sessionId, /^session-/u)
+  assert.equal(child.sourceSessionId, first.sessionId)
+  assert(child.title.startsWith('Fork:'))
+  const childSnapshot = run(['session', 'show', child.sessionId]).data
+  assert.equal(childSnapshot.session.parentSession, first.sessionId)
+  assert.equal(childSnapshot.inheritedEventCount, child.inheritedEventCount)
+  assert.equal(run(['run', '--session-id', child.sessionId, 'fork continues']).sessionId, child.sessionId)
   assert.match(run(['session', 'export', first.sessionId]).data, /CLI_RUNTIME_OK/u)
   assert(Array.isArray(run(['models', 'list']).data))
   assert(Array.isArray(run(['skills', 'list']).data))

@@ -1,4 +1,5 @@
 /** DSH-only read adapter, mounted by the official profile loader (no UI). */
+import { createSessionFork, latestTitle } from './fork.mjs'
 import { ownerOf, readSessionOwners } from './mounts.mjs'
 
 export const name = 'dst-cli-management'
@@ -37,17 +38,6 @@ function trimmedText(event) {
   return text.length > TAIL_TEXT_MAX ? `${text.slice(0, TAIL_TEXT_MAX)}…` : text
 }
 
-async function titleOf(query, sessionId) {
-  try {
-    const results = await query.readTitleSnapshots([sessionId])
-    const result = results.find(entry => entry.sessionId === sessionId && entry.status === 'fulfilled')
-    return result?.value?.title?.text ?? null
-  } catch {
-    // A title is presentation detail: a failing title fold must not fail the read.
-    return null
-  }
-}
-
 async function describe(ctx, request) {
   const query = service(ctx, 'sessionQuery')
   const snapshot = await query.readSession(request.sessionId)
@@ -58,7 +48,7 @@ async function describe(ctx, request) {
   const owner = ownerOf(readSessionOwners(), request.sessionId)
   return {
     sessionId: header.id,
-    title: await titleOf(query, request.sessionId),
+    title: await latestTitle(query, request.sessionId),
     cwd: header.cwd ?? null,
     createdAt: header.createdAt,
     parentSession: header.parentSession ?? null,
@@ -113,6 +103,14 @@ export async function manage(ctx, request) {
   if (request.kind === 'session') {
     const query = service(ctx, 'sessionQuery')
     if (request.action === 'status') return describe(ctx, request)
+    if (request.action === 'fork') {
+      return createSessionFork({
+        query,
+        persistence: service(ctx, 'sessionPersistence'),
+        sourceId: request.sessionId,
+        title: request.title,
+      })
+    }
     if (request.action === 'tail') return tail(ctx, request)
     if (request.action === 'show') return query.readSession(request.sessionId)
     if (request.action === 'export') return markdown(await query.readSurface(request.sessionId))
@@ -178,7 +176,7 @@ export function apply(ctx, config) {
       exit(0)
     } catch (error) {
       const code = error.code === 'SESSION_QUERY_SESSION_NOT_FOUND' ? 'SESSION_NOT_FOUND'
-        : ['SESSION_NOT_FOUND', 'PROVIDER_NOT_FOUND', 'CAPABILITY_UNAVAILABLE'].includes(error.code) ? error.code : 'MANAGEMENT_FAILED'
+        : ['SESSION_NOT_FOUND', 'PROVIDER_NOT_FOUND', 'CAPABILITY_UNAVAILABLE', 'SESSION_FORK_UNAVAILABLE'].includes(error.code) ? error.code : 'MANAGEMENT_FAILED'
       process.stdout.write(`${JSON.stringify({ schemaVersion: 1, type: 'error', code, message: 'DSH management operation failed' })}\n`, () => exit(1))
     }
   }
