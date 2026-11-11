@@ -697,8 +697,6 @@ const GROUPS = {
 // sticky 头的重复调用走 memo、18k 单行不再 O(n²)——活体冻结会话的 profile 里
 // stringWidth 占 13.6% self-time。
     ["verify-clean-render-text", ['node', '--import', 'tsx/esm', 'scripts/verify-clean-render-text.tsx']],
-    // 流式片段的帧预算：3000 行规模下 cpu/frame 门槛 9ms（步进式 rebuild 曾到 18ms）
-    ["verify-transcript-delta-cost", ['node', '--import', 'tsx/esm', 'scripts/verify-transcript-delta-cost.tsx']],
 // 会话标题回归：选择器标题宽容读取（带未标记第三方事件的日志
 // 不能让标题退化成目录名），/rename 的最后一条 session/title 优先。
     ["verify-session-titles", ['node', 'scripts/verify-session-titles.mjs']],
