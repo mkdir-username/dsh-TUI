@@ -336,7 +336,7 @@ delegation provider 的已结算运行失败至少 2 次、且不低于一半时
 
 启动页与聊天页均支持 `Alt/Option+←/→` 按空白分隔的单词移动，`Alt/Option+Backspace` 与 `Ctrl+W` 一样删除前一个单词。macOS 终端需将 Option 配置为 Meta。
 
-问卷的回答行是同一套编辑器：`Alt/Option+←/→` 与 `Ctrl+←/→` 按词跳转，`Ctrl+A/E` 与 `Home`/`End` 到当前行首尾，`Ctrl+W` 与 `Alt/Option+Backspace` 删除前一个单词，`Ctrl+U` 删至行首，`Ctrl+↑/↓` 在多行间移动光标。`Shift+Enter`、`Option+Enter` 或 `Ctrl+J` 插入换行，回答可以是多行；单独 `Enter` 仍然是提交，粘贴的多行文本仍折叠为一行。
+问卷的回答行是同一套编辑器：`Alt/Option+←/→` 与 `Ctrl+←/→` 按词跳转，`Ctrl+A/E` 与 `Home`/`End` 到当前行首尾，`Ctrl+W` 与 `Alt/Option+Backspace` 删除前一个单词，`Ctrl+U` 删至行首，`Ctrl+↑/↓` 在多行间移动光标。`Shift+Enter`、`Option+Enter` 或 `Ctrl+J` 插入换行，回答可以是多行；单独 `Enter` 仍然是提交，粘贴的多行文本仍折叠为一行。选项带编号（`1)`、`2)`…）。回答缓冲区为空时，`1`–`9` 直接选中对应选项（多选为切换）；缓冲区已有文字时，数字按普通文本输入。
 
 计划评审的反馈行是同一套编辑器：同样的按键移动光标与编辑，`Shift+Enter`、`Option+Enter` 或 `Ctrl+J` 同样插入换行。
 

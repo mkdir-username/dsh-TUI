@@ -422,7 +422,7 @@ In the launchpad input, `Shift+Enter` (or `Option+Enter`) opens chat and inserts
 
 In both the launchpad and chat, `Alt/Option+←/→` moves by whitespace-delimited words and `Alt/Option+Backspace` deletes the previous word, like `Ctrl+W`. On macOS, configure your terminal to send Option as Meta.
 
-The questionnaire's answer field is the same kind of editor: `Alt/Option+←/→` and `Ctrl+←/→` jump by words, `Ctrl+A/E` and `Home`/`End` go to the line edge, `Ctrl+W` and `Alt/Option+Backspace` delete the previous word, `Ctrl+U` deletes to the line start and `Ctrl+↑/↓` move the caret between lines. `Shift+Enter`, `Option+Enter` or `Ctrl+J` insert a line break, so an answer may span several lines; a bare `Enter` still submits and pasted text stays folded to one line.
+The questionnaire's answer field is the same kind of editor: `Alt/Option+←/→` and `Ctrl+←/→` jump by words, `Ctrl+A/E` and `Home`/`End` go to the line edge, `Ctrl+W` and `Alt/Option+Backspace` delete the previous word, `Ctrl+U` deletes to the line start and `Ctrl+↑/↓` move the caret between lines. `Shift+Enter`, `Option+Enter` or `Ctrl+J` insert a line break, so an answer may span several lines; a bare `Enter` still submits and pasted text stays folded to one line. Options are numbered (`1)`, `2)`, …): with an empty answer buffer, `1`–`9` pick that option directly (multi-select toggles it); once the buffer holds text, digits are typed into the answer.
 
 The plan-review feedback row is the same editor: the same keys move the caret and edit it, and `Shift+Enter`, `Option+Enter` or `Ctrl+J` insert a line break there too.
 
