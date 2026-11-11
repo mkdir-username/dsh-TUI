@@ -226,6 +226,22 @@ export function createManualCompaction(
       try { deps.releaseCompact?.() } catch {}
     }
     const run = async (): Promise<void> => {
+      // The decision gates the WHOLE cycle: the restruct-plan fork writes to
+      // disk, so a vetoed /compact must not start it. Asking before the agent
+      // is held also keeps a slow dialog from freezing the session.
+      const decision = await deps.withDecisionPending('tui/compact', dispatchTuiDecision(ctx, 'tui/compact', {
+        sessionId: state.agentId,
+        cwd: state.cwd,
+      }, normalizeCancelDecision))
+      if (!current()) return
+      if (decision !== undefined) {
+        deps.notify(decision.reason ?? t('ext-action-cancelled'), { color: 'warning', timeoutMs: 4000 })
+        return
+      }
+      if (originAgent.status === 'running' || (deps.agent() === originAgent && state.working)) {
+        deps.notify(t(WORKING_GATE_NOTICES.compact), { color: 'warning' })
+        return
+      }
       if (input.kind === 'restruct') {
         const verdict = await runRestructPlan(ctx, originAgent, cycle.preparation.signal)
         if (!current()) return
@@ -285,25 +301,9 @@ export function createManualCompaction(
       controller.abort(new Error('channel lifetime ended'))
       try { disposeStream?.() } finally { disposeEnd?.() }
     })
-    const originAgentId = state.agentId
     let finished = false
     const settled = (async () => {
       try {
-        const decision = await deps.withDecisionPending('tui/compact', dispatchTuiDecision(ctx, 'tui/compact', {
-          sessionId: originAgentId,
-          cwd: state.cwd,
-        }, normalizeCancelDecision))
-        // A view switch may park this agent while the decision is pending.
-        // Disposal and snapshot actions revoke it; parking does not.
-        if (!isLive()) return
-        if (userCancelled.has(controller)) {
-          if (isCurrent()) deps.notify(t('compact-cancelled'))
-          return
-        }
-        if (decision !== undefined) {
-          if (isCurrent()) deps.notify(decision.reason ?? t('ext-action-cancelled'), { color: 'warning', timeoutMs: 4000 })
-          return
-        }
         if (originAgent.status === 'running' || (isCurrent() && state.working)) {
           if (isCurrent()) deps.notify(t(WORKING_GATE_NOTICES.compact), { color: 'warning' })
           return

@@ -200,7 +200,7 @@ function makeAgent(id: string, sessionEvents: readonly unknown[], captured: { fo
 type FakeAgent = ReturnType<typeof makeAgent>
 
 function makeServices(
-  captured: { followupTexts: string[]; compactCalls: string[]; cancelCalls: number },
+  captured: { followupTexts: string[]; compactCalls: string[]; cancelCalls: number; forkCalls: number },
   agentsById: Map<string, FakeAgent>,
 ) {
   const remember = (agent: FakeAgent): FakeAgent => {
@@ -252,12 +252,21 @@ function makeServices(
         return true
       },
     },
+    // The manual cycle asks the fork provider first; without it `/compact`
+    // stops before the decision these scenes are about.
+    subagents: {
+      getProvider: (name: string) => name === 'fork' ? { name } : undefined,
+      async startActivation() {
+        captured.forkCalls += 1
+        return { result: Promise.resolve({ stopReason: 'completed', output: [{ type: 'text', text: 'RP_SKIP harness' }] }) }
+      },
+    },
   }
 }
 
 // ── harness: real cordis root + real channel + real Chat ────────────────
 const ctx = new Context()
-const captured = { followupTexts: [] as string[], compactCalls: [] as string[], cancelCalls: 0 }
+const captured = { followupTexts: [] as string[], compactCalls: [] as string[], cancelCalls: 0, forkCalls: 0 }
 const agentsById = new Map<string, FakeAgent>()
 const services = makeServices(captured, agentsById)
 for (const [key, value] of Object.entries(services)) {
@@ -685,12 +694,14 @@ await sleep(800)
   channel.compact()
   const compactVetoToasted = await settled(() => notified('禁止压缩'))
   check('tui/compact veto: compaction never ran', captured.compactCalls.length === 0)
+  check('tui/compact veto: restruct-plan never started', captured.forkCalls === 0, String(captured.forkCalls))
   check('tui/compact veto: reason toasted', compactVetoToasted)
   dispose()
 
   channel.compact()
   check('tui/compact without the veto: compaction runs on the live agent',
     await settled(() => captured.compactCalls.length === 1), JSON.stringify(captured.compactCalls))
+  check('tui/compact without the veto: the fork ran once', captured.forkCalls === 1, String(captured.forkCalls))
 }
 
 // ── 8. compact stale-drop: a slow listener + /new during the await ───────
