@@ -415,6 +415,8 @@ the dashboard alone does not acknowledge every child. Task status stays failed.
 ## Keybindings & Mouse
 
 `Enter` send · `Tab` complete · `Ctrl+Enter` send without stopping the turn · `Alt+Up` recall the last message · `Esc` closes local layers before interrupting a running turn, double-`Esc` rewinds on empty idle input · `Ctrl+B` / `⌘B` opens or closes the side panel, or moves a running command to the background · `/panel` side panel · `Ctrl+O` details · `Ctrl+R` history (`↑`/`↓` and `Ctrl+R` are scoped to the current project) · `Ctrl+V` paste · `Ctrl+Shift+E` fullscreen draft editor · `?` shortcuts · `←` open the session manager (DSH backgrounds the current session first).
+
+The rewind list (double-`Esc` on an empty idle input, or `/rewind`) shows one checkpoint per message with a dim metadata line — its position, plus `last message` for the newest — keeps the focused checkpoint on screen, collapses the rest behind `↑ N more` / `↓ N more`, and the confirm step says `⚠ No code restore` when the rewind restores the conversation only.
 In both the launchpad and chat, `Ctrl+U` deletes from the caret to the current line start, preserving text to the right and whole image chips. It edits only the focused input.
 
 In the launchpad input, `Shift+Enter` (or `Option+Enter`) opens chat and inserts a newline at the caret, keeping the draft and staged images unsent. Continue typing there, then press `Enter` to send.
