@@ -40,7 +40,7 @@ interface SubagentsService {
     readonly request: { readonly prompt: ReadonlyArray<{ readonly type: 'text'; readonly text: string }>; readonly parent: Agent }
     readonly signal: AbortSignal
     readonly delivery: 'caller'
-  }): Promise<{ readonly result: Promise<RestructPlanResult> }>
+  }): Promise<{ readonly result: Promise<RestructPlanResult>; readonly dispose?: () => Promise<void> }>
 }
 
 /** `Agent.runMaintenance` (DSH 0.2+): a non-turn phase that keeps waking input
@@ -181,21 +181,49 @@ export function createManualCompaction(
   }
   const RP_PROMPT = 'Пользователь набрал /compact: это его явная команда выполнить restruct-plan сейчас, до сжатия контекста. Ты — форк этой сессии, запущенный TUI, история диалога тебе видна. Вызови Skill restruct-plan для плана .dev/<slug>/, над которым шла работа, и запиши на диск всё, что знает только диалог: прогресс, грабли, тупики, проверенные факты. Перед записью в .dev/ прочитай каталог плана — его сторожит гейт dev-docs. Вопросов не задавай, ответить некому. Ничего не коммить и не пушить. Последней строкой ответа выведи ровно RP_DONE <slug> или RP_SKIP <причина>.'
   const RP_TIMEOUT_MS = 15 * 60 * 1000
+  /** `activation.result` settles only when the child finishes: a fork that hangs
+   *  (or ignores its abort) would otherwise keep the cycle, and with it the whole
+   *  agent hold, waiting long past `RP_TIMEOUT_MS`. The cycle's own signals end
+   *  the wait; the child is released separately. */
+  const settledOrAborted = async <T>(result: Promise<T>, signal: AbortSignal): Promise<T> => {
+    let detach = (): void => {}
+    try {
+      return await Promise.race([
+        result,
+        new Promise<never>((_, reject) => {
+          const fail = (): void => reject(signal.reason instanceof Error ? signal.reason : new Error('restruct-plan aborted'))
+          if (signal.aborted) return fail()
+          signal.addEventListener('abort', fail, { once: true })
+          detach = () => signal.removeEventListener('abort', fail)
+        }),
+      ])
+    } finally {
+      detach()
+    }
+  }
   async function runRestructPlan(ctx: Context, agent: Agent, preparation: AbortSignal): Promise<{ ok: true; notice: string } | { ok: false; reason: string }> {
     const subagents = (ctx.get('subagents') ?? (agent.ctx as Context).get('subagents')) as SubagentsService | undefined
     if (subagents === undefined) return { ok: false, reason: 'compact-rp: сервис subagents не смонтирован. Без restruct-plan: /compact --pure' }
     if (subagents.getProvider('fork') === undefined) return { ok: false, reason: 'compact-rp: провайдер «fork» не смонтирован. Без restruct-plan: /compact --pure' }
     const signal = AbortSignal.any([deps.owner.signal, preparation, AbortSignal.timeout(RP_TIMEOUT_MS)])
+    let activation: { readonly result: Promise<RestructPlanResult>; readonly dispose?: () => Promise<void> } | undefined
     try {
-      const activation = await subagents.startActivation({
+      activation = await subagents.startActivation({
         provider: 'fork',
         label: 'restruct-plan',
         request: { prompt: [{ type: 'text', text: RP_PROMPT }], parent: agent },
         signal,
         delivery: 'caller',
       })
-      return restructPlanVerdict(await activation.result)
+      return restructPlanVerdict(await settledOrAborted(activation.result, signal))
     } catch (error: unknown) {
+      if (activation !== undefined && signal.aborted) {
+        // The fork kept its own request after the abort (live probe 2026-11-12),
+        // so stop it: the cycle is over and `dispose` is the only handle left.
+        void activation.dispose?.().catch(() => {})
+        const why = signal.reason instanceof Error ? signal.reason.message : 'отмена'
+        return { ok: false, reason: `compact-rp: restruct-plan прерван (${why}). Сжатие остановлено. Без restruct-plan: /compact --pure` }
+      }
       return {
         ok: false,
         reason: `compact-rp: restruct-plan не запустился (${error instanceof Error ? error.message : String(error)}). Сжатие остановлено. Без restruct-plan: /compact --pure`,

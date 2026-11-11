@@ -136,14 +136,22 @@ function holdRestructPlan() {
   let finish!: (result: unknown) => void
   const result = new Promise(resolve => { finish = resolve })
   let signal: AbortSignal | undefined
+  let disposed = false
   return {
     finish,
     get signal() { return signal },
+    get disposed() { return disposed },
     service: {
       getProvider: (name: string) => name === 'fork' ? {} : undefined,
       async startActivation(request: { signal: AbortSignal }) {
         signal = request.signal
-        return { result }
+        return {
+          result,
+          dispose() {
+            disposed = true
+            return Promise.resolve()
+          },
+        }
       },
     },
   }
@@ -152,7 +160,7 @@ function holdRestructPlan() {
 // ---- 组装 ctx：source snapshot / agents.create 记录调用顺序 -----------------
 function assemble(script: Script, subagents?: {
   getProvider(name: string): unknown
-  startActivation(request: { signal: AbortSignal }): Promise<{ result: Promise<unknown> }>
+  startActivation(request: { signal: AbortSignal }): Promise<{ result: Promise<unknown>; dispose?(): Promise<void> }>
 }) {
   // Each assembly is an independent session: restart the event sequence so the
   // log's `seq` stays index-aligned (makeAgent publishes `seq: events.length`)
@@ -746,6 +754,31 @@ const toasts = (channel: { notifications: readonly { text: string }[] }) =>
     check('scene21: no compaction runs after the late fork result', compaction.calls.length === 0)
     check('scene21: the queued line is released',
       await settle(() => !channel.pending.some(item => item.heldCompact === true && item.text === 'typed during the fork')))
+  } finally {
+    fork.finish(verdict)
+    channel.releaseContributions()
+  }
+}
+
+// ==== A fork that never settles must not outlive the cycle ====
+// The live probe (2026-11-12) saw `activation.result` still pending >20 min after
+// RP_TIMEOUT_MS: aborting the request does not settle the child's result, so the
+// cycle kept the agent held with no way out.
+{
+  const fork = holdRestructPlan()
+  const { channel, compaction } = assemble({ kind: 'hang-until-abort' }, fork.service)
+  const verdict = { stopReason: 'completed', output: [{ type: 'text', text: 'RP_DONE late' }] }
+  try {
+    channel.compact()
+    check('scene22: the hung restruct-plan fork runs',
+      await settle(() => fork.signal !== undefined && channel.manualCompactionStage?.phase === 'restruct-plan'))
+    channel.cancelCompact()
+    check('scene22: the hung fork is disposed on cancel',
+      await settle(() => fork.disposed && fork.signal?.aborted === true))
+    check('scene22: the cancellation is announced', await settle(() => toasts(channel).includes('压缩已取消')))
+    check('scene22: the stage is cleared without the fork result',
+      await settle(() => channel.manualCompactionStage === undefined))
+    check('scene22: no compaction runs after the hung fork', compaction.calls.length === 0)
   } finally {
     fork.finish(verdict)
     channel.releaseContributions()
