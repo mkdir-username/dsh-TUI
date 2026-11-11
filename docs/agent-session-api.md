@@ -12,7 +12,7 @@
   "mcpServers": {
     "dsh-sessions": {
       "command": "node",
-      "args": ["/Users/username/Docs/dsh-tui-fork/bin/dst-mcp.js"]
+      "args": ["/path/to/dsh-tui/bin/dst-mcp.js"]
     }
   }
 }
