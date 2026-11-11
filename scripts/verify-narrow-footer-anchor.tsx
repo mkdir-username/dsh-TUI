@@ -148,10 +148,11 @@ function geometry(term: InstanceType<typeof XTerm>): Geometry {
   let fields = -1
   let hint = -1
   let lastNonBlank = -1
+  const footerBandStart = lines.length - 6
   for (let y = 0; y < lines.length; y++) {
     const line = lines[y]!
     if (composer < 0 && /[╭┌]/.test(line)) composer = y
-    if (fields < 0 && /ctx [\d.]/.test(line)) fields = y
+    if (fields < 0 && y >= footerBandStart && /ctx\s*[\d.]|ctx…|zyb-token-plan|deepseek-v4\.1/.test(line)) fields = y
     if (hint < 0 && /^\s*\? 查看快捷键/.test(line)) hint = y
     if (line.trim() !== '') lastNonBlank = y
   }

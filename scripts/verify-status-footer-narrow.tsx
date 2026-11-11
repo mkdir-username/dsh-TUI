@@ -66,7 +66,7 @@ const channel = {
   contextSegments: {},
   contextBreakdown: undefined,
   contextBarEnabled: true,
-  working: true,
+  working: false,
   turnStart: Date.now() - 3_000,
   spinnerMode: 'requesting',
   responseChars: 1_024,
@@ -86,6 +86,7 @@ const channel = {
     contextUsage: true,
     gitBranch: true,
     compact: true,
+    shortcutHint: true,
   },
 }
 
@@ -109,7 +110,7 @@ async function footerRows(cols: number): Promise<{ rows: string[]; painted: bool
     patchConsole: false,
   })
   // 页脚上屏即量高度：等待的谓词就是断言要读的那一行，超时即报未上屏。
-  const painted = await settled(() => screenHas(term, 'esc 中断'))
+  const painted = await settled(() => screenHas(term, '? 查看快捷键'))
   const lines = viewportLines(term, ROWS)
   instance.unmount()
   term.dispose()
@@ -134,7 +135,7 @@ check('每个宽度页脚都是 3 行', offenders.length === 0, offenders.length
 // 空白带的具体形状：提示行紧贴字段行上方。
 {
   const { rows } = await footerRows(127)
-  const hint = rows.findIndex(line => line.includes('esc 中断'))
+  const hint = rows.findIndex(line => line.includes('? 查看快捷键'))
   const fields = rows.findIndex(line => line.includes('ctx '))
   check('127 列量到字段行与提示行', hint > 0 && fields > 0, `fields=${fields}, hint=${hint}`)
   check('提示行紧贴字段行（中间无空行）', hint === fields + 1, `fields=${fields}, hint=${hint}`)
