@@ -291,6 +291,7 @@
     "verify:ctrl-enter-steer": "node scripts/verify-ctrl-enter-steer.mjs",
     "verify:tool-park": "node --import tsx/esm scripts/verify-tool-park.tsx",
     "verify:compact-queue": "node scripts/verify-compact-queue.mjs",
+    "verify:compact-hold": "node scripts/verify-compact-hold-events.mjs",
     "verify:compact-rp": "node scripts/verify-compact-rp.mjs"
   },
   "peerDependencies": {

@@ -18,6 +18,8 @@ interface ManualCompaction {
 interface CompactCycle {
   stage: ManualCompactionStage
   preparation: AbortController
+  /** The user stopped the cycle from the status row. */
+  cancelRequested?: boolean
 }
 
 type CompactionState = Pick<ChannelState, 'agentId' | 'agentBindingGeneration' | 'cwd' | 'working' | 'compaction' | 'manualCompactionStage' | 'emit' | 'emitStream'>
@@ -40,6 +42,27 @@ interface SubagentsService {
     readonly delivery: 'caller'
   }): Promise<{ readonly result: Promise<RestructPlanResult> }>
 }
+
+/** `Agent.runMaintenance` (DSH 0.2+): a non-turn phase that keeps waking input
+ *  in the inbox until the task settles. Nullish on older hosts. */
+type MaintenanceRunner = <T>(task: (signal: AbortSignal) => Promise<T>) => Promise<T>
+const maintenanceOf = (agent: Agent): MaintenanceRunner | undefined => {
+  const run = (agent as { runMaintenance?: MaintenanceRunner }).runMaintenance
+  return typeof run === 'function'
+    ? <T>(task: (signal: AbortSignal) => Promise<T>): Promise<T> => Reflect.apply(run, agent, [task])
+    : undefined
+}
+/** The compaction engine claims its own maintenance span before summarizing;
+ *  inside the cycle's span that second claim would throw. Forward the whole
+ *  agent and run only that method inline in the phase the cycle already owns. */
+const heldCompactionAgent = (agent: Agent, signal: AbortSignal): Agent => new Proxy(agent, {
+  get(target, property) {
+    if (property === 'runMaintenance') {
+      return <T>(task: (taskSignal: AbortSignal) => Promise<T>): Promise<T> => task(signal)
+    }
+    return Reflect.get(target, property, target)
+  },
+})
 
 /** One manual compaction transaction per live agent, including agents parked
  * by `/bg`. `settle` aborts the transaction of the FOREGROUND binding — the
@@ -242,31 +265,67 @@ export function createManualCompaction(
         deps.notify(t(WORKING_GATE_NOTICES.compact), { color: 'warning' })
         return
       }
-      if (input.kind === 'restruct') {
-        const verdict = await runRestructPlan(ctx, originAgent, cycle.preparation.signal)
-        if (!current()) return
-        if (!verdict.ok) {
-          deps.notify(verdict.reason, { color: 'error', timeoutMs: 12000 })
-          return
+      /** True when the cycle must stop before the next step: the binding moved
+       *  or the user cancelled the preparation. */
+      const stopped = (): boolean => {
+        if (!current()) return true
+        if (cycle.cancelRequested === true) {
+          deps.notify(t('compact-cancelled'))
+          return true
         }
-        deps.notify(verdict.notice)
-        if (state.working) {
-          cycle.stage = { ...cycle.stage, phase: 'wait-idle' }
-          state.manualCompactionStage = cycle.stage
-          state.emit()
-          if (!await waitUntilIdle(current)) {
-            if (current()) {
-              deps.notify(`compact-rp: ход не освободился за ${IDLE_WAIT_MS / 60000} минут — сжатие отменено. Повтори /compact`, { color: 'warning', timeoutMs: 12000 })
-            }
+        return cycle.preparation.signal.aborted
+      }
+      const cycleTask = async (holdSignal: AbortSignal | undefined): Promise<void> => {
+        if (input.kind === 'restruct') {
+          const verdict = await runRestructPlan(
+            ctx,
+            originAgent,
+            holdSignal === undefined
+              ? cycle.preparation.signal
+              : AbortSignal.any([cycle.preparation.signal, holdSignal]),
+          )
+          if (stopped()) return
+          if (!verdict.ok) {
+            deps.notify(verdict.reason, { color: 'error', timeoutMs: 12000 })
             return
           }
+          deps.notify(verdict.notice)
+          if (holdSignal === undefined && state.working) {
+            // A host without runMaintenance: a turn that started while the
+            // fork ran still has to finish before the summary.
+            cycle.stage = { ...cycle.stage, phase: 'wait-idle' }
+            state.manualCompactionStage = cycle.stage
+            state.emit()
+            if (!await waitUntilIdle(() => current() && !cycle.preparation.signal.aborted)) {
+              if (current() && !cycle.preparation.signal.aborted) {
+                deps.notify(`compact-rp: ход не освободился за ${IDLE_WAIT_MS / 60000} минут — сжатие отменено. Повтори /compact`, { color: 'warning', timeoutMs: 12000 })
+              }
+              return
+            }
+            if (stopped()) return
+          }
+          cycle.stage = { ...cycle.stage, phase: 'checking' }
+          state.manualCompactionStage = cycle.stage
+          state.emit()
         }
-        if (!current()) return
-        cycle.stage = { ...cycle.stage, phase: 'checking' }
-        state.manualCompactionStage = cycle.stage
-        state.emit()
+        if (stopped()) return
+        await compactNow(originAgent, cycle, holdSignal)
       }
-      if (current()) await compactNow(originAgent, cycle)
+      const maintenance = maintenanceOf(originAgent)
+      if (maintenance === undefined) {
+        await cycleTask(undefined)
+        return
+      }
+      let held: Promise<void>
+      try {
+        // Throws synchronously while a turn or another maintenance owns the
+        // agent; nothing was started in that case.
+        held = maintenance(cycleTask)
+      } catch {
+        deps.notify(t(WORKING_GATE_NOTICES.compact), { color: 'warning' })
+        return
+      }
+      await held
     }
     void run().catch((error: unknown) => {
       if (current()) {
@@ -274,7 +333,7 @@ export function createManualCompaction(
       }
     }).finally(finish)
   }
-  const compactNow = (originAgent: Agent, cycle: CompactCycle): Promise<void> => {
+  const compactNow = (originAgent: Agent, cycle: CompactCycle, holdSignal?: AbortSignal): Promise<void> => {
     if (active.has(originAgent)) return Promise.resolve()
     const compactService = serviceForAgent<{
       compactNow(agent: unknown, signal: AbortSignal): Promise<unknown>
@@ -288,6 +347,9 @@ export function createManualCompaction(
       return Promise.resolve()
     }
     const controller = new AbortController()
+    const operationSignal = holdSignal === undefined
+      ? controller.signal
+      : AbortSignal.any([controller.signal, holdSignal])
     const transaction: ManualCompaction = { controller, settled: Promise.resolve(), row: undefined }
     const isLive = () => deps.owner.current()
       && !deps.owner.signal.aborted
@@ -359,7 +421,10 @@ export function createManualCompaction(
         })
         try {
           // Compact the entry agent, never a later binding read after await.
-          const result = await compactService.compactNow(originAgent, controller.signal)
+          const result = await compactService.compactNow(
+            holdSignal === undefined ? originAgent : heldCompactionAgent(originAgent, operationSignal),
+            operationSignal,
+          )
           if (!isCurrent()) return
           deps.notify(result ? t('compact-done') : t('compact-nothing'))
         } catch (error: unknown) {
