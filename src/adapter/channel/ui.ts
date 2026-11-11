@@ -96,7 +96,13 @@ export function createChannelUi(channel: ChannelUi, mode: AdapterMode, lease: Ch
         if (key === 'jobControl') {
           const control = channel.jobControl as ChannelUi['jobControl'] | undefined
           if (control === undefined) return undefined
-          const projected = methods(control, { kill: 'mutate' } as Readonly<Record<keyof typeof control, HostEffectClass>>)
+          // `parkAny` is optional: backends that only read and kill jobs have
+          // no background seam. Forward it when present — the background key
+          // asks through this view, so a dropped method turns the key into a
+          // side-panel toggle on a running call.
+          const effects: Partial<Record<keyof NonNullable<ChannelUi['jobControl']>, HostEffectClass>> = { kill: 'mutate' }
+          if (typeof control.parkAny === 'function') effects.parkAny = 'mutate'
+          const projected = methods(control, effects as Readonly<Record<keyof typeof control, HostEffectClass>>)
           const watch = control.watchOutput
           if (watch === undefined) return projected
           // A renderer observation of an on-screen card (like `subscribe`):

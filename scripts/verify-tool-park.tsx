@@ -244,5 +244,22 @@ const BACKGROUND_CARD = toolRow({
   check('a backend without park says nothing', notices.length === 0, JSON.stringify(notices))
 }
 
+// ── the production UI projection keeps the optional park seam ─────────────
+// The suites above hand `jobControl` straight to Chat, but production reads
+// it through `createChannelUi`, which forwards only the methods it knows.
+// A dropped `parkAny` makes the background key fall through to the panel on
+// a running call — the exact symptom this suite exists to prevent.
+{
+  const { createChannelUi, createChannelUiLease } = await import('../src/adapter/channel/ui.js')
+  const lease = createChannelUiLease(() => true)
+  const parkedCall = { callId: 'call-7', command: 'sleep 300' }
+  const live = createChannelUi(makeChannel([RUNNING], { kill: () => false, parkAny: () => parkedCall }) as never, 'new', lease)
+  check('the UI view forwards parkAny', typeof live.jobControl?.parkAny === 'function')
+  check('the forwarded call reaches the backend', live.jobControl?.parkAny?.()?.callId === 'call-7')
+  const bare = createChannelUi(makeChannel([RUNNING], { kill: () => false }) as never, 'new', lease)
+  check('a backend without the seam keeps no parkAny', bare.jobControl?.parkAny === undefined)
+  lease.dispose()
+}
+
 console.log(failed === 0 ? '\nAll tool-park checks passed.' : `\n${failed} check(s) failed.`)
 process.exit(failed === 0 ? 0 : 1)
