@@ -44,6 +44,10 @@ dst session list --json                 # 当前 cwd，默认最多 50 条
 dst session list --all --limit 100 --json
 dst session show <id> --json             # 官方校验过的日志快照
 dst session export <id> > session.md     # 官方当前 surface 的可见文字，非完整备份
+dst session status <id> --json           # 活跃度、kind、持有进程 pid、计数
+dst session tail <id> --limit 20 --json  # 最近事件，文本截断到 500 字符
+dst session fork <id> --json             # 复制到最后关闭的回合（--title 可选）
+dst session list --titles --json         # 附带标题；会读取每个会话日志，较慢
 dst models list --provider deepseek-official --json
 dst skills list --json
 dst mcp status --json
@@ -57,6 +61,8 @@ dst dsh plugin --profile dsh-tui add <package>
 
 - `--session-id` 只恢复已存在、cwd 匹配、没有 preset/fork/子代理身份的官方兼容主会话。`--continue` 用官方查询结果和最近日志活动选择，不读取 TUI 的 resume.txt；找不到兼容会话失败，不静默新建。查询后取得写租约时仍由官方重新校验。
 - `session export` 仅输出当前可见 user/assistant 文字的 Markdown，不含附件、完整工具结果或 ZIP；`show --json` 是校验后的事件快照，不冒充物理备份。
+- `session status` / `session tail` 只读：`working` 表示最后一条事件不是 `turn/end`；`ownerPid` 取自 TUI 的挂载账本 `~/.dsh-tui/session-mounts.json`（缺失或损坏时该字段为 `null`，那只是展示信息）。
+- `session fork` 是**写入**：经官方 `sessionPersistence` 新建一个会话（`parentSession` = 源），源日志不动。切点固定为最后一个已关闭回合；没有关闭回合 → `SESSION_FORK_UNAVAILABLE`（退出码 3），不创建文件。子会话继承源的 `agentPreset`，因此只能在能组合该 preset 的运行时继续（TUI），headless 会拒绝。写完后 CLI 重新读取子会话校验，失败即报错。
 - `skills list` 是当前 profile 全局作用域、当前 cwd 的目录，不代表某个 TUI preset 的技能。
 - `mcp status` 只报告已注册的 `mcp__...` 工具，明确返回 `connectionHealth: unavailable`，不能据此判断无工具的服务器是否连接。
 - `auth status` 只查 `DEEPSEEK_API_KEY` 的配置状态及来源，不返回值，不代表账号登录成功、key 有效或所有 provider 已认证。DSH 0.2.1 与 0.2.2 的默认 headless profile 禁用了凭据服务，此命令返回 `CAPABILITY_UNAVAILABLE`（退出码 3）；需要查询时，显式选择挂载该服务的兼容 profile 或 `--patch`，CLI 不会自行启用凭据库。

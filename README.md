@@ -194,6 +194,8 @@ Automation: `dst -p "task"`, `dst run --json`, `dst session list --json`.
 The independent engine does not load the TUI or inherit its profile/preferences;
 it uses official DSH headless/services (validated on 0.2.0-rc.2, 0.2.1-rc.2, 0.2.1-rc.3, 0.2.1-rc.4, 0.2.1-rc.5 and 0.2.2-rc.1).
 `dst cli --help` lists its commands; `dst dsh <argv...>` forwards native DSH.
+Agents get the same session operations as MCP tools (`node bin/dst-mcp.js`) — see
+[Session API for agents](docs/agent-session-api.en.md).
 See [Automation CLI](docs/cli.en.md) for protocol, limits, resume restrictions,
 and Node/Python/PowerShell integration examples.
 

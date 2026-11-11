@@ -155,7 +155,8 @@ TUI 启动后会在后台检查新版本，不阻塞首帧。有更新时输入 
 自动化入口：`dst -p "任务"`、`dst run --json`、`dst session list --json`。
 独立引擎不加载 TUI，也不继承其 profile/偏好；执行与查询仍由官方 DSH
 headless/服务拥有（当前验证 0.2.0-rc.2、0.2.1-rc.2、0.2.1-rc.3、0.2.1-rc.4、0.2.1-rc.5 与 0.2.2-rc.1）。`dst cli --help` 查看全部命令，
-`dst dsh <参数...>` 原样转交官方。协议、限制、会话恢复边界与
+`dst dsh <参数...>` 原样转交官方。同样的会话操作也可作为 MCP 工具给 agent 使用
+（`node bin/dst-mcp.js`），见[会话 API](docs/agent-session-api.md)。协议、限制、会话恢复边界与
 Node/Python/PowerShell 示例见[自动化 CLI](docs/cli.md)。
 
 | 命令 | 作用 |
