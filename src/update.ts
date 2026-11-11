@@ -4252,6 +4252,13 @@ export interface TuiRestartOptions {
    * continues with the usual outcome handling.
    */
   onTerminationSignal?: (signal: NodeJS.Signals) => void
+  /**
+   * The session's title, for the recovery notice a failed handoff prints: the
+   * user has to recognise the conversation the resume command brings back,
+   * and its bare id does not. Written by THIS process (the channel knows the
+   * title); the replacement ignores it.
+   */
+  sessionTitle?: string
 }
 
 /**
@@ -4350,20 +4357,18 @@ export function restartArgv(input: {
 const RUNTIME_RELEASE_ENTRY = /[\\/]releases[\\/][^\\/]+[\\/](.+)$/
 
 /**
- * The script the replacement should exec. Normally this process's own entry,
- * but a runtime release can disappear under a live process: `prepare` prunes
- * old releases, and this process then holds a pinned
- * `<runtime>/releases/<id>/...` entry whose file is gone. Re-execing it dies
- * in the loader before the first frame (field evidence 2026-11-11:
- * MODULE_NOT_FOUND, exit 1 in 35ms — the /restart that was supposed to bring
- * the session back dropped it instead). The same relative entry under
- * `<runtime>/current` is what a fresh launch runs and what boot.mjs itself
- * would dispatch to, so a missing own entry falls back to it instead of a
- * dead path. A live entry, a launcher or a package script is returned
- * untouched: a restart must stay a restart.
+ * The script the replacement should exec. A runtime release entry is always
+ * re-pointed at `<runtime>/current`: a pinned `<runtime>/releases/<id>/...`
+ * entry can disappear under a live process (prepare prunes old releases) and
+ * re-execing it dies in the loader before the first frame (field evidence
+ * 2026-11-11: MODULE_NOT_FOUND, exit 1 in 35ms — the /restart that was
+ * supposed to bring the session back dropped it instead). `current` is where
+ * that entry would dispatch itself, so the substitution changes nothing in
+ * the healthy case and heals the vanished one. A launcher, a package script
+ * or a `current` path already is returned untouched: a restart must stay a
+ * restart, not an upgrade.
  */
 export function resolveRestartScript(script: string, fileExists: (path: string) => boolean = existsSync): string {
-  if (fileExists(script)) return script
   const match = RUNTIME_RELEASE_ENTRY.exec(script)
   if (match === null) return script
   const current = join(script.slice(0, match.index), 'current', match[1])
@@ -4390,7 +4395,7 @@ export async function restartTui(sessionId: string, options: TuiRestartOptions =
   const entry = resolveRestartScript(ownEntry)
   if (entry !== ownEntry) {
     argv[0] = entry
-    logRestartEvent(`${tag}: own entry is gone, restarting from the current release`, { missing: ownEntry, entry })
+    logRestartEvent(`${tag}: release entry re-pointed at current`, { from: ownEntry, to: entry })
   }
   logRestartEvent(`${tag}: spawning replacement`, {
     node: process.execPath,

@@ -2583,8 +2583,8 @@ export async function apply(ctx: Context, runtimeConfig: RuntimeConfig<Config>, 
             // dispose the root a second time and race two replacements for the
             // same session mount.
             void held.then(
-              inputs => { runRestart(ctx, profile, handoffSessionId(), handoffHint, { kernel: backendChoice, env: writeHeldInputs(inputs) }, exitSeam) },
-              () => { runRestart(ctx, profile, handoffSessionId(), handoffHint, { kernel: backendChoice }, exitSeam) },
+              inputs => { runRestart(ctx, profile, handoffSessionId(), handoffHint, { kernel: backendChoice, env: writeHeldInputs(inputs), sessionTitle: channel.sessionTitle }, exitSeam) },
+              () => { runRestart(ctx, profile, handoffSessionId(), handoffHint, { kernel: backendChoice, sessionTitle: channel.sessionTitle }, exitSeam) },
             )
           },
         )
@@ -3850,8 +3850,10 @@ function writeStream(stream: NodeJS.WriteStream, data: string): Promise<void> {
  * or nothing, when there is none to resume (a backend session the CLI never
  * persisted hands over an empty id: a hint without an id would mislead).
  */
-function preservedSessionTail(sessionId: string, hint: (sessionId: string) => string): string {
-  return sessionId === '' ? '\n\n' : ` Your session is preserved — resume with:\n${hint(sessionId)}\n\n`
+function preservedSessionTail(sessionId: string, hint: (sessionId: string) => string, title?: string): string {
+  if (sessionId === '') return '\n\n'
+  const named = title === undefined || title.trim() === '' ? '' : ` «${title.trim()}»`
+  return ` Your session${named} is preserved — resume with:\n${hint(sessionId)}\n\n`
 }
 
 /**
@@ -3893,7 +3895,7 @@ function runRestart(ctx: Context, profile: string | undefined, sessionId: string
   const resumeLine = (id: string): string => heldInputsResumeCommand(hint(id), options.env)
   const ended = (): string => {
     if (sessionId === '') dropHeldInputs()
-    return preservedSessionTail(sessionId, resumeLine)
+    return preservedSessionTail(sessionId, resumeLine, options.sessionTitle)
   }
   const stalled = (): void => {
     writeHandoffNotice(`\ndsh-tui restart timed out while stopping the current turn.${ended()}`)

@@ -226,8 +226,9 @@ const stateTmp = mkdtempSync(join(tmpdir(), 'verify-handoff-atomic-'))
   const own = join(root, 'releases', '217f1fb4-2212-42dd-adb8-8f56f0ef2970', 'boot.mjs')
   const current = join(root, 'current', 'boot.mjs')
   const present = (...paths: string[]) => (path: string) => paths.includes(path)
-  check('restart entry: a live own entry is never replaced',
-    resolveRestartScript(own, present(own, current)) === own)
+  check('restart entry: a pinned release entry always runs the current release (boot.mjs dispatches there anyway)',
+    resolveRestartScript(own, present(own, current)) === current,
+    resolveRestartScript(own, present(own, current)))
   check('restart entry: a pruned own release re-execs the current release (same entry name)',
     resolveRestartScript(own, present(current)) === current,
     resolveRestartScript(own, present(current)))
@@ -327,7 +328,7 @@ const stateTmp = mkdtempSync(join(tmpdir(), 'verify-handoff-atomic-'))
   check('plugin.ts: /restart and /update pass the current kernel to the replacement',
     // (the trailing argument is the standalone entry's exit seam / supervision hooks;
     // `env` carries the queue a /restart holds for the replacement)
-    /runRestart\(ctx, profile, handoffSessionId\(\), handoffHint, \{ kernel: backendChoice, env: writeHeldInputs\(inputs\) \}(, exitSeam)?\)/.test(plugin)
+    /runRestart\(ctx, profile, handoffSessionId\(\), handoffHint, \{ kernel: backendChoice, env: writeHeldInputs\(inputs\), sessionTitle: channel\.sessionTitle \}(, exitSeam)?\)/.test(plugin)
     // The queue the replacement holds (#1651): collected, images included,
     // from what the screen still shows, taken back at the replacement's boot.
     && /const held = collectHeldInputs\(channel\.pending, stageId => channel\.stagedImage\(stageId\)\)/.test(plugin)
@@ -341,6 +342,12 @@ const stateTmp = mkdtempSync(join(tmpdir(), 'verify-handoff-atomic-'))
   // recovery hatch promises a clean resume it cannot deliver on a wedged agent.
   check('plugin.ts: the /restart handoff notice warns when the turn is interrupted',
     /t\(channel\.working \? 'restart-during-turn' : 'restart-starting'\)/.test(plugin))
+  // The recovery line must name the session, not just its id: after a failed
+  // handoff the user has to recognise which conversation they are getting
+  // back, and the id alone is what they complained about (2026-11-11).
+  check('plugin.ts: the preserved-session notice carries the session title',
+    /preservedSessionTail\(sessionId, resumeLine, options\.sessionTitle\)/.test(plugin)
+    && /options\.sessionTitle: channel\.sessionTitle|sessionTitle: channel\.sessionTitle/.test(plugin))
   // A turn whose abort never converges keeps the agent teardown in
   // `whenIdle()` forever; the 5 s dispose bound must then print the resume
   // hint instead of a bare exit, or the advertised recovery hatch "restarts"
@@ -352,7 +359,7 @@ const stateTmp = mkdtempSync(join(tmpdir(), 'verify-handoff-atomic-'))
     check('plugin.ts: a stalled /restart dispose hands back the resume hint (no bare exit)',
       restart.includes('restart timed out while stopping the current turn')
       // The hint may carry the queued messages' file (#1651), never replace it.
-      && /preservedSessionTail\(sessionId, resumeLine\)/.test(restart)
+      && /preservedSessionTail\(sessionId, resumeLine(, options\.sessionTitle)?\)/.test(restart)
       && /resumeLine = \(id: string\): string => heldInputsResumeCommand\(hint\(id\), options\.env\)/.test(restart)
       && /\}, stalled\)/.test(restart))
   }
