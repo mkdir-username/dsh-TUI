@@ -47,7 +47,7 @@ dst session export <id> > session.md      # visible current-surface text, not a 
 dst session status <id> --json            # activity, kind, holder pid, counters
 dst session tail <id> --limit 20 --json   # recent events, text trimmed to 500 chars
 dst session fork <id> --json              # copy up to the last closed turn (--title optional)
-dst session list --titles --json          # also read titles; slower, reads every listed log
+dst session list --titles --json          # also folded titles; one log fold per session, slower
 dst models list --provider deepseek-official --json
 dst skills list --json
 dst mcp status --json
@@ -61,7 +61,7 @@ A separate Cordis plugin calls public `sessionQuery`, `llm`, `skills`, `tools`, 
 
 - `--session-id` resumes only existing, cwd-matching root sessions without a preset/fork/subagent identity. `--continue` selects by validated recent log activity through official queries, not TUI resume.txt; no compatible session means failure, never a silent fresh session. DSH revalidates after acquiring its write lease.
 - `session export` is Markdown user/assistant text from the current visible surface, not attachments, complete tool output or ZIP. `show --json` is a validated event snapshot, not a physical backup.
-- `session status` / `session tail` are read-only: `working` means the last event is not `turn/end`; `ownerPid` comes from the TUI mount ledger `~/.dsh-tui/session-mounts.json` (absent or damaged reads as `null`, display only).
+- `session status` / `session tail` are read-only: `working` means a turn is open (`turn/start` without a later `turn/end`); trailing events such as a title, a fork marker or a compaction are not work in progress. `title` is the latest title folded from the log, `null` for a session that was never titled; `tail` returns the text of user and assistant messages, truncated to 500 characters. `ownerPid` comes from the TUI mount ledger `~/.dsh-tui/session-mounts.json` (absent or damaged reads as `null`, display only).
 - `session fork` is a **write**: it creates a new session through the official `sessionPersistence` (`parentSession` = source) and never touches the source log. The cut is the last completed turn; without one it fails with `SESSION_FORK_UNAVAILABLE` (exit 3) and creates no file. The child inherits the source `agentPreset`, so only a runtime composing that preset (the TUI) can continue it; headless refuses. The child is re-read and verified before the command reports success.
 - `skills list` reads the profile's global scope for this cwd, not a TUI preset's catalog.
 - `mcp status` observes registered `mcp__...` tools and explicitly returns `connectionHealth: unavailable`; it cannot determine connectivity of a server with no tools.

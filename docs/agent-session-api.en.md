@@ -27,9 +27,9 @@ as `mcp__dsh-sessions__*` after a TUI restart; Claude Code can take the same blo
 
 | Tool | What it does | Limits |
 | --- | --- | --- |
-| `sessions_list` | Sessions of one cwd: `sessionId`, `kind` (root/fork/subagent), `ownerPid`, optional `title` | 50 rows by default, 200 max; `titles` reads every listed log |
-| `session_status` | One session: title, cwd, kind, preset, event count, last event, whether a turn runs, holder pid | reads the full log |
-| `session_tail` | Recent events: `seq`, `type`, `time`, text truncated to 500 characters, tool name | 20 rows by default, 200 max |
+| `sessions_list` | Sessions of one cwd: `sessionId`, `kind` (root/fork/subagent), `ownerPid`, optional `title` | 50 rows by default, 200 max; `titles` folds one title per session, `null` when never titled |
+| `session_status` | One session: folded title, cwd, kind, preset, event count, last event, whether a turn is open, holder pid | reads the full log |
+| `session_tail` | Recent events: `seq`, `type`, `time`, text of user and assistant messages truncated to 500 characters, tool name | 20 rows by default, 200 max |
 | `session_fork` | Copy up to the last completed turn into a new session with `parentSession` = source; the source log is untouched | a write; the child inherits the source `agentPreset` |
 | `session_prompt` | Run one headless turn in an idle session and return its answer | `SESSION_OCCUPIED` when held; `SESSION_PRESET_UNSUPPORTED` with a preset |
 

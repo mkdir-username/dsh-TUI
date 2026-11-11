@@ -26,9 +26,9 @@ DSH 的 `mcp-claude` 插件在挂载时读取 `~/.mcp.json`（`sources`），重
 
 | 工具 | 作用 | 限制 |
 | --- | --- | --- |
-| `sessions_list` | 当前 cwd 的会话：`sessionId`、`kind`（root/fork/subagent）、`ownerPid`、可选的 `title` | 默认 50，最多 200；`titles` 会读取每个会话日志，较慢 |
-| `session_status` | 一个会话：标题、cwd、kind、preset、事件数、最后事件、是否在跑、持有进程 pid | 读取完整会话日志 |
-| `session_tail` | 最近事件：`seq`、`type`、`time`、截断到 500 字符的文本、工具名 | 默认 20，最多 200 |
+| `sessions_list` | 当前 cwd 的会话：`sessionId`、`kind`（root/fork/subagent）、`ownerPid`、可选的 `title` | 默认 50，最多 200；`titles` 每条会话折叠一次标题，从未命名时为 `null` |
+| `session_status` | 一个会话：折叠标题、cwd、kind、preset、事件数、最后事件、是否有未结束的回合、持有进程 pid | 读取完整会话日志 |
+| `session_tail` | 最近事件：`seq`、`type`、`time`、用户与助手文本（截断到 500 字符）、工具名 | 默认 20，最多 200 |
 | `session_fork` | 复制到最后关闭的回合，生成 `parentSession` = 源的新会话；源日志不改动 | 写入；子会话继承源的 `agentPreset` |
 | `session_prompt` | 在空闲会话里跑一个 headless 回合并返回答案 | 被占用 → `SESSION_OCCUPIED`；带 preset → `SESSION_PRESET_UNSUPPORTED` |
 
