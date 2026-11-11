@@ -20,3 +20,5 @@ HANDOVER.md
 .upstream/
 # run-ci-group 保留的失败脚本帧日志（CI 传 artifact，本地随手跑也会生成）
 ci-render-logs/
+# /export 落在会话 cwd，仓库里不留副本
+dsh-tui-export-*.md
