@@ -1877,6 +1877,7 @@ const dict = {
   'question-hint-cancel': { zh: 'Ctrl+C 取消整批', en: 'Ctrl+C cancel batch' },
   'question-hint-selected': { zh: '已选 {{n}}', en: 'Selected {{n}}' },
   'question-hint-select': { zh: '↑/↓ 选择', en: '↑/↓ select' },
+  'question-hint-digit': { zh: '1–9 快速选择', en: '1–9 pick' },
   'question-hint-multi': { zh: 'Space 多选', en: 'Space multi-select' },
   'question-hint-attach': { zh: '输入文字附带回答', en: 'Type text to attach an answer' },
   'question-fold-waiting': { zh: '正在等你回答', en: 'Waiting for your answer' },

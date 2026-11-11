@@ -368,7 +368,14 @@ export function AskUserQuestionPanel({
   // Non-windowed rows wrap at their actual text width. Reducing the preview
   // must not disable windowing just because a multiline description was
   // counted as one line. Windowed rows below still have fixed 1/2-row heights.
-  const optionCells = Math.max(1, contentCells - 3)
+  // The number column ("1) " up to nine options, "10) " beyond) sits between
+  // the pointer and the checkbox: charge it to the wrap width so windowing
+  // still measures what really paints.
+  const numberWidth = options.length === 0 ? 0 : String(options.length).length + 2
+  const optionCells = Math.max(
+    1,
+    contentCells - 1 - numberWidth - (multiSelect ? 3 : 1) - 1,
+  )
   const wrappedOptionRows = options.reduce((sum, option, index) =>
     sum + wrapText(optionLabels[index]!, optionCells, 'wrap').split('\n').length
       + (option.description === undefined ? 0 : wrapText(option.description, optionCells, 'wrap').split('\n').length), 0)
@@ -612,6 +619,23 @@ export function AskUserQuestionPanel({
       if (!hideCustomInput && field.text !== '') field.backspace()
       return
     }
+    // A bare 1–9 on an option row quick-picks with an empty answer buffer;
+    // with text pending, digits are answer text (the same rule the plan
+    // review's decision rows already carry). The ref, not state: one stdin
+    // chunk delivers several events before React commits.
+    if (!key.ctrl && !key.meta && !key.super && input.length === 1) {
+      const digit = input >= '1' && input <= '9' ? Number(input) : 0
+      if (digit > 0 && digit <= options.length && field.textRef.current === '') {
+        const index = digit - 1
+        // Highlight the picked row even when the answer unmounts the panel
+        // right away: hosts that keep it mounted (async answers) must still
+        // show which option the digit chose, and a windowed list scrolls to it.
+        placeFocus(index)
+        if (multiSelect) toggleCheckedAt(index)
+        else answerOption(index)
+        return
+      }
+    }
     // Typing on an option appends into the input row; single-select also
     // attaches this option's label so Enter carries label + text (#9).
     if (!hideCustomInput && !key.ctrl && !key.meta && !key.super && input) {
@@ -635,6 +659,13 @@ export function AskUserQuestionPanel({
     placeFocus(options.length)
     setError(null)
   }
+  /** Single-select answer plus whatever the answer field already holds. */
+  const answerOption = (index: number): void => {
+    const label = options[index]?.label
+    if (label === undefined) return
+    const text = field.textRef.current.trim()
+    onAnswer({ selected: [label], ...(text !== '' ? { custom: text } : {}) })
+  }
   /**
    * Mouse: click an option row. Multi-select toggles the checkmark (same as
    * Space); single-select answers immediately with that option plus any
@@ -646,10 +677,7 @@ export function AskUserQuestionPanel({
       toggleCheckedAt(index)
       return
     }
-    const label = options[index]?.label
-    if (label === undefined) return
-    const text = field.text.trim()
-    onAnswer({ selected: [label], ...(text !== '' ? { custom: text } : {}) })
+    answerOption(index)
   }
   const [hoverIndex, setHoverIndex] = React.useState(-1)
   /** Header row hover — the row doubles as the mouse fold/unfold affordance. */
@@ -740,6 +768,11 @@ export function AskUserQuestionPanel({
                 {pointer}
               </Text>
             </Box>
+            <Box width={numberWidth} flexShrink={0}>
+              <Text color={focused ? 'accent' : undefined} dimColor={!focused} bold={focused}>
+                {`${absoluteIndex + 1})`}
+              </Text>
+            </Box>
             <Box width={multiSelect ? 3 : 1} flexShrink={0}>
               <Text color={focused ? 'accent' : undefined} bold={selected}>
                 {selected ? (multiSelect ? CHECKED : '●') : UNCHECKED}
@@ -797,6 +830,7 @@ export function AskUserQuestionPanel({
     : [
         t('question-hint-select'),
         ...(multiSelect ? [t('question-hint-multi')] : []),
+        ...(options.length > 0 ? [t('question-hint-digit')] : []),
         ...(modelEditor === undefined ? [] : [t('provider-model-edit-hint')]),
         ...(hideCustomInput ? [] : [t('question-hint-paste', { key: comboDisplay(primaryComboString('paste')) }), t('question-hint-attach')]),
         t('question-hint-enter'),
