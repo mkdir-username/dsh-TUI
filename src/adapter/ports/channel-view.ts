@@ -583,6 +583,8 @@ export interface NotificationItem {
 export interface ManualCompactionStage {
   readonly phase: 'restruct-plan' | 'wait-idle' | 'checking' | 'finalizing'
   readonly startedAt: number
+  /** The status row can stop the whole cycle (Esc / Ctrl+C), not only the summary. */
+  readonly cancellable?: boolean
 }
 
 /**

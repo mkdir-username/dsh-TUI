@@ -726,4 +726,30 @@ const toasts = (channel: { notifications: readonly { text: string }[] }) =>
   }
 }
 
+// ==== Esc during restruct-plan cancels the whole cycle ====
+{
+  const fork = holdRestructPlan()
+  const { channel, compaction } = assemble({ kind: 'hang-until-abort' }, fork.service)
+  const verdict = { stopReason: 'completed', output: [{ type: 'text', text: 'RP_DONE late' }] }
+  try {
+    channel.compact()
+    check('scene21: the restruct-plan fork runs',
+      await settle(() => fork.signal !== undefined && channel.manualCompactionStage?.phase === 'restruct-plan'))
+    channel.submit('typed during the fork')
+    check('scene21: input waits in the composer while the fork runs',
+      await settle(() => channel.pending.some(item => item.heldCompact === true && item.text === 'typed during the fork')))
+    channel.cancelCompact()
+    check('scene21: Esc aborts the fork', await settle(() => fork.signal?.aborted === true))
+    fork.finish(verdict)
+    check('scene21: the cancellation is announced', await settle(() => toasts(channel).includes('压缩已取消')))
+    check('scene21: the stage is cleared', await settle(() => channel.manualCompactionStage === undefined))
+    check('scene21: no compaction runs after the late fork result', compaction.calls.length === 0)
+    check('scene21: the queued line is released',
+      await settle(() => !channel.pending.some(item => item.heldCompact === true && item.text === 'typed during the fork')))
+  } finally {
+    fork.finish(verdict)
+    channel.releaseContributions()
+  }
+}
+
 process.exit(failed)

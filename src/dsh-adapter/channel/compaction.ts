@@ -234,7 +234,7 @@ export function createManualCompaction(
     }
     const cycle: CompactCycle = {
       preparation: new AbortController(),
-      stage: { phase: input.kind === 'pure' ? 'checking' : 'restruct-plan', startedAt: Date.now() },
+      stage: { phase: input.kind === 'pure' ? 'checking' : 'restruct-plan', startedAt: Date.now(), cancellable: true },
     }
     cycles.set(originAgent, cycle)
     holdInputs(cycle)
@@ -475,10 +475,19 @@ export function createManualCompaction(
 
   /** Abort the in-flight manual compaction the user asked to stop. */
   const cancel = (): void => {
-    const transaction = active.get(deps.agent())
-    if (transaction === undefined) return
-    userCancelled.add(transaction.controller)
-    transaction.controller.abort(new Error('user cancelled compaction'))
+    const agent = deps.agent()
+    const transaction = active.get(agent)
+    if (transaction !== undefined) {
+      userCancelled.add(transaction.controller)
+      transaction.controller.abort(new Error('user cancelled compaction'))
+      return
+    }
+    const cycle = cycles.get(agent)
+    if (cycle === undefined) return
+    // The fork and the pre-transaction prefill are stopped through the
+    // cycle's own signal; the summary has its transaction branch above.
+    cycle.cancelRequested = true
+    cycle.preparation.abort(new Error('user cancelled compaction'))
   }
 
   /** Rebinding restores only the foreground agent's live work. */

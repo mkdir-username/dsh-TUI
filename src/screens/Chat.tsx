@@ -5776,12 +5776,11 @@ export function Chat({
       key.escape
       && !helpOpen
       && !channel.working
-      && channel.compaction?.cancellable === true
+      && (channel.compaction?.cancellable === true || channel.manualCompactionStage?.cancellable === true)
       && !promptControllerRef.current?.vimActive()
     ) {
-      // Idle Esc otherwise falls through to the prompt's double-tap-clear;
-      // while a manual compaction runs, stopping it is what the status row
-      // promises (and the host closes the bracket cleanly on abort).
+      // The whole manual cycle stops here: restruct-plan promises Esc in its
+      // stage row exactly like the summary does.
       channel.cancelCompact()
       event.stopImmediatePropagation()
     } else if (
