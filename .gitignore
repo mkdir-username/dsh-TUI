@@ -15,6 +15,7 @@ package-lock.json
 .tmp/
 .dsh-prompt-debug.json
 HANDOVER.md
+LOCAL-FORK-NOTES.md
 .local/
 .claude/
 .upstream/
