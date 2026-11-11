@@ -121,6 +121,35 @@ check('B12 short terminal keeps title, a checkpoint and the footer',
 check('B13 short terminal stays inside the screen',
   lines().filter(line => line.trim() !== '').length <= 16, screen())
 
+// C1–C4: plain confirm — capped quote, code-restore warning, footer
+await mount(100, 30, {
+  rows,
+  focusIndex: 0,
+  confirmRow: { id: 1, kind: 'user' as const, text: 'Line one\nLine two\nLine three\nLine four' },
+})
+check('C1 confirm repeats the picked message', screen().includes('Rewind conversation to this message?'), screen())
+check('C2 confirm states the code-restore availability', screen().includes('No code restore'), screen())
+check('C3 confirm preview is capped with an ellipsis',
+  screen().includes('Line one') && screen().includes('Line two')
+  && !screen().includes('Line three') && !screen().includes('Line four')
+  && screen().includes('…'), screen())
+check('C4 confirm footer offers Enter and Esc',
+  screen().includes('Enter to rewind') && screen().includes('Esc'), screen())
+
+// C5–C6: plugin modes carry the real file stats, option zero is conversation-only
+await mount(100, 30, {
+  rows,
+  focusIndex: 0,
+  confirmRow: rows[0],
+  modes: [
+    { id: 'both', label: 'Rewind conversation and restore files', description: '2 files · +5 −3' },
+    { id: 'files', label: 'Restore files only (conversation unchanged)', description: '2 files · +5 −3' },
+  ],
+})
+check('C5 modes list is rendered', screen().includes('Restore files only'), screen())
+check('C6 file stats come from the decision and option zero stays conversation-only',
+  screen().includes('Conversation only') && screen().includes('2 files · +5 −3'), screen())
+
 if (failures > 0) {
   console.error(`${failures} check(s) failed`)
   process.exit(1)

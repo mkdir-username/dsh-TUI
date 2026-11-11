@@ -9,6 +9,7 @@ import { Pane } from './design-system/Pane.js'
 import { ListItem } from './design-system/ListItem.js'
 import { HintLine } from './design-system/HintLine.js'
 import { listWindow } from './listWindow.js'
+import { clipPreviewRows } from './previewRows.js'
 import { useOverlayListRows } from './OverlayAbove.js'
 
 /** One checkpoint: the message line plus its dim metadata line. */
@@ -23,6 +24,11 @@ const LIST_FRAME_ROWS = 8
 /** Compact chrome below ~20 terminal rows: wrapper 1 + Pane 2 + title 1 +
  *  footer 1. The subtitle and the footer margin are secondary. */
 const LIST_FRAME_COMPACT_ROWS = 5
+/** Modes pane chrome: wrapper 1 + Pane 2 + title 1 + margin 1 + footer 2. */
+const MODES_FRAME_ROWS = 7
+/** Plain confirm chrome without the quote: wrapper 1 + Pane 2 + title 1 +
+ *  warning 1 + footer 2. */
+const CONFIRM_FRAME_ROWS = 7
 
 /**
  * Double-Esc rewind picker (double-tap Esc rewinds the selected message and/or
@@ -72,7 +78,7 @@ export function RewindPicker({
   // parts (compact chrome, confirm preview rows) read the same number.
   const overlayRows = useOverlayListRows(0)
   const compact = overlayRows < 12
-  const modeListRows = useOverlayListRows(6)
+  const modeListRows = useOverlayListRows(MODES_FRAME_ROWS)
   // Rows for the checkpoint list itself. The list chrome is counted by real
   // rows (wrapper 1 + Pane 2 + title block 3 + footer 2; compact 5), and the
   // busy line is its own row. Counters are reserved below, after the first
@@ -96,9 +102,10 @@ export function RewindPicker({
   if (confirmRow !== null) {
     if (modes !== null) {
       // Plugin modes: a described choice list (one extra row per
-      // description), windowed like the message list below.
+      // description), windowed like the message list below. Option zero is
+      // always the built-in conversation-only rewind.
       const rowCosts = [2, ...modes.map(mode => (mode.description === undefined ? 1 : 2))]
-      const { start, end } = listWindow(rowCosts, modeIndex, modeListRows)
+      const { start, end } = listWindow(rowCosts, modeIndex, modeListRows, ROW_GAP)
       const options: readonly { key: string; label: string; description?: string }[] = [
         { key: 'conversation', label: t('rewind-mode-default'), description: t('rewind-confirm-desc') },
         ...modes.map(mode => ({
@@ -107,48 +114,79 @@ export function RewindPicker({
           ...(mode.description === undefined ? {} : { description: mode.description }),
         })),
       ]
+      const title = t('rewind-confirm-title')
       return (
         <Pane color="permission">
           <Box flexDirection="column">
             <Box marginBottom={1}>
-              <Text color="remember" bold>
-                {t('rewind-confirm-title')}
+              <Text color="accent" bold>
+                {title}
               </Text>
-              <Text dimColor>{preview(confirmRow.text)}</Text>
+              <Text dimColor>
+                {oneLine(confirmRow.text, Math.max(8, contentCells - stringWidth(title) - 2))}
+              </Text>
             </Box>
-            {options.slice(start, end).map((option, index) => {
-              const absoluteIndex = start + index
-              return (
-                <ListItem
-                  key={option.key}
-                  isFocused={absoluteIndex === modeIndex}
-                  description={option.description}
-                  showScrollUp={absoluteIndex === start && start > 0}
-                  showScrollDown={absoluteIndex === end - 1 && end < options.length}
-                  onClick={onPickMode === undefined ? undefined : () => onPickMode(absoluteIndex)}
-                >
-                  {option.label}
-                </ListItem>
-              )
-            })}
+            <Box flexDirection="column" gap={ROW_GAP}>
+              {options.slice(start, end).map((option, index) => {
+                const absoluteIndex = start + index
+                return (
+                  <ListItem
+                    key={option.key}
+                    isFocused={absoluteIndex === modeIndex}
+                    focusColor="accent"
+                    description={option.description}
+                    showScrollUp={absoluteIndex === start && start > 0}
+                    showScrollDown={absoluteIndex === end - 1 && end < options.length}
+                    onClick={onPickMode === undefined ? undefined : () => onPickMode(absoluteIndex)}
+                  >
+                    {option.label}
+                  </ListItem>
+                )
+              })}
+            </Box>
           </Box>
-          <Text dimColor italic>
-            <HintLine text={t('hint-select-exit')} />
-          </Text>
+          <Box marginTop={1}>
+            <Text dimColor italic>
+              <HintLine text={t('hint-select-exit')} />
+            </Text>
+          </Box>
         </Pane>
       )
     }
+    // The plain confirm offers no file mode by contract: the dry run that
+    // would name changed files either failed or found none, so the rewind
+    // restores the conversation only. Say so instead of inventing stats the
+    // projection does not carry.
+    const previewRows = Math.max(1, Math.min(3, overlayRows - CONFIRM_FRAME_ROWS))
+    const quoteCells = Math.max(8, contentCells - 2) // border + left padding
+    const quote = clipPreviewRows(confirmRow.text, quoteCells, previewRows)
+    const confirmLines = previewRows === 1 ? [oneLine(confirmRow.text, quoteCells)] : quote.rows
+    const confirmOmitted = previewRows > 1 && quote.omitted > 0
     return (
       <Pane color="permission">
         <Box flexDirection="column">
-          <Box marginBottom={1}>
-            <Text color="remember" bold>
-              {t('rewind-confirm-title')}
-            </Text>
+          <Text color="accent" bold>
+            {t('rewind-confirm-title')}
+          </Text>
+          <Box
+            flexDirection="column"
+            paddingLeft={1}
+            borderStyle="single"
+            borderRight={false}
+            borderTop={false}
+            borderBottom={false}
+            borderLeft
+            borderLeftDimColor
+            onClick={onConfirm}
+          >
+            {confirmLines.map((line, index) => (
+              <Text key={index} wrap="truncate-end">{line}</Text>
+            ))}
+            {confirmOmitted && <Text dimColor>…</Text>}
           </Box>
-          <ListItem isFocused={false} description={t('rewind-confirm-desc')} onClick={onConfirm}>
-            {preview(confirmRow.text)}
-          </ListItem>
+          <Text color="warning">{t('rewind-no-code-restore')}</Text>
+        </Box>
+        <Box marginTop={1}>
           <Text dimColor italic>
             <HintLine text={t('hint-rewind-back')} />
           </Text>
@@ -156,7 +194,6 @@ export function RewindPicker({
       </Pane>
     )
   }
-
   return (
     <Pane color="permission">
       <Box flexDirection="column">
@@ -220,10 +257,4 @@ function oneLine(text: string, cells: number): string {
   const flat = text.replace(/\s+/gu, ' ').trim()
   if (flat === '' || stringWidth(flat) <= cells) return flat
   return `${truncateToWidth(flat, Math.max(1, cells - 1))}…`
-}
-
-/** One-line preview of a message (newlines flattened, capped). */
-function preview(text: string): string {
-  const flat = text.replace(/\s+/g, ' ').trim()
-  return flat.length <= 80 ? flat : `${flat.slice(0, 80)}…`
 }

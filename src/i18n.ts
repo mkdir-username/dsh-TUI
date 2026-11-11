@@ -1397,6 +1397,7 @@ const dict = {
   'rewind-row-position': { zh: '第 {{n}} 条，共 {{total}} 条', en: '{{n}} of {{total}}' },
   'rewind-more-above': { zh: '↑ 还有 {{n}} 条', en: '↑ {{n}} more' },
   'rewind-more-below': { zh: '↓ 还有 {{n}} 条', en: '↓ {{n}} more' },
+  'rewind-no-code-restore': { zh: '⚠ 不恢复代码', en: '⚠ No code restore' },
   'rewind-none': { zh: '还没有可回退的消息', en: 'Nothing to rewind yet' },
   'rewind-done': { zh: '已回退——编辑后按 Enter 重新发送', en: 'Rewound — edit and press Enter to resend' },
   'rewind-mode-default': { zh: '仅回退会话', en: 'Conversation only' },
