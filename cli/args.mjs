@@ -45,6 +45,7 @@ export function parse(argv, cwd = process.cwd()) {
     }
     if (token === '-c' || token === '--continue') { request.continue = true; continue }
     if (token === '--all') { request.all = true; continue }
+    if (token === '--titles') { request.titles = true; continue }
     if (token === '-' || !token.startsWith('-')) { positional.push(token); continue }
     const equal = token.indexOf('=')
     const flag = equal < 0 ? token : token.slice(0, equal)
@@ -90,6 +91,7 @@ export function parse(argv, cwd = process.cwd()) {
     if (request.limit !== undefined && !(kind === 'session' && ['list', 'tail'].includes(request.action))) usage('--limit requires session list or tail')
     if (request.sessionId && !(kind === 'session' && sessionById.includes(request.action))) usage('--session-id is a run option')
     if (request.title !== undefined && !(kind === 'session' && request.action === 'fork')) usage('--title requires session fork')
+    if (request.titles && !(kind === 'session' && request.action === 'list')) usage('--titles requires session list')
   } else {
     if (positional.length || request.continue || request.sessionId || request.model || request.provider || request.permission || request.all || request.limit) usage('Unexpected capability arguments')
   }
@@ -123,7 +125,7 @@ export function help() {
 
 Commands:
   run                     Run one DSH task without loading the TUI
-  session list            List sessions (current cwd; --all, --limit N)
+  session list            List sessions (current cwd; --all, --limit N, --titles)
   session show <id>        Read the validated durable session log
   session export <id>      Export visible text as Markdown (JSON with --json)
   session status <id>      Activity, kind, owner and counters for one session

@@ -14,14 +14,31 @@ function service(ctx, key) {
   return value
 }
 
-function headerDto(record) {
+function headerDto(record, owners) {
   const h = record.header
+  const owner = ownerOf(owners, h.id)
   return {
-    sessionId: h.id, cwd: h.cwd, createdAt: h.createdAt,
+    sessionId: h.id, cwd: h.cwd ?? null, createdAt: h.createdAt,
     ...(h.parentSession === undefined ? {} : { parentSession: h.parentSession }),
     ...(h.agentPreset === undefined ? {} : { agentPreset: h.agentPreset }),
+    kind: sessionKind(h),
+    ownerPid: owner === undefined ? null : owner.pid,
     persisted: record.persisted, live: record.live,
   }
+}
+
+/** One title batch over the listed page; a failing fold degrades to null titles. */
+async function withTitles(query, page) {
+  const titles = new Map()
+  try {
+    const results = await query.readTitleSnapshots(page.map(row => row.sessionId))
+    for (const result of results) {
+      if (result.status === 'fulfilled') titles.set(result.sessionId, result.value?.title?.text ?? null)
+    }
+  } catch {
+    // Titles are a convenience: an unavailable fold must not fail the listing.
+  }
+  return page.map(row => ({ ...row, title: titles.get(row.sessionId) ?? null }))
 }
 
 function sessionKind(header) {
@@ -115,7 +132,11 @@ export async function manage(ctx, request) {
     if (request.action === 'show') return query.readSession(request.sessionId)
     if (request.action === 'export') return markdown(await query.readSurface(request.sessionId))
     const rows = (await query.listSessions()).filter(row => request.all || row.header.cwd === request.cwd)
-    if (request.action === 'list') return rows.slice(0, request.limit ?? 50).map(headerDto)
+    if (request.action === 'list') {
+      const owners = readSessionOwners()
+      const page = rows.slice(0, request.limit ?? 50).map(row => headerDto(row, owners))
+      return request.titles === true ? withTitles(query, page) : page
+    }
     if (request.action === 'continue') {
       // listSessions is newest-first by header; choose by latest validated activity.
       let latest
