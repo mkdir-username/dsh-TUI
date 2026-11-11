@@ -4346,6 +4346,30 @@ export function restartArgv(input: {
   return [...input.execArgv, ...args]
 }
 
+/** `<runtime>/releases/<id>/<entry>`: the shape of an entry a runtime release owns. */
+const RUNTIME_RELEASE_ENTRY = /[\\/]releases[\\/][^\\/]+[\\/](.+)$/
+
+/**
+ * The script the replacement should exec. Normally this process's own entry,
+ * but a runtime release can disappear under a live process: `prepare` prunes
+ * old releases, and this process then holds a pinned
+ * `<runtime>/releases/<id>/...` entry whose file is gone. Re-execing it dies
+ * in the loader before the first frame (field evidence 2026-11-11:
+ * MODULE_NOT_FOUND, exit 1 in 35ms — the /restart that was supposed to bring
+ * the session back dropped it instead). The same relative entry under
+ * `<runtime>/current` is what a fresh launch runs and what boot.mjs itself
+ * would dispatch to, so a missing own entry falls back to it instead of a
+ * dead path. A live entry, a launcher or a package script is returned
+ * untouched: a restart must stay a restart.
+ */
+export function resolveRestartScript(script: string, fileExists: (path: string) => boolean = existsSync): string {
+  if (fileExists(script)) return script
+  const match = RUNTIME_RELEASE_ENTRY.exec(script)
+  if (match === null) return script
+  const current = join(script.slice(0, match.index), 'current', match[1])
+  return fileExists(current) ? current : script
+}
+
 export async function restartTui(sessionId: string, options: TuiRestartOptions = {}): Promise<number> {
   const kind = options.kind ?? 'restart'
   const tag = options.backend !== undefined ? 'backend-switch' : kind === 'update' ? 'update-restart' : 'restart'
@@ -4358,6 +4382,16 @@ export async function restartTui(sessionId: string, options: TuiRestartOptions =
     hostEntry: hostEntry === undefined || hostEntry === '' || hostEntryDisabled() ? undefined : hostEntry,
     dshEntry: options.dshEntry,
   })
+  // A pruned release leaves argv[1] pointing at a file that no longer exists;
+  // the replacement would die in the loader before its first frame. Re-point
+  // it at the current release BEFORE the spawn log, so the log shows what
+  // actually ran.
+  const ownEntry = argv[0]
+  const entry = resolveRestartScript(ownEntry)
+  if (entry !== ownEntry) {
+    argv[0] = entry
+    logRestartEvent(`${tag}: own entry is gone, restarting from the current release`, { missing: ownEntry, entry })
+  }
   logRestartEvent(`${tag}: spawning replacement`, {
     node: process.execPath,
     argv,

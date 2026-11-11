@@ -35,7 +35,7 @@ import {
   ownsAltScreenExit,
   parseHandoffAckLine,
 } from '../src/handoffAck.js'
-import { restartChildEnv } from '../src/update.js'
+import { restartChildEnv, resolveRestartScript } from '../src/update.js'
 import { KERNEL_SWITCH_HANDOFF_ENV, resolveRememberedBackend } from '../src/kernelPrefs.js'
 
 let failures = 0
@@ -218,6 +218,29 @@ const stateTmp = mkdtempSync(join(tmpdir(), 'verify-handoff-atomic-'))
   check('restartChildEnv: a kernel switch targets the new kernel, not the current one', switched[KERNEL_SWITCH_HANDOFF_ENV] === 'claude')
   const plain = restartChildEnv({ [KERNEL_SWITCH_HANDOFF_ENV]: 'claude' } as NodeJS.ProcessEnv, 's', 'restart', {})
   check('restartChildEnv: without a kernel no stale handoff is inherited', plain[KERNEL_SWITCH_HANDOFF_ENV] === undefined)
+}
+
+// ── resolveRestartScript：prune 删掉自己的 release 时换到 current ─────────
+{
+  const root = '/Users/u/.dsh/runtime'
+  const own = join(root, 'releases', '217f1fb4-2212-42dd-adb8-8f56f0ef2970', 'boot.mjs')
+  const current = join(root, 'current', 'boot.mjs')
+  const present = (...paths: string[]) => (path: string) => paths.includes(path)
+  check('restart entry: a live own entry is never replaced',
+    resolveRestartScript(own, present(own, current)) === own)
+  check('restart entry: a pruned own release re-execs the current release (same entry name)',
+    resolveRestartScript(own, present(current)) === current,
+    resolveRestartScript(own, present(current)))
+  check('restart entry: no current release → the dead path is left to the spawn-failure path',
+    resolveRestartScript(own, present()) === own)
+  check('restart entry: a missing non-runtime script is not rewritten',
+    resolveRestartScript('/opt/dsh/bin/dsh-tui.js', present('/x')) === '/opt/dsh/bin/dsh-tui.js')
+  const hostEntry = join(root, 'releases', 'abc', 'node_modules', 'host-entry.js')
+  check('restart entry: a release-owned host entry keeps its relative path under current',
+    resolveRestartScript(hostEntry, present(join(root, 'current', 'node_modules', 'host-entry.js'))) === join(root, 'current', 'node_modules', 'host-entry.js'))
+  const source = readFileSync(new URL('../src/update.ts', import.meta.url), 'utf8')
+  check('restart entry: restartTui resolves the entry BEFORE the spawn log',
+    /restartArgv\(\{[\s\S]{0,900}resolveRestartScript\([\s\S]{0,900}spawning replacement/.test(source))
 }
 
 // ── e2e：真进程父/子角色（argv/env 复刻生产 spawn 链）────────────────────
