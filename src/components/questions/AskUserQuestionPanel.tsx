@@ -2,7 +2,7 @@
  * The questionnaire panel — ask-user-question UI for the
  * DSH user-interaction seam. One question per panel (progress header, header
  * chip, wrapped question text, optional detail, option list with focus
- * pointer and multi-select checkmarks), styled in the dsh-tui mist-blue
+ * pointer and multi-select checkboxes), styled in the dsh-tui mist-blue
  * design language.
  *
  * The list's last row IS the free-text input (issue #9): no Tab, no mode
@@ -67,8 +67,10 @@ function isPlainArrow(key: { ctrl?: boolean; meta?: boolean; super?: boolean; sh
   return key.ctrl !== true && key.meta !== true && key.super !== true && key.shift !== true
 }
 
-const CHECKED = '◉'
-const UNCHECKED = '○'
+/** Multi-select rows read as checkboxes, not as the single-choice radio pair:
+ *  a "можно несколько" question rendered with ●/○ looked answerable once. */
+const CHECKED = '[✓]'
+const UNCHECKED = '[ ]'
 const PENCIL = '✎'
 /** One masked code point of a secret answer (`question.secret`). */
 const SECRET_MASK = '•'
@@ -738,7 +740,7 @@ export function AskUserQuestionPanel({
                 {pointer}
               </Text>
             </Box>
-            <Box width={1} flexShrink={0}>
+            <Box width={multiSelect ? 3 : 1} flexShrink={0}>
               <Text color={focused ? 'accent' : undefined} bold={selected}>
                 {selected ? (multiSelect ? CHECKED : '●') : UNCHECKED}
               </Text>
