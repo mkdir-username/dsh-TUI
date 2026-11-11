@@ -11,6 +11,9 @@ export type ListItemProps = {
   /** Whether this item is selected (chosen/checked).
    *  Shows the checkmark indicator (✓) when true. */
   isSelected?: boolean
+  /** Indicator and label color while focused. Defaults to the historical
+   *  suggestion blue; rewind opts into the session accent. */
+  focusColor?: 'suggestion' | 'accent'
   /** The content to display for this item. */
   children: ReactNode
   /** Optional description text displayed below the main content. */
@@ -57,6 +60,7 @@ export type ListItemProps = {
 export function ListItem({
   isFocused,
   isSelected = false,
+  focusColor = 'suggestion',
   children,
   description,
   showScrollDown,
@@ -92,7 +96,7 @@ export function ListItem({
       return <Text> </Text>
     }
     if (isFocused) {
-      return <Text color="suggestion">{POINTER}</Text>
+      return <Text color={focusColor}>{POINTER}</Text>
     }
     if (showScrollDown) {
       return <Text dimColor>{DOWN_ARROW}</Text>
@@ -103,11 +107,11 @@ export function ListItem({
     return <Text> </Text>
   }
 
-  function getTextColor(): 'success' | 'suggestion' | 'inactive' | undefined {
+  function getTextColor(): 'success' | 'suggestion' | 'accent' | 'inactive' | undefined {
     if (disabled) return 'inactive'
     if (!styled) return undefined
     if (isSelected) return 'success'
-    if (isFocused) return 'suggestion'
+    if (isFocused) return focusColor
     return undefined
   }
 

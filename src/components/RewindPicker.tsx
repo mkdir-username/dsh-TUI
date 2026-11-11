@@ -1,6 +1,8 @@
 import React from 'react'
 import { t } from '../i18n.js'
-import { Box, Text } from '../ui.js'
+import { Box, Text, useTerminalSize } from '../ui.js'
+import { stringWidth } from '../ink/stringWidth.js'
+import { truncateToWidth } from '../ink/truncateToWidth.js'
 import type { ChatRow } from '../dsh-adapter/channel.js'
 import type { TuiRewindMode } from '../dsh-adapter/extension-events.js'
 import { Pane } from './design-system/Pane.js'
@@ -8,6 +10,19 @@ import { ListItem } from './design-system/ListItem.js'
 import { HintLine } from './design-system/HintLine.js'
 import { listWindow } from './listWindow.js'
 import { useOverlayListRows } from './OverlayAbove.js'
+
+/** One checkpoint: the message line plus its dim metadata line. */
+const ROW_HEIGHT = 2
+/** Air between checkpoints — the whole list is a wall of text without it. */
+const ROW_GAP = 1
+/** Same visible cap as Claude Code's rewind selector; the rest hides behind
+ *  the counters instead of painting the entire history. */
+const MAX_VISIBLE = 7
+/** Normal chrome: overlay wrapper 1 + Pane 2 + title block 3 + footer 2. */
+const LIST_FRAME_ROWS = 8
+/** Compact chrome below ~20 terminal rows: wrapper 1 + Pane 2 + title 1 +
+ *  footer 1. The subtitle and the footer margin are secondary. */
+const LIST_FRAME_COMPACT_ROWS = 5
 
 /**
  * Double-Esc rewind picker (double-tap Esc rewinds the selected message and/or
@@ -52,15 +67,32 @@ export function RewindPicker({
   /** Mouse pick on a modes-list option: executes that mode directly. */
   onPickMode?: (index: number) => void
 }): React.ReactNode {
-  // 两个列表的行预算都来自最近一层 OverlayAbove 的有效高度（已钳到输入簇
-  // 上方的真实空间，#493/#698）。hook 不进条件分支：无论当前画的是模式列
-  // 表、纯确认页还是消息列表，调用顺序都一致。框架行按实际渲染数：
-  // 模式列表：挂载包裹 marginTop 1 + Pane 2 + 标题/预览同一行 1 + marginBottom 1
-  //   + 页脚 1 = 6（rowCosts 只算选项行，首项是带描述的"仅对话"选项）；
-  // 消息列表：挂载包裹 marginTop 1 + Pane 2 + 标题+副标题 2 + marginBottom 1
-  //   + 页脚 1 = 7，插件决策在途时再多一行「等待插件」状态行（busy）。
+  const { columns } = useTerminalSize()
+  // Frame 0 hands back the overlay's usable height untouched: the adaptive
+  // parts (compact chrome, confirm preview rows) read the same number.
+  const overlayRows = useOverlayListRows(0)
+  const compact = overlayRows < 12
   const modeListRows = useOverlayListRows(6)
-  const listRows = useOverlayListRows(confirmRow === null && busy ? 8 : 7)
+  // Rows for the checkpoint list itself. The list chrome is counted by real
+  // rows (wrapper 1 + Pane 2 + title block 3 + footer 2; compact 5), and the
+  // busy line is its own row. Counters are reserved below, after the first
+  // window tells how many sides actually hide rows.
+  const listFrame = (compact ? LIST_FRAME_COMPACT_ROWS : LIST_FRAME_ROWS)
+    + (confirmRow === null && busy ? 1 : 0)
+  const listRows = Math.min(
+    useOverlayListRows(listFrame),
+    MAX_VISIBLE * (ROW_HEIGHT + ROW_GAP) - ROW_GAP,
+  )
+  const heights = rows.map(() => ROW_HEIGHT)
+  const fit = (budget: number) => listWindow(heights, focusIndex, Math.max(2, budget), ROW_GAP)
+  let listWin = fit(listRows)
+  const reserved = (listWin.start > 0 ? 1 : 0) + (listWin.end < rows.length ? 1 : 0)
+  if (reserved > 0) listWin = fit(listRows - reserved)
+  const hiddenAbove = listWin.start
+  const hiddenBelow = rows.length - listWin.end
+  const contentCells = Math.max(8, columns - 4)
+  // ListItem paints the pointer plus one gap cell before the text.
+  const listTextCells = Math.max(8, contentCells - 2)
   if (confirmRow !== null) {
     if (modes !== null) {
       // Plugin modes: a described choice list (one extra row per
@@ -125,53 +157,69 @@ export function RewindPicker({
     )
   }
 
-  // 焦点窗口化按行预算：首项带 'last message' 描述占 2 行、其余 1 行
-  //（ListItem 保证单行截断）。rewind 是不可见确认的高危操作，焦点必须
-  // 始终在屏。
-  const { start, end } = listWindow(
-    rows.map((_, i) => (i === 0 ? 2 : 1)),
-    focusIndex,
-    listRows,
-  )
   return (
     <Pane color="permission">
       <Box flexDirection="column">
-        <Box marginBottom={1} flexDirection="column">
-          <Text color="remember" bold>
+        <Box marginBottom={compact ? 0 : 1} flexDirection="column">
+          <Text color="accent" bold>
             {t('rewind-title')}
           </Text>
-          <Text dimColor>{t('rewind-subtitle')}</Text>
+          {!compact && <Text dimColor>{t('rewind-subtitle')}</Text>}
         </Box>
         {rows.length === 0 ? (
           <ListItem isFocused={false}>{t('rewind-empty')}</ListItem>
         ) : (
-          rows.slice(start, end).map((row, index) => {
-            const absoluteIndex = start + index
-            return (
-              <ListItem
-                key={row.id}
-                isFocused={absoluteIndex === focusIndex}
-                description={absoluteIndex === 0 ? t('rewind-last-message') : undefined}
-                showScrollUp={absoluteIndex === start && start > 0}
-                showScrollDown={absoluteIndex === end - 1 && end < rows.length}
-                onClick={
-                  onPickRow !== undefined && !busy
-                    ? () => onPickRow(absoluteIndex)
-                    : undefined
-                }
-              >
-                {preview(row.text)}
-              </ListItem>
-            )
-          })
+          <>
+            {hiddenAbove > 0 && (
+              <Text dimColor wrap="truncate-end">{t('rewind-more-above', { n: hiddenAbove })}</Text>
+            )}
+            <Box flexDirection="column" gap={ROW_GAP}>
+              {rows.slice(listWin.start, listWin.end).map((row, index) => {
+                const absoluteIndex = listWin.start + index
+                return (
+                  <ListItem
+                    key={row.id}
+                    isFocused={absoluteIndex === focusIndex}
+                    focusColor="accent"
+                    description={metaFor(rows, absoluteIndex)}
+                    onClick={
+                      onPickRow !== undefined && !busy
+                        ? () => onPickRow(absoluteIndex)
+                        : undefined
+                    }
+                  >
+                    {oneLine(row.text, listTextCells)}
+                  </ListItem>
+                )
+              })}
+            </Box>
+            {hiddenBelow > 0 && (
+              <Text dimColor wrap="truncate-end">{t('rewind-more-below', { n: hiddenBelow })}</Text>
+            )}
+          </>
         )}
         {busy && <Text dimColor>{t('rewind-waiting-plugins')}</Text>}
       </Box>
-      <Text dimColor italic>
-        <HintLine text={t('hint-select-exit')} />
-      </Text>
+      <Box marginTop={compact ? 0 : 1}>
+        <Text dimColor italic>
+          <HintLine text={t('hint-select-exit')} />
+        </Text>
+      </Box>
     </Pane>
   )
+}
+
+/** Checkpoint metadata: chronological position, plus the newest marker. */
+function metaFor(rows: readonly ChatRow[], index: number): string {
+  const position = t('rewind-row-position', { n: rows.length - index, total: rows.length })
+  return index === 0 ? `${t('rewind-last-message')} · ${position}` : position
+}
+
+/** One-line, width-aware preview: flatten breaks, truncate by display cells. */
+function oneLine(text: string, cells: number): string {
+  const flat = text.replace(/\s+/gu, ' ').trim()
+  if (flat === '' || stringWidth(flat) <= cells) return flat
+  return `${truncateToWidth(flat, Math.max(1, cells - 1))}…`
 }
 
 /** One-line preview of a message (newlines flattened, capped). */
