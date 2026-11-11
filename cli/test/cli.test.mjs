@@ -271,6 +271,33 @@ test('list marks root, fork and the live owner; titles only on request', async (
   }
 })
 
+test('list filter selects by title before the page limit', async () => {
+  const home = await mkdtemp(join(tmpdir(), 'dst-home-'))
+  await mkdir(join(home, '.dsh-tui'), { recursive: true })
+  await writeFile(join(home, '.dsh-tui/session-mounts.json'), JSON.stringify({ version: 1, owners: [] }))
+  const previous = process.env.HOME
+  process.env.HOME = home
+  try {
+    const rows = [
+      { header: { id: 'root-1', cwd: 'here', createdAt: 3 }, persisted: true, live: false },
+      { header: { id: 'fork-1', cwd: 'here', createdAt: 2, parentSession: 'root-1', isSeeded: true, delegationDepth: 0 }, persisted: true, live: false },
+      { header: { id: 'deep-1', cwd: 'here', createdAt: 1 }, persisted: true, live: false },
+    ]
+    const ctx = context({ sessionQuery: {
+      listSessions: async () => rows,
+      readTitleSnapshots: async ids => ids.map(sessionId => ({ sessionId, status: 'fulfilled', value: { session: { id: sessionId }, title: { title: sessionId === 'deep-1' ? 'Аудит контрактов' : `t-${sessionId}`, messageSeqs: [], source: { kind: 'user' }, eventSeq: 1, updatedAt: 1 } } })),
+    } })
+    const hit = await manage(ctx, { kind: 'session', action: 'list', cwd: 'here', filter: 'КОНТРАКТ', limit: 1 })
+    assert.deepEqual(hit.map(row => row.sessionId), ['deep-1'])
+    assert.equal(hit[0].title, 'Аудит контрактов')
+    assert.deepEqual(await manage(ctx, { kind: 'session', action: 'list', cwd: 'here', filter: 'нет-такого' }), [])
+  } finally {
+    if (previous === undefined) delete process.env.HOME
+    else process.env.HOME = previous
+    await rm(home, { recursive: true, force: true, maxRetries: 3 })
+  }
+})
+
 test('read commands whitelist credential output and label MCP observation honestly', async () => {
   const ctx = context({
     credentials: { describe: async () => ({ configured: true, writable: false, source: 'env', value: 'DO_NOT_EMIT' }) },

@@ -138,8 +138,17 @@ export async function manage(ctx, request) {
     const rows = (await query.listSessions()).filter(row => request.all || row.header.cwd === request.cwd)
     if (request.action === 'list') {
       const owners = readSessionOwners()
-      const page = rows.slice(0, request.limit ?? 50).map(row => headerDto(row, owners))
-      return request.titles === true ? withTitles(query, page) : page
+      const filter = typeof request.filter === 'string' && request.filter !== '' ? request.filter.toLowerCase() : undefined
+      const page = rows.map(row => headerDto(row, owners))
+      const limited = request.limit ?? 50
+      if (filter === undefined) {
+        const sliced = page.slice(0, limited)
+        return request.titles === true ? await withTitles(query, sliced) : sliced
+      }
+      // Отбор по названию идёт до обрезки страницы: иначе совпадение за пределами лимита
+      // не найдётся, а название нужно прочитать у каждой строки списка.
+      const titled = await withTitles(query, page)
+      return titled.filter(row => (row.title ?? '').toLowerCase().includes(filter)).slice(0, limited)
     }
     if (request.action === 'continue') {
       // listSessions is newest-first by header; choose by latest validated activity.

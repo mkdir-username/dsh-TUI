@@ -6,7 +6,7 @@ const valueFlags = new Map([
   ['--cwd', 'cwd'], ['--workspace', 'cwd'], ['--profile', 'profile'],
   ['--patch', 'patches'], ['--dsh-bin', 'dshBin'], ['--timeout', 'timeout'],
   ['--output-format', 'output'], ['--session-id', 'sessionId'], ['--resume', 'sessionId'],
-  ['--limit', 'limit'], ['--provider', 'provider'], ['--model', 'model'],
+  ['--limit', 'limit'], ['--filter', 'filter'], ['--provider', 'provider'], ['--model', 'model'],
   ['--permission-mode', 'permission'], ['--title', 'title'],
 ])
 const kinds = new Set(['run', 'session', 'models', 'skills', 'mcp', 'auth', 'capabilities', 'dsh'])
@@ -92,6 +92,7 @@ export function parse(argv, cwd = process.cwd()) {
     if (request.sessionId && !(kind === 'session' && sessionById.includes(request.action))) usage('--session-id is a run option')
     if (request.title !== undefined && !(kind === 'session' && request.action === 'fork')) usage('--title requires session fork')
     if (request.titles && !(kind === 'session' && request.action === 'list')) usage('--titles requires session list')
+    if (request.filter !== undefined && !(kind === 'session' && request.action === 'list')) usage('--filter requires session list')
   } else {
     if (positional.length || request.continue || request.sessionId || request.model || request.provider || request.permission || request.all || request.limit) usage('Unexpected capability arguments')
   }
@@ -125,7 +126,7 @@ export function help() {
 
 Commands:
   run                     Run one DSH task without loading the TUI
-  session list            List sessions (current cwd; --all, --limit N, --titles)
+  session list            List sessions (current cwd; --all, --limit N, --titles, --filter TEXT)
   session show <id>        Read the validated durable session log
   session export <id>      Export visible text as Markdown (JSON with --json)
   session status <id>      Activity, kind, owner and counters for one session

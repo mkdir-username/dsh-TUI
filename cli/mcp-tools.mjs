@@ -35,6 +35,7 @@ export const TOOLS = [
         cwd: { type: 'string', description: 'Directory whose sessions to list; defaults to the server working directory.' },
         all: { type: 'boolean', description: 'List every working directory instead of one cwd.' },
         titles: { type: 'boolean', description: 'Also read each title. Reads every listed session log, so it is slower.' },
+        filter: { type: 'string', description: 'Keep only sessions whose title contains this text (case-insensitive). Titles are read for the whole list before the limit applies, so a match beyond the limit is still found.' },
         limit: { type: 'integer', minimum: 1, maximum: 200, description: 'Maximum rows, default 50.' },
       },
       additionalProperties: false,
@@ -44,6 +45,7 @@ export const TOOLS = [
         'session', 'list', '--json',
         ...(input.all === true ? ['--all'] : []),
         ...(input.titles === true ? ['--titles'] : []),
+        ...(typeof input.filter === 'string' && input.filter !== '' ? ['--filter', input.filter] : []),
         ...(input.limit === undefined ? [] : optionalLimit(input, 50)),
       ]
     },
