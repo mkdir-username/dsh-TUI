@@ -88,20 +88,20 @@ const inst = await render(
   </AlternateScreen>,
   { stdout: stdout as any, stdin: stdin as any, stderr: stderr as any, exitOnCtrlC: false, patchConsole: false, onFrame: () => { frames++ } },
 )
-await sleep(1500)
+await sleep(1500) // 固定窗:pacing первая сборка и замер окна виртуализации
 
 // Бурст колеса по rail (последние две колонки терминала), как у живой сессии.
 const railCol = COLS - 2
 for (let i = 0; i < BURST; i++) {
   const up = i % 2 === 0
   stdin.emit('data', Buffer.from(`\x1b[<${up ? 64 : 65};${railCol};20M`))
-  await sleep(8)
+  await sleep(8) // 固定窗:pacing шаг между событиями колеса
 }
-await sleep(250)
+await sleep(250) // 固定窗:pacing хвост после последнего события колеса
 
 frames = 0
 const before = process.cpuUsage()
-await sleep(IDLE_MS)
+await sleep(IDLE_MS) // 固定窗:墙钟 окно простоя — сам предмет проверки
 const used = process.cpuUsage(before)
 const cpuMs = (used.user + used.system) / 1e3
 const cpuPercent = (cpuMs / IDLE_MS) * 100

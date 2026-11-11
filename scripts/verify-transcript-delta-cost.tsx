@@ -26,6 +26,7 @@ const [
   { QuestionStore },
   { LOCAL_COMMANDS, completeCommands },
   { createChannelReadView, markChannelReadDirty },
+  { settled },
 ] = await Promise.all([
   import('node:stream'),
   import('react'),
@@ -35,6 +36,7 @@ const [
   import('../src/dsh-adapter/questions.js'),
   import('../src/commands.js'),
   import('../src/adapter/channel/read-view.js'),
+  import('./lib/term-test.mjs'),
 ])
 
 const COLS = 120, ROWS = 40
@@ -102,7 +104,7 @@ const inst = await render(
   </AlternateScreen>,
   { stdout: stdout as any, stdin: stdin as any, stderr: stderr as any, exitOnCtrlC: false, patchConsole: false, onFrame: () => { frames++ } },
 )
-await sleep(1500)
+await sleep(1500) // 固定窗:pacing первая сборка и замер окна виртуализации
 
 const screen = (): string => {
   const out: string[] = []
@@ -120,24 +122,24 @@ const delta = async (mutate: () => void): Promise<void> => {
   channelVersion += 1
   raw.version = channelVersion
   for (const cb of listeners) cb()
-  await sleep(FRAME_MS * 2)
+  await sleep(FRAME_MS * 2) // 固定窗:pacing дельта ставится в очередь кадра драйвера
 }
 
 // кейс 1: рост текста стримящейся строки виден в том же кадре
 streamRow.text = '流 CASE1-START CASE1-GROWTH'
 await delta(() => { markChannelReadDirty(streamRow) })
-check('case1: рост текста стримящейся строки доехал до экрана', screen().includes('CASE1-GROWTH'))
+check('case1: рост текста стримящейся строки доехал до экрана', await settled(() => screen().includes('CASE1-GROWTH')))
 
 // кейс 2: осевшая пустая assistant-строка исчезает из окна
 case2Row.text = ''
 case2Row.streaming = false
 await delta(() => { markChannelReadDirty(case2Row) })
-check('case2: осевшая пустая assistant-строка убрана из окна', !screen().includes('CASE2-OLD-TEXT'))
+check('case2: осевшая пустая assistant-строка убрана из окна', await settled(() => !screen().includes('CASE2-OLD-TEXT')))
 
 // кейс 3: строка на том же индексе заменена другим видом — окно показывает новую
 rows[rows.length - 1] = case3Row
 await delta(() => { markChannelReadDirty(case3Row) })
-check('case3: замена строки другим kind/id видна в окне', screen().includes('CASE3-KIND'))
+check('case3: замена строки другим kind/id видна в окне', await settled(() => screen().includes('CASE3-KIND')))
 
 // бюджет кадра дельты: стриминг assistant-строки, 16 мс-драйвер, окно замера
 const budgetRow: any = { id: ++id, kind: 'assistant', text: '流 BUDGET-START', streaming: true }
@@ -155,9 +157,9 @@ while (performance.now() - startedAt < WINDOW_MS) {
   channelVersion += 1
   raw.version = channelVersion
   for (const cb of listeners) cb()
-  await sleep(FRAME_MS)
+  await sleep(FRAME_MS) // 固定窗:墙钟 каденция драйвера — предмет замера
 }
-await sleep(200)
+await sleep(200) // 固定窗:墙钟 профиль закрывается после последнего кадра
 const used = process.cpuUsage(before)
 const cpuMs = (used.user + used.system) / 1e3
 const perFrame = cpuMs / Math.max(1, frames)
