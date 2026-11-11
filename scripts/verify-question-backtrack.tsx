@@ -248,9 +248,14 @@ const batchApp = await render(React.createElement(AskUserQuestionPanel, {
   onCancel() {},
 }), { stdout, stdin, stderr: new FakeStdout(), exitOnCtrlC: false, patchConsole: false })
 await settle(() => screen().includes('同批多选'))
+// A multi-select row must read as a checkbox: the radio pair (●/○) made a
+// "можно несколько" question look single-choice (the /fail Q2 case).
+assert.ok(await settled(() => screen().includes('[ ] One') && screen().includes('[ ] Two')))
 forwardDraft = undefined
 stdin.write(' \x1b[C')
 assert.ok(await settled(() => forwardDraft !== undefined))
+assert.ok(await settled(() => screen().includes('[✓] One')))
+assert.ok(screen().includes('[ ] Two'))
 assert.deepEqual(forwardDraft, { selected: ['One'] })
 await batchApp.unmount()
 
