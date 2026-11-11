@@ -1451,6 +1451,8 @@ function renderNodeToOutput(
         // rendered with its Y translated by -scrollTop; its children are
         // culled against the visible window.
         const padTop = yogaNode.getComputedPadding(LayoutEdge.Top)
+        const padLeft = yogaNode.getComputedPadding(LayoutEdge.Left)
+        const padRight = yogaNode.getComputedPadding(LayoutEdge.Right)
         const innerHeight = Math.max(
           0,
           (y2 ?? y + height) -
@@ -1517,6 +1519,11 @@ function renderNodeToOutput(
         // padding) begins. Exposed via ScrollBoxHandle.getViewportTop() so
         // drag-to-scroll can detect when the drag leaves the scroll viewport.
         node.scrollViewportTop = (y1 ?? y) + padTop
+        // Column span of the same viewport: a drag anchored in a neighbouring
+        // pane shares rows with the transcript, so row containment alone
+        // cannot tell the two apart.
+        node.scrollViewportLeft = Math.floor(x) + padLeft
+        node.scrollViewportRight = Math.floor(x + width) - padRight - 1
         // Viewport-edges change with no scroll delta (chrome mount/unmount
         // around the box) — recorded for the selection translate in ink.tsx.
         // prevViewportTop defined ⇒ a previous frame wrote both bounds, so

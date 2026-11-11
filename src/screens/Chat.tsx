@@ -67,6 +67,7 @@ import { useTerminalFocus } from '../ink/hooks/use-terminal-focus.js'
 import { useProgramStatus, type ProgramBlockedPrompt } from '../ink/hooks/use-program-status.js'
 import { supportsProgramStatus } from '../ink/termio/osc7501.js'
 import { useCopyOnSelect } from '../ink/hooks/use-copy-on-select.js'
+import { useDragAutoScroller } from '../ink/hooks/use-drag-autoscroll.js'
 import { useSelection } from '../ink/hooks/use-selection.js'
 import { NoSelect } from '../ink/components/NoSelect.js'
 import { LogoHeader, MessageList } from '../components/MessageList.js'
@@ -2463,6 +2464,11 @@ export function Chat({
     hasSelection: hasMouseSelection,
     getState: getMouseSelectionState,
   } = useSelection()
+
+  // Holding a selection drag on the transcript's top/bottom edge keeps
+  // scrolling, so the copied text can include rows outside the viewport the
+  // drag started in.
+  useDragAutoScroller(handle)
 
   // OSC 7501 program status: tell the terminal (and any agentic inbox) whether
   // this session is working, parked on the user, or finished. Precedence

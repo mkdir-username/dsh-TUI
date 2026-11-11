@@ -71,7 +71,7 @@ Workspace side-panel counts match the session manager: the current conversation 
 
 When a DSH 0.2.1+ Agent moves its session to another directory (the `working_directory` tool or a Git worktree), the status line, Git branch, `@` completion, `!` commands, clicked paths, skill commands and loaded context follow it, including after `/resume`. The session stays registered under the project it started in. Relative paths in cards rendered before a move resolve against the session's current directory when clicked; absolute paths keep their target.
 
-Fullscreen mouse selection stays in the pane where the gesture starts, including chat, sidebar and either diff column. Diagonal, word and line selection copy that pane’s text; soft wraps join independently, source newlines remain, and divider drags only resize.
+Fullscreen mouse selection stays in the pane where the gesture starts, including chat, sidebar and either diff column. Diagonal, word and line selection copy that pane’s text; soft wraps join independently, source newlines remain, and divider drags only resize. Holding the pointer on the transcript’s top or bottom row while dragging keeps scrolling, so the copied text can include rows outside the viewport the drag began in.
 
 ## Preview
 

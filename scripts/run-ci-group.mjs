@@ -443,6 +443,10 @@ const GROUPS = {
 // 全屏拖选自动复制后保留选区，重复 release 不重复复制；选区高亮跳过
 // 行尾填充/空白行，并保留代码缩进、软换行分隔空格和 Unicode 字符。
     ['verify-selection-stale-guard', ['node', '--import', 'tsx/esm', 'scripts/verify-selection-stale-guard.tsx']],
+// 拖选到视口上下边缘的自动滚动：纯控制器（边缘、release、边界、加速、分栏
+// 几何、follow 偏移）与真实 Chat + SGR 鼠标端到端（复制含视口外的行）。
+    ['verify-drag-autoscroll', ['node', '--import', 'tsx/esm', 'scripts/verify-drag-autoscroll.tsx']],
+    ['verify-drag-autoscroll-e2e', ['node', '--import', 'tsx/esm', 'scripts/verify-drag-autoscroll-e2e.tsx']],
     ['verify-copy-on-select', ['node', 'scripts/verify-copy-on-select.mjs']],
 // hover 事件性能与健壮性回归：同批 motion 保留兴趣边界（tooltip dwell
 // 不提前）、无兴趣矩形快路径跳过全树 hit-test，且渲染提交/帧边界/

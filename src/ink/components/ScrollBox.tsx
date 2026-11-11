@@ -38,6 +38,11 @@ export type ScrollBoxHandle = {
    * padding). Used for drag-to-scroll edge detection.
    */
   getViewportTop: () => number;
+  /** Absolute screen-buffer column of the first visible content column
+   *  (inside padding); the companion of getViewportTop(). */
+  getViewportLeft: () => number;
+  /** Last visible column, inclusive. */
+  getViewportRight: () => number;
   /**
    * True when scroll is pinned to the bottom. Set by scrollToBottom, the
    * initial stickyScroll attribute, and by the renderer when positional
@@ -290,6 +295,12 @@ function ScrollBox({
     },
     getViewportTop() {
       return domRef.current?.scrollViewportTop ?? 0;
+    },
+    getViewportLeft() {
+      return domRef.current?.scrollViewportLeft ?? 0;
+    },
+    getViewportRight() {
+      return domRef.current?.scrollViewportRight ?? 0;
     },
     isSticky() {
       const el = domRef.current;

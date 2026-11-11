@@ -88,6 +88,8 @@ export type DOMElement = {
   scrollHeight?: number
   scrollViewportHeight?: number
   scrollViewportTop?: number
+  scrollViewportLeft?: number
+  scrollViewportRight?: number
   // maxScroll of the most recent TRUSTED (non-shrink) frame. Virtualization
   // can transiently shrink scrollHeight; a positional at-bottom check must
   // not compare against a maxScroll computed from such an artifact frame,

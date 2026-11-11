@@ -145,6 +145,11 @@ export type SelectionState = {
    *  rows is never captured. Undefined for gestures without the fence. */
   fence?: { colStart: number; colEnd: number }
   paneId?: string
+  /** True while drag-to-edge auto-scroll drives this gesture. The scroll it
+   *  causes legitimately moves rows under a highlight whose clamped
+   *  geometry stopped changing, so the overwrite guard must not read those
+   *  frames as an in-place replacement. Set only by the drag auto-scroller. */
+  autoScrolling?: boolean
 }
 
 /**
@@ -292,6 +297,15 @@ export function finishSelection(s: SelectionState): void {
       clearSelection(s)
     }
   }
+  // An auto-scrolled gesture commits what it grew over: rows it scrolled
+  // past are expected content, not an overwrite under a settled highlight.
+  // Re-baseline on the next frame — the release frame can still drain a
+  // pending notch, and that change belongs to the gesture just finished.
+  if (wasDragging && s.autoScrolling === true) {
+    s.stale = false
+    s.coveredGeometry = null
+    s.autoScrolling = false
+  }
   if (wasDragging && hasSelection(s)) s.settledRevision += 1
   // Keep anchor/focus after automatic copy; Escape clears the highlight.
 }
@@ -319,6 +333,7 @@ export function clearSelection(s: SelectionState): void {
   s.includeNoSelectCells = false
   s.fence = undefined
   s.paneId = undefined
+  s.autoScrolling = false
 }
 
 // Unicode-aware word character matcher: letters (any script), digits,
@@ -1625,6 +1640,13 @@ export function refreshSelectionFingerprint(
   }
   s.coveredFingerprint = h
   s.coveredText = text
+  // A gesture driven by drag-to-edge auto-scroll keeps growing once both
+  // endpoints clamp: the geometry string stops changing while the content
+  // legitimately moves. That is not the overwrite this guard hunts.
+  if (s.isDragging && s.autoScrolling === true) {
+    s.stale = false
+    return false
+  }
   if (coordinated) return false
   s.stale = true
   return true
