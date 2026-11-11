@@ -56,6 +56,7 @@ try {
   const childSnapshot = run(['session', 'show', child.sessionId]).data
   assert.equal(childSnapshot.session.parentSession, first.sessionId)
   assert.equal(childSnapshot.inheritedEventCount, child.inheritedEventCount)
+  assert.equal(run(['session', 'status', child.sessionId]).data.working, false)
   assert.equal(run(['run', '--session-id', child.sessionId, 'fork continues']).sessionId, child.sessionId)
   const forkRow = run(['session', 'list']).data.find(row => row.sessionId === child.sessionId)
   assert.equal(forkRow.kind, 'fork')

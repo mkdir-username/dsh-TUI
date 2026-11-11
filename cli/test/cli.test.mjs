@@ -135,7 +135,7 @@ test('status and tail describe one session without shipping the whole log', asyn
     { seq: 1, type: 'tool/call', time: 2, data: { name: 'bash' } },
     { seq: 2, type: 'assistant/message', time: 3, data: { message: { content: [{ type: 'text', text: 'x'.repeat(600) }] } } },
     { seq: 3, type: 'turn/end', time: 4, data: { turn: 1, reason: { kind: 'completed' } } },
-    { seq: 4, type: 'user/message', time: 5, data: { message: { content: [{ type: 'text', text: 'next' }] } } },
+    { seq: 4, type: 'session/title', time: 5, data: { title: 't', messageSeqs: [], source: { kind: 'user' } } },
   ]
   const ctx = context({ sessionQuery: {
     readSession: async () => ({ session: { id: 's-1', cwd: '/tmp', createdAt: 1, isSeeded: true, parentSession: 'p', delegationDepth: 0 }, inheritedEventCount: 3, events }),
@@ -144,14 +144,14 @@ test('status and tail describe one session without shipping the whole log', asyn
   const status = await manage(ctx, { kind: 'session', action: 'status', sessionId: 's-1' })
   assert.equal(status.kind, 'fork')
   assert.equal(status.title, 'Заголовок')
-  assert.equal(status.working, true)
-  assert.equal(status.lastEventType, 'user/message')
+  assert.equal(status.working, false)
+  assert.equal(status.lastEventType, 'session/title')
   assert.equal(status.lastTurnEndSeq, 3)
   assert.equal(status.eventCount, 5)
   assert.equal(status.inheritedEventCount, 3)
   assert.equal(status.ownerPid, null)
   const tail = await manage(ctx, { kind: 'session', action: 'tail', sessionId: 's-1', limit: 3 })
-  assert.deepEqual(tail.rows.map(row => row.type), ['assistant/message', 'turn/end', 'user/message'])
+  assert.deepEqual(tail.rows.map(row => row.type), ['assistant/message', 'turn/end', 'session/title'])
   assert.equal(tail.cursor, 4)
   assert(tail.rows[0].text.endsWith('…'))
 })

@@ -62,6 +62,7 @@ async function describe(ctx, request) {
   const events = snapshot.events ?? []
   const last = events.at(-1)
   const lastTurnEnd = events.findLast(event => event.type === 'turn/end')
+  const lastTurnStart = events.findLast(event => event.type === 'turn/start')
   const owner = ownerOf(readSessionOwners(), request.sessionId)
   return {
     sessionId: header.id,
@@ -75,7 +76,9 @@ async function describe(ctx, request) {
     eventCount: events.length,
     lastSeq: last?.seq ?? null,
     lastEventType: last?.type ?? null,
-    working: last === undefined ? false : last.type !== 'turn/end',
+    // Trailing events after a closed turn (title, fork marker, compaction) are
+    // not work in progress: a turn is open only when its start has no end yet.
+    working: lastTurnStart !== undefined && (lastTurnEnd === undefined || lastTurnStart.seq > lastTurnEnd.seq),
     lastTurnEndSeq: lastTurnEnd?.seq ?? null,
     ownerPid: owner === undefined ? null : owner.pid,
     persisted: true,
