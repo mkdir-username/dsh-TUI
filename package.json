@@ -41,7 +41,8 @@
   },
   "bin": {
     "dsh-tui": "./bin/dsh-tui.js",
-    "dst": "./bin/dsh-tui.js"
+    "dst": "./bin/dsh-tui.js",
+    "dst-mcp": "./bin/dst-mcp.js"
   },
   "main": "lib/types/index.js",
   "types": "lib/types/index.d.ts",
@@ -148,7 +149,7 @@
     "tui": "node --import tsx/esm scripts/run.ts",
     "smoke": "node --import tsx/esm scripts/smoke.tsx",
     "verify:build": "node scripts/run-verify-build.mjs",
-    "verify:cli": "node --test cli/test/cli.test.mjs cli/test/edges.test.mjs cli/test/package.test.mjs cli/test/boundary.test.mjs cli/test/mounts.test.mjs",
+    "verify:cli": "node --test cli/test/cli.test.mjs cli/test/edges.test.mjs cli/test/package.test.mjs cli/test/boundary.test.mjs cli/test/mounts.test.mjs cli/test/mcp.test.mjs",
     "verify:cli:runtime": "node cli/test/runtime.mjs",
     "verify:cli-subcommands": "node scripts/verify-cli-subcommands.mjs",
     "verify:boundary": "node --import tsx/esm scripts/verify-adapter-boundary.ts",

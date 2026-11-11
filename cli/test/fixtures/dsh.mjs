@@ -13,7 +13,14 @@ else if (mode === 'invalid') process.stdout.write('not-json\n')
 else if (mode === 'partial') process.stdout.write('{"type":')
 else if (mode === 'missing') process.stdout.write('{"type":"session","sessionId":"one"}\n')
 else if (management) {
-  const data = management.action === 'continue' ? { sessionId: 'existing' } : [{ sessionId: 'existing', cwd: management.cwd }]
+  const canned = {
+    continue: { sessionId: 'existing' },
+    list: [{ sessionId: 'existing', cwd: management.cwd, kind: 'root', ownerPid: null, persisted: true, live: false }],
+    status: { sessionId: 'existing', kind: 'root', working: false, eventCount: 2, lastSeq: 1, lastEventType: 'turn/end', ownerPid: null },
+    tail: { sessionId: 'existing', cursor: 1, returned: 1, rows: [{ seq: 1, type: 'turn/end', time: 1 }] },
+    fork: { sessionId: 'session-child', sourceSessionId: 'existing', boundary: 1, inheritedEventCount: 2, events: 3, title: 'Fork: existing' },
+  }
+  const data = canned[management.action] ?? [{ sessionId: 'existing', cwd: management.cwd }]
   console.log(JSON.stringify({ schemaVersion: 1, type: 'final', data }))
 } else {
   let prompt = ''
