@@ -43,6 +43,7 @@ The root README lists what ships; the details live here. Chinese files have no s
 | Codex 后端交接 / Codex backend handoff | [codex-backend-handoff.md](codex-backend-handoff.md) | — | 当前进度、剩余工作、新机器准备与实测配置（接手者先读）。 |
 | Codex 后端施工日志 / Codex backend progress | [codex-backend-progress.md](codex-backend-progress.md) | — | 逐期记录：实测结论、决策、门禁结果与偏离。 |
 | 子代理转录页数据源 / DSH child transcript | [dsh-child-transcript.md](dsh-child-transcript.md) | — | DSH 子会话转录的读取契约与新后端接入清单。 |
+| 上游参考图 / Upstream reference map | — | [references.en.md](references.en.md) | Upstream files behind the TUI mechanism review: pin, line ranges, permalinks, fork relation. |
 
 ## 插件 / Plugins
 
