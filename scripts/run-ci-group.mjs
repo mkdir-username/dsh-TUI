@@ -692,6 +692,11 @@ const GROUPS = {
 // （插件不可 sticky）、未知颜色拒绝、每激活 20/min 限速 + 粘性告警、
 // host-only 面不泄漏到插件服务对象、公开 shim 导出。
     ["verify-plugin-toast", ['node', '--import', 'tsx/esm', 'scripts/verify-plugin-toast.tsx']],
+// 渲染路径消毒回归：cleanRenderText 的裁剪结果必须与「逐个前缀精确测量」的
+// 参考算法在语料上逐例一致（ANSI/控制字节、CJK、emoji/VS16 簇），并钉住成本：
+// sticky 头的重复调用走 memo、18k 单行不再 O(n²)——活体冻结会话的 profile 里
+// stringWidth 占 13.6% self-time。
+    ["verify-clean-render-text", ['node', '--import', 'tsx/esm', 'scripts/verify-clean-render-text.tsx']],
 // 会话标题回归：选择器标题宽容读取（带未标记第三方事件的日志
 // 不能让标题退化成目录名），/rename 的最后一条 session/title 优先。
     ["verify-session-titles", ['node', 'scripts/verify-session-titles.mjs']],

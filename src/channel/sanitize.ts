@@ -18,8 +18,91 @@
 import { stringWidth } from '../ink/stringWidth.js'
 import { getGraphemeSegmenter } from '../utils/intl.js'
 
+/**
+ * Memo for {@link cleanRenderText}: render paths ask for the SAME text every
+ * frame (the sticky prompt header, a dialog label), and the sanitize regexes
+ * plus the prefix measurement are not free — a live profile of the frozen
+ * session put `stringWidthJavaScript` at ~13% self-time through this call.
+ * Bounded by entry count and total chars, so a session cannot grow it.
+ */
+const CLEAN_CACHE_MAX_ENTRIES = 512
+const CLEAN_CACHE_MAX_CHARS = 200_000
+/** Inputs longer than this are measured but not retained as keys. */
+const CLEAN_CACHE_MAX_INPUT = 4096
+const cleanCache = new Map<string, string>()
+let cleanCacheChars = 0
+
+/** Remember one sanitized result; bounded by entries and total chars. */
+function remember(key: string, result: string): string {
+  if (key.length > CLEAN_CACHE_MAX_INPUT) return result
+  if (cleanCache.size >= CLEAN_CACHE_MAX_ENTRIES) {
+    const oldest = cleanCache.keys().next().value
+    if (oldest !== undefined) {
+      cleanCacheChars -= oldest.length + (cleanCache.get(oldest)?.length ?? 0)
+      cleanCache.delete(oldest)
+    }
+  }
+  cleanCache.set(key, result)
+  cleanCacheChars += key.length + result.length
+  while (cleanCacheChars > CLEAN_CACHE_MAX_CHARS && cleanCache.size > 1) {
+    const oldest = cleanCache.keys().next().value
+    if (oldest === undefined) break
+    cleanCacheChars -= oldest.length + (cleanCache.get(oldest)?.length ?? 0)
+    cleanCache.delete(oldest)
+  }
+  return result
+}
+
+/**
+ * Either return the sanitized line whole (its real width fits `maxCells`) or
+ * cut it to `maxCells` with an ellipsis.
+ *
+ * The old loop measured every prefix of the WHOLE string (O(n²)) and measured
+ * the full width up front — ~1ms per call on a 20k-char line, on a path
+ * renderers hit every frame. The bounded walk here accumulates per-cluster
+ * widths (additive in the terminal model) and stops once the budget is spent,
+ * so long lines cost O(maxCells) rather than O(n). "Fits" stays exact: the
+ * walk only returns the line whole when every cluster was accepted, which also
+ * covers zero-width runs that are longer than the cell budget. The cut is
+ * finalized by an exact code-point refinement from the accepted prefix —
+ * prefix width is monotone in length, so it lands on the same maximal prefix
+ * the per-prefix loop produced.
+ */
+function fitOrCut(flat: string, maxCells: number): string {
+  let out = ''
+  let width = 0
+  let whole = true
+  for (const { segment } of getGraphemeSegmenter().segment(flat)) {
+    if (segment === '') continue
+    const segmentWidth = stringWidth(segment)
+    if (width + segmentWidth > maxCells) {
+      whole = false
+      break
+    }
+    out += segment
+    width += segmentWidth
+  }
+  if (whole) return flat
+  // Trim the accepted prefix back to the ellipsis budget (`maxCells - 1`)
+  // before extending: a prefix that exactly fills `maxCells` has no room for
+  // the ellipsis, and the reference cut then stops one cluster earlier.
+  const segments = out === '' ? [] : Array.from(getGraphemeSegmenter().segment(out), part => part.segment)
+  while (segments.length > 0 && stringWidth(segments.join('')) > maxCells - 1) segments.pop()
+  let exact = segments.join('')
+  for (const ch of Array.from(flat.slice(exact.length))) {
+    if (stringWidth(exact + ch) > maxCells - 1) break
+    exact += ch
+  }
+  return `${exact}…`
+}
+
 /** Sanitize an already-string value for the render path. */
 export function cleanRenderText(value: string, maxCells: number): string {
+  const cacheKey = maxCells <= CLEAN_CACHE_MAX_INPUT ? `${maxCells}\u0000${value}` : ''
+  if (cacheKey !== '') {
+    const cached = cleanCache.get(cacheKey)
+    if (cached !== undefined) return cached
+  }
   // Remove complete ANSI control sequences before stripping control bytes.
   // Otherwise an SGR such as ESC[31m becomes the visible garbage "[31m".
   const withoutAnsi = value
@@ -27,13 +110,8 @@ export function cleanRenderText(value: string, maxCells: number): string {
     .replace(/\u001B\[[0-?]*[ -/]*[@-~]/gu, '')
   // eslint-disable-next-line no-control-regex -- deliberate: sanitize untrusted render-path text
   const flat = withoutAnsi.replace(/[\x00-\x1f\x7f-\x9f]/g, ' ').replace(/\s+/g, ' ').trim()
-  if (stringWidth(flat) <= maxCells) return flat
-  let out = ''
-  for (const ch of flat) {
-    if (stringWidth(out + ch) > maxCells - 1) break
-    out += ch
-  }
-  return `${out}…`
+  const result = fitOrCut(flat, maxCells)
+  return cacheKey === '' ? result : remember(cacheKey, result)
 }
 
 /**
