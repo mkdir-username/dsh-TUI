@@ -16,7 +16,7 @@ else if (management) {
   const canned = {
     continue: { sessionId: 'existing' },
     list: [{ sessionId: 'existing', cwd: management.cwd, kind: 'root', ownerPid: null, persisted: true, live: false }],
-    status: { sessionId: 'existing', kind: 'root', working: false, eventCount: 2, lastSeq: 1, lastEventType: 'turn/end', ownerPid: null },
+    status: { sessionId: 'existing', kind: 'root', cwd: management.cwd, agentPreset: process.env.FAKE_DSH_STATUS_PRESET ?? null, working: false, eventCount: 2, lastSeq: 1, lastEventType: 'turn/end', ownerPid: null },
     tail: { sessionId: 'existing', cursor: 1, returned: 1, rows: [{ seq: 1, type: 'turn/end', time: 1 }] },
     fork: { sessionId: 'session-child', sourceSessionId: 'existing', boundary: 1, inheritedEventCount: 2, events: 3, title: 'Fork: existing' },
   }

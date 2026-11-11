@@ -2,6 +2,7 @@
 import assert from 'node:assert/strict'
 import { test, after } from 'node:test'
 import { spawn } from 'node:child_process'
+import { existsSync } from 'node:fs'
 import { copyFile, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -17,10 +18,10 @@ await copyFile(fixture, runtime)
 await writeFile(join(sandbox, 'dsh', 'package.json'), JSON.stringify({ name: '@deepseek-ai/dsh', version: '0.2.0-rc.2', type: 'module', bin: { dsh: './bin.mjs' } }))
 after(() => rm(sandbox, { recursive: true, force: true, maxRetries: 3 }))
 
-async function session(messages) {
+async function session(messages, extraEnv = {}) {
   const child = spawn(process.execPath, [bin], {
     cwd: root,
-    env: { ...process.env, HOME: sandbox, USERPROFILE: sandbox, DSH_HOME: join(sandbox, 'home'), DSH_TUI_CLI_DSH_BIN: runtime },
+    env: { ...process.env, HOME: sandbox, USERPROFILE: sandbox, DSH_HOME: join(sandbox, 'home'), DSH_TUI_CLI_DSH_BIN: runtime, ...extraEnv },
     stdio: ['pipe', 'pipe', 'pipe'],
   })
   let stdout = ''
@@ -44,7 +45,7 @@ test('initialize and tools/list answer over stdio', async () => {
   assert.equal(exit, 0, stderr)
   assert.equal(responses[0].result.protocolVersion, '2025-06-18')
   assert.equal(responses[0].result.serverInfo.name, 'dsh-sessions')
-  assert.deepEqual(responses[1].result.tools.map(tool => tool.name).sort(), ['session_fork', 'session_status', 'session_tail', 'sessions_list'])
+  assert.deepEqual(responses[1].result.tools.map(tool => tool.name).sort(), ['session_fork', 'session_prompt', 'session_status', 'session_tail', 'sessions_list'])
 })
 
 test('tool calls return the management payload as JSON text', async () => {
@@ -77,4 +78,41 @@ test('a notification produces no response line', async () => {
   ])
   assert.equal(responses.length, 1)
   assert.equal(responses[0].id, 7)
+})
+
+test('a mounted session is refused before DSH starts', async () => {
+  const ledgerDir = join(sandbox, '.dsh-tui')
+  const argsFile = join(sandbox, 'prompt-args.json')
+  await mkdir(ledgerDir, { recursive: true })
+  await writeFile(join(ledgerDir, 'session-mounts.json'), JSON.stringify({ version: 1, owners: [{ pid: process.pid, startedAt: Date.now(), sessionIds: ['existing'] }] }))
+  try {
+    const { responses } = await session([
+      { jsonrpc: '2.0', id: 1, method: 'initialize' },
+      { jsonrpc: '2.0', id: 2, method: 'tools/call', params: { name: 'session_prompt', arguments: { sessionId: 'existing', prompt: 'hi' } } },
+    ], { FAKE_DSH_ARGS: argsFile })
+    assert.equal(responses[1].result.isError, true)
+    assert.match(responses[1].result.content[0].text, /SESSION_OCCUPIED/u)
+    assert.equal(existsSync(argsFile), false)
+  } finally {
+    await rm(ledgerDir, { recursive: true, force: true })
+  }
+})
+
+test('a session with an agent preset is refused with a clear reason', async () => {
+  const { responses } = await session([
+    { jsonrpc: '2.0', id: 1, method: 'initialize' },
+    { jsonrpc: '2.0', id: 2, method: 'tools/call', params: { name: 'session_prompt', arguments: { sessionId: 'existing', prompt: 'hi' } } },
+  ], { FAKE_DSH_STATUS_PRESET: 'standard' })
+  assert.equal(responses[1].result.isError, true)
+  assert.match(responses[1].result.content[0].text, /SESSION_PRESET_UNSUPPORTED/u)
+})
+
+test('a free session runs the prompt through the CLI', async () => {
+  const { responses } = await session([
+    { jsonrpc: '2.0', id: 1, method: 'initialize' },
+    { jsonrpc: '2.0', id: 2, method: 'tools/call', params: { name: 'session_prompt', arguments: { sessionId: 'existing', prompt: 'hello fork' } } },
+  ])
+  const result = responses[1].result
+  assert.equal(result.isError, undefined)
+  assert.equal(JSON.parse(result.content[0].text).text, 'hello fork')
 })

@@ -27,6 +27,11 @@ function imports(path, text) {
   return result
 }
 
+// Composition roots bind the adapter; every other CLI module stays neutral.
+// The MCP server is a second root on purpose: it must run the same grammar and
+// the same adapter as `dst`, so it owns the binding instead of duplicating it.
+const COMPOSITION_ROOTS = new Set(['cli/entry.mjs', 'cli/mcp-server.mjs'])
+
 function violations(path, text) {
   const name = relative(root, path).replaceAll('\\', '/')
   return imports(path, text).flatMap(specifier => {
@@ -34,7 +39,7 @@ function violations(path, text) {
     if (!specifier.startsWith('.')) return [`${name}: non-node dependency ${specifier}`]
     const target = relative(root, resolve(dirname(path), specifier)).replaceAll('\\', '/')
     if (!target.startsWith('cli/')) return [`${name}: CLI import escapes into ${target}`]
-    if (name !== 'cli/entry.mjs' && !name.startsWith('cli/adapters/') && target.startsWith('cli/adapters/')) return [`${name}: neutral engine imports adapter`]
+    if (!COMPOSITION_ROOTS.has(name) && !name.startsWith('cli/adapters/') && target.startsWith('cli/adapters/')) return [`${name}: neutral engine imports adapter`]
     return []
   })
 }

@@ -71,6 +71,25 @@ export const TOOLS = [
     },
   },
   {
+    name: 'session_prompt',
+    description: 'Run one headless turn in an existing DSH session and return its answer. Refused when another process holds the session (SESSION_OCCUPIED) or when the session carries an agent preset the headless runner cannot compose (SESSION_PRESET_UNSUPPORTED); fork such a session and continue it in the TUI instead.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        sessionId: sessionIdSchema,
+        prompt: { type: 'string', minLength: 1, description: 'Task text for that session.' },
+        cwd: { type: 'string', description: 'Defaults to the cwd recorded in the session header.' },
+      },
+      required: ['sessionId', 'prompt'],
+      additionalProperties: false,
+    },
+    argv(input) {
+      const prompt = input.prompt
+      if (typeof prompt !== 'string' || prompt.trim() === '') throw coded('INVALID_ARGUMENT', 'session_prompt requires a prompt')
+      return ['run', '--session-id', requiredId(input, 'session_prompt'), '--json', prompt]
+    },
+  },
+  {
     name: 'session_fork',
     description: 'Copy a DSH session up to its last completed turn into a new session (parentSession = source). The source log is never modified. The child keeps the source agent preset, so it resumes in the TUI; it is not runnable by the headless runner.',
     inputSchema: {
