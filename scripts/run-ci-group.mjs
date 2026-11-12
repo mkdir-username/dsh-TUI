@@ -998,6 +998,12 @@ const GROUPS = {
     ["verify-settings-effort-catalog", ['node', '--import', 'tsx/esm', 'scripts/verify-settings-effort-catalog.tsx']],
     ["verify-compact", ['node', '--import', 'tsx/esm', 'scripts/verify-compact.mjs']],
     ["verify-compaction-progress", ['node', '--import', 'tsx/esm', 'scripts/verify-compaction-progress.tsx']],
+// Manual /compact cycle: the whole cycle (restruct-plan fork + summary) runs in one
+// maintenance phase, so a settled background job waits in the inbox and opens no turn
+// until the cycle ends; a hung fork is released by cancel and after the summary.
+    ["verify-compact-hold", ['node', 'scripts/verify-compact-hold-events.mjs']],
+    ["verify-compact-queue", ['node', 'scripts/verify-compact-queue.mjs']],
+    ["verify-compact-rp", ['node', 'scripts/verify-compact-rp.mjs']],
 // #1030：隔离 locale、持久化 /lang 与环境变量，不能靠 CI 的 zh 默认掩盖脚本依赖。
     ['verify-regression-language', ['node', 'scripts/verify-regression-language.mjs']],
     ["verify-context-warning", ['node', '--import', 'tsx/esm', 'scripts/verify-context-warning.mjs']],
