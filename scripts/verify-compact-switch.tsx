@@ -161,7 +161,7 @@ function holdRestructPlan() {
 function assemble(script: Script, subagents?: {
   getProvider(name: string): unknown
   startActivation(request: { signal: AbortSignal }): Promise<{ result: Promise<unknown>; dispose?(): Promise<void> }>
-}) {
+}, options: { maintenance?: boolean } = {}) {
   // Each assembly is an independent session: restart the event sequence so the
   // log's `seq` stays index-aligned (makeAgent publishes `seq: events.length`)
   // and rewind boundaries computed from a row's `seq` resolve inside it.
@@ -214,6 +214,18 @@ function assemble(script: Script, subagents?: {
     logger: { warn() {} },
   }
   const agent = makeAgent('a1', makeEvents(), () => mark('snapshot'))
+  let maintenanceCalls = 0
+  if (options.maintenance === true) {
+    // The current host's path: the cycle claims one non-turn phase, so a waking
+    // delivery waits instead of opening a turn. Scenes that need it opt in —
+    // the default keeps the legacy wait-idle behaviour the other scenes pin.
+    Object.assign(agent, {
+      async runMaintenance<T>(task: (signal: AbortSignal) => Promise<T>): Promise<T> {
+        maintenanceCalls += 1
+        return await task(new AbortController().signal)
+      },
+    })
+  }
   live.set(String(agent.session.id), agent)
   const channel = createChannel(ctx as never, agent as never, {
     model: 'model-a',
@@ -234,7 +246,7 @@ function assemble(script: Script, subagents?: {
     )
     return next()[Symbol.asyncIterator]()
   }
-  return { order, stamps, compaction, channel, agent, handlers, emit, stream, live }
+  return { order, stamps, compaction, channel, agent, handlers, emit, stream, live, maintenance: { get calls() { return maintenanceCalls } } }
 }
 const toasts = (channel: { notifications: readonly { text: string }[] }) =>
   channel.notifications.map(item => item.text).join('\n')
@@ -779,6 +791,34 @@ const toasts = (channel: { notifications: readonly { text: string }[] }) =>
     check('scene22: the stage is cleared without the fork result',
       await settle(() => channel.manualCompactionStage === undefined))
     check('scene22: no compaction runs after the hung fork', compaction.calls.length === 0)
+  } finally {
+    fork.finish(verdict)
+    channel.releaseContributions()
+  }
+}
+
+// ==== The same cancel/dispose on the host's maintenance path ====
+// Every host in the supported peer range exposes runMaintenance, so the cycle
+// runs inside one phase and a cancel has to end that phase, not only the fork.
+{
+  const fork = holdRestructPlan()
+  const { channel, compaction, maintenance } = assemble(
+    { kind: 'hang-until-abort' },
+    fork.service,
+    { maintenance: true },
+  )
+  const verdict = { stopReason: 'completed', output: [{ type: 'text', text: 'RP_DONE late' }] }
+  try {
+    channel.compact()
+    check('scene23: the cycle claims one maintenance phase',
+      await settle(() => maintenance.calls === 1 && fork.signal !== undefined
+        && channel.manualCompactionStage?.phase === 'restruct-plan'))
+    channel.cancelCompact()
+    check('scene23: cancel disposes the hung fork', await settle(() => fork.disposed && fork.signal?.aborted === true))
+    check('scene23: the cancellation is announced', await settle(() => toasts(channel).includes('压缩已取消')))
+    check('scene23: the phase ends and the stage is cleared',
+      await settle(() => channel.manualCompactionStage === undefined))
+    check('scene23: no compaction runs after the cancel', compaction.calls.length === 0)
   } finally {
     fork.finish(verdict)
     channel.releaseContributions()
