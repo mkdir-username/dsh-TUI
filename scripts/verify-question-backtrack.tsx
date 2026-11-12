@@ -259,6 +259,30 @@ assert.ok(screen().includes('[ ] Two'))
 assert.deepEqual(forwardDraft, { selected: ['One'] })
 await batchApp.unmount()
 
+// The other half of the same contract: a single-select row keeps the radio
+// pair. A `[ ]` glyph does not fit the one-cell column, and its `]` wraps
+// onto a row of its own — the option list looked like broken brackets.
+const radioApp = await render(React.createElement(AskUserQuestionPanel, {
+  position: 1,
+  total: 1,
+  answered: 0,
+  question: {
+    question: '单选行',
+    options: [
+      { label: 'Alpha', description: '一条很长的说明文字，必须和它的选项在同一行块里。' },
+      { label: 'Beta' },
+    ],
+  },
+  onAnswer() {},
+  onCancel() {},
+}), { stdout, stdin, stderr: new FakeStdout(), exitOnCtrlC: false, patchConsole: false })
+assert.ok(await settled(() => screen().includes('单选行')))
+const radioScreen = screen()
+assert.ok(radioScreen.includes('● Alpha'), radioScreen)
+assert.ok(radioScreen.includes('○ Beta'), radioScreen)
+assert.ok(!radioScreen.split('\n').some(line => /^[[\]]$/.test(line.trim())), radioScreen)
+await radioApp.unmount()
+
 const moveApp = await render(React.createElement(AskUserQuestionPanel, {
   position: 1,
   total: 2,

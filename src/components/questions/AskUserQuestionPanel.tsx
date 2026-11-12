@@ -71,6 +71,10 @@ function isPlainArrow(key: { ctrl?: boolean; meta?: boolean; super?: boolean; sh
  *  a "можно несколько" question rendered with ●/○ looked answerable once. */
 const CHECKED = '[✓]'
 const UNCHECKED = '[ ]'
+/** The checkbox glyphs are three cells wide. A single-select row keeps the
+ *  one-cell radio column, where `[ ]` wraps its `]` onto the next line. */
+const RADIO_CHECKED = '●'
+const RADIO_UNCHECKED = '○'
 const PENCIL = '✎'
 /** One masked code point of a secret answer (`question.secret`). */
 const SECRET_MASK = '•'
@@ -775,7 +779,9 @@ export function AskUserQuestionPanel({
             </Box>
             <Box width={multiSelect ? 3 : 1} flexShrink={0}>
               <Text color={focused ? 'accent' : undefined} bold={selected}>
-                {selected ? (multiSelect ? CHECKED : '●') : UNCHECKED}
+                {multiSelect
+                  ? (selected ? CHECKED : UNCHECKED)
+                  : (selected ? RADIO_CHECKED : RADIO_UNCHECKED)}
               </Text>
             </Box>
             <Box flexDirection="column" marginLeft={1}>
