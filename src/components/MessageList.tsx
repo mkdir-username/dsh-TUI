@@ -28,6 +28,7 @@ import { MessageMetadata } from './messages/MessageMetadata.js'
 import { stripNarration } from '../utils/narration.js'
 import { foldLongLines } from '../utils/fold-long-lines.js'
 import { stringWidth } from '../ink/stringWidth.js'
+import { truncateToWidth } from '../ink/truncateToWidth.js'
 import { clipPreview, type TimelineSnapshot, type TimelineTurn } from '../ink/timeline-rail.js'
 import type { ToolBackground } from '../tuiDisplayPrefs.js'
 import { getRevealVersion, revealLengthOf, revealTextOf, scopeRevealKey } from './smoothReveal.js'
@@ -1651,6 +1652,7 @@ export function MessageList({
               rowId={row.id}
               kind={row.kind}
               text={displayText}
+              compactSummaryPreview={row.compactPreview}
               interruptBackend={row.interruptBackend}
               images={row.images}
               textFull={row.kind === 'reasoning' ? row.text : undefined}
@@ -1730,6 +1732,7 @@ export function MessageList({
 // in the virtualization window) and re-ran each row's markdown pipeline —
 // the dominant long-session jank source.
 type MemoRowProps = {
+  compactSummaryPreview?: string
   rowId: number
   kind: ChatRow['kind']
   text: string
@@ -1848,6 +1851,7 @@ function TranscriptRow({
   rowId,
   kind,
   text,
+  compactSummaryPreview,
   interruptBackend,
   images,
   textFull,
@@ -2202,7 +2206,13 @@ function TranscriptRow({
             <Box paddingLeft={2} backgroundColor={background}>
               <Text dimColor>{text}</Text>
             </Box>
-          ) : null}
+          ) : (
+            <Text dimColor italic color={compactHovered ? 'text' : undefined}>
+              <Text color={compactHovered ? 'text' : undefined}>∴</Text>
+              {' '}{t('compact-summary-folded')} · {compactPreview(compactSummaryPreview ?? displayText)}{' '}
+              {t('hint-expand-ctrl-o', { key: primaryComboString('transcript') })}
+            </Text>
+          )}
         </Box>
       )
     case 'subagent':
@@ -2250,6 +2260,14 @@ function TranscriptRow({
       )
     }
   }
+}
+
+/** Folded compact-summary preview: whitespace flattened, capped with an
+ *  ellipsis so the fold line never wraps. `limit` is terminal cells, so
+ *  CJK wide chars count double and never split mid-glyph. */
+function compactPreview(text: string, limit = 60): string {
+  const flat = text.replace(/\s+/g, ' ').trim()
+  return stringWidth(flat) <= limit ? flat : `${truncateToWidth(flat, limit - 1)}…`
 }
 
 const MemoRow = React.memo(TranscriptRow)

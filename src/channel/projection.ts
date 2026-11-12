@@ -778,11 +778,21 @@ export function createChannelProjection(state: ProjectionState, deps: ChannelPro
     if (event.source === 'compaction') {
       const summary = event.text
       if (summary) {
-        appendRow({ id: deps.rowIds.value, kind: 'compact', text: summary })
+        appendRow({
+          id: deps.rowIds.value, kind: 'compact', text: summary,
+          ...(event.compactPreview === undefined ? {} : { compactPreview: event.compactPreview }),
+        })
       } else {
         appendRow({ id: deps.rowIds.value, kind: 'notice', text: t('compact-done') })
       }
       deps.rowIds.value += 1
+      // A partial checkpoint does not identify the removed segment mix. Keep
+      // the heuristic composition unchanged rather than treating summary size
+      // as a net delta; the host meter remains authoritative for occupancy.
+      if (event.compactionScope === 'partial') {
+        deps.resetContextWarning()
+        return
+      }
       // The checkpoint replaces the whole pre-compact surface. Occupancy
       // needs no chars/4 rewrite here: a DSH host's token meter folds this
       // same event and reprices the surface by its logged shadow price (the

@@ -295,6 +295,18 @@ export interface PreparedHostProfile {
  * resolve only through `$DSH_HOME/profiles/node_modules`, which a fresh
  * install may not have. The DSH kernel also gets the rest of `runProfile`'s prepare.
  */
+/**
+ * dsh `profile-boot` userAgentProfile (0.2.2-rc.2): render a profile name as an
+ * RFC 9110 `User-Agent` product version. Bytes outside `tchar`, and `%`, are
+ * percent-encoded, so spaces, `/`, and non-ASCII names stay readable and
+ * reversible. Replicated locally: the host module's export set must stay
+ * stable across the supported lines, and older lines lack this helper.
+ */
+function userAgentProfile(name: string): string {
+  // encodeURIComponent leaves only `(` and `)` outside tchar.
+  return encodeURIComponent(name).replace(/[()]/g, char => `%${char.charCodeAt(0).toString(16).toUpperCase()}`)
+}
+
 /** Whether the loaded kernel predates `minimum` (unparseable counts as current). */
 function kernelBefore(host: HostDsh, minimum: string): boolean {
   let version: string | undefined
@@ -318,6 +330,8 @@ export async function prepareHostRoot(host: HostDsh, options: PrepareHostRootOpt
     installAnchor: profileBoot.INSTALL_ANCHOR,
     overlays: [],
   }
+  // runProfile's first line: model providers see which profile sent a request.
+  process.env.DSH_USER_AGENT_SUFFIX = `dsh-profile/${userAgentProfile(profile.name)}`
   const resolution = await appBoot.createRuntimeResolution({ installAnchor, profile })
   const rootConfig = join(profile.dir, profileBoot.PROFILE_ROOT_FILENAME)
   // Build the neutral Loader root first: discovery needs its resolver before

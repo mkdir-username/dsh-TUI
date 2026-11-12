@@ -16,7 +16,7 @@ dst run --continue "continue this directory's latest compatible root session"
 dst cli --help
 ```
 
-Install the official DSH CLI. The automation adapter currently validates **0.2.0-rc.2, 0.2.1-rc.2, 0.2.1-rc.3, 0.2.1-rc.4 and 0.2.1-rc.5**; other versions are rejected before a task starts. `dst dsh <args...>` bypasses protocol conversion and this version restriction. Resolution follows the first DSH installation on PATH. Use `--dsh-bin /path/to/dsh/lib/bin.js` or `DSH_TUI_CLI_DSH_BIN` for an explicit built JS entry belonging to the official package. The adapter never executes a `.cmd`, PowerShell command, or interpolated shell string.
+Install the official DSH CLI. The automation adapter currently validates **0.2.0-rc.2, 0.2.1-rc.2, 0.2.1-rc.3, 0.2.1-rc.4, 0.2.1-rc.5 and 0.2.2-rc.1**; other versions are rejected before a task starts. `dst dsh <args...>` bypasses protocol conversion and this version restriction. Resolution follows the first DSH installation on PATH. Use `--dsh-bin /path/to/dsh/lib/bin.js` or `DSH_TUI_CLI_DSH_BIN` for an explicit built JS entry belonging to the official package. The adapter never executes a `.cmd`, PowerShell command, or interpolated shell string.
 
 ### Input, output and execution
 
@@ -44,6 +44,10 @@ dst session list --json                  # current cwd, at most 50 rows by defau
 dst session list --all --limit 100 --json
 dst session show <id> --json              # validated official log snapshot
 dst session export <id> > session.md      # visible current-surface text, not a backup
+dst session status <id> --json            # activity, kind, holder pid, counters
+dst session tail <id> --limit 20 --json   # recent events, text trimmed to 500 chars
+dst session fork <id> --json              # copy up to the last closed turn (--title optional)
+dst session list --titles --json          # also folded titles; one log fold per session, slower
 dst models list --provider deepseek-official --json
 dst skills list --json
 dst mcp status --json
@@ -57,9 +61,11 @@ A separate Cordis plugin calls public `sessionQuery`, `llm`, `skills`, `tools`, 
 
 - `--session-id` resumes only existing, cwd-matching root sessions without a preset/fork/subagent identity. `--continue` selects by validated recent log activity through official queries, not TUI resume.txt; no compatible session means failure, never a silent fresh session. DSH revalidates after acquiring its write lease.
 - `session export` is Markdown user/assistant text from the current visible surface, not attachments, complete tool output or ZIP. `show --json` is a validated event snapshot, not a physical backup.
+- `session status` / `session tail` are read-only: `working` means a turn is open (`turn/start` without a later `turn/end`); trailing events such as a title, a fork marker or a compaction are not work in progress. `title` is the latest title folded from the log, `null` for a session that was never titled; `tail` returns the text of user and assistant messages, truncated to 500 characters. `ownerPid` comes from the TUI mount ledger `~/.dsh-tui/session-mounts.json` (absent or damaged reads as `null`, display only).
+- `session fork` is a **write**: it creates a new session through the official `sessionPersistence` (`parentSession` = source) and never touches the source log. The cut is the last completed turn; without one it fails with `SESSION_FORK_UNAVAILABLE` (exit 3) and creates no file. The child inherits the source `agentPreset`, so only a runtime composing that preset (the TUI) can continue it; headless refuses. The child is re-read and verified before the command reports success.
 - `skills list` reads the profile's global scope for this cwd, not a TUI preset's catalog.
 - `mcp status` observes registered `mcp__...` tools and explicitly returns `connectionHealth: unavailable`; it cannot determine connectivity of a server with no tools.
-- `auth status` describes only `DEEPSEEK_API_KEY` presence/source. It never returns the value or claims account login, key validity, or every provider's authentication. DSH 0.2.1 disables the credential service in its default headless profile, so this command returns `CAPABILITY_UNAVAILABLE` (exit 3). To query it, explicitly choose a compatible profile or `--patch` that mounts that service; the CLI does not enable the credential store itself.
+- `auth status` describes only `DEEPSEEK_API_KEY` presence/source. It never returns the value or claims account login, key validity, or every provider's authentication. DSH 0.2.1 and 0.2.2 disable the credential service in their default headless profile, so this command returns `CAPABILITY_UNAVAILABLE` (exit 3). To query it, explicitly choose a compatible profile or `--patch` that mounts that service; the CLI does not enable the credential store itself.
 - `capabilities` describes adapter operations and version limits, not proof that an arbitrary custom profile supplies every service.
 
 ## Separation and migration
