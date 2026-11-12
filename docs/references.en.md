@@ -36,7 +36,7 @@ directory onto the recorded project and throws when that path is gone too.
 `ensure()` also runs inside `system-prompt/assemble`, so a renamed or deleted
 project ends every later turn with `working-directory: directory does not exist`.
 `src/**` cannot reach a core service, so
-`/Users/username/.claude/dotfiles/dsh/bin/patch-dsh-workdir-recovery.mjs` patches
+`~/.claude/dotfiles/dsh/bin/patch-dsh-workdir-recovery.mjs` patches
 the vendored package while `dsh-runtime.mjs prepare` builds a release: recovery
 walks from the recorded project through the live process directory (the inode of
 `.`, which survives an external rename) and their ancestors, with the filesystem
