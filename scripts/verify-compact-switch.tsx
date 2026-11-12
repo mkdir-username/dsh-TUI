@@ -825,4 +825,35 @@ const toasts = (channel: { notifications: readonly { text: string }[] }) =>
   }
 }
 
+// ==== Legacy host: the waiting phase must not promise a cancel it cannot deliver ====
+// Without runMaintenance the cycle polls for idle while a turn runs, and both
+// Esc and Ctrl+C hand the key to the turn interrupt first (`!channel.working`
+// guards the cancel branch), so a row advertising the cancel lies. A cancel that
+// still arrives (programmatic) must be announced instead of dropped.
+{
+  const fork = holdRestructPlan()
+  const { channel, compaction, agent, emit } = assemble({ kind: 'hang-until-abort' }, fork.service)
+  const verdict = { stopReason: 'completed', output: [{ type: 'text', text: 'RP_SKIP waiting' }] }
+  try {
+    channel.compact()
+    await settle(() => fork.signal !== undefined)
+    agent.status = 'running'
+    emit('session/event', agent.session, ev('turn/start', { turn: 2 }))
+    fork.finish(verdict)
+    check('scene24: the legacy path waits for the running turn',
+      await settle(() => channel.manualCompactionStage?.phase === 'wait-idle'))
+    check('scene24: the waiting row does not advertise a cancel',
+      channel.manualCompactionStage?.cancellable === false)
+    agent.status = 'idle'
+    channel.cancelCompact()
+    check('scene24: a cancel at the end of the wait is announced',
+      await settle(() => toasts(channel).includes('压缩已取消')))
+    check('scene24: the stage is cleared', await settle(() => channel.manualCompactionStage === undefined))
+    check('scene24: no compaction runs', compaction.calls.length === 0)
+  } finally {
+    fork.finish(verdict)
+    channel.releaseContributions()
+  }
+}
+
 process.exit(failed)

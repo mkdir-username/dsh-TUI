@@ -321,18 +321,19 @@ export function createManualCompaction(
           if (holdSignal === undefined && state.working) {
             // A host without runMaintenance: a turn that started while the
             // fork ran still has to finish before the summary.
-            cycle.stage = { ...cycle.stage, phase: 'wait-idle' }
+            // Esc and Ctrl+C hand the key to the running turn first, so this row
+            // must not advertise a cancel it cannot deliver.
+            cycle.stage = { ...cycle.stage, phase: 'wait-idle', cancellable: false }
             state.manualCompactionStage = cycle.stage
             state.emit()
             if (!await waitUntilIdle(() => current() && !cycle.preparation.signal.aborted)) {
-              if (current() && !cycle.preparation.signal.aborted) {
-                deps.notify(`compact-rp: ход не освободился за ${IDLE_WAIT_MS / 60000} минут — сжатие отменено. Повтори /compact`, { color: 'warning', timeoutMs: 12000 })
-              }
+              if (cycle.cancelRequested === true) deps.notify(t('compact-cancelled'))
+              else if (current()) deps.notify(`compact-rp: ход не освободился за ${IDLE_WAIT_MS / 60000} минут — сжатие отменено. Повтори /compact`, { color: 'warning', timeoutMs: 12000 })
               return
             }
             if (stopped()) return
           }
-          cycle.stage = { ...cycle.stage, phase: 'checking' }
+          cycle.stage = { ...cycle.stage, phase: 'checking', cancellable: true }
           state.manualCompactionStage = cycle.stage
           state.emit()
         }
