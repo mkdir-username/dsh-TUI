@@ -580,6 +580,15 @@ export class SubagentActivityStore {
     this.notify()
   }
 
+  /** Observed output of one child: tool calls, streamed lines, usage. Zero means
+   *  the child has produced nothing yet — a fork still waiting for its first
+   *  token, which the status row must name instead of looking hung. */
+  activity(agentId: string): number {
+    const state = this.states.get(agentId)
+    if (state === undefined) return 0
+    return state.toolCalls.length + state.outputEvents.length + (state.tokens === undefined ? 0 : 1)
+  }
+
   snapshot(): SubagentState[] { return Array.from(this.states.values()).map(state => ({ ...state, output: [...state.output], outputEvents: [...state.outputEvents], toolCalls: state.toolCalls.map(tool => ({ ...tool })), tokens: state.tokens ? { ...state.tokens } : undefined, settledRuns: state.settledRuns?.map(run => ({ ...run })) })) }
   get(agentId: string): SubagentState | undefined { return this.snapshot().find(state => state.agentId === agentId) }
   subscribe(listener: () => void): () => void { this.listeners.add(listener); return () => this.listeners.delete(listener) }

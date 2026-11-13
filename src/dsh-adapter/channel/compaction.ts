@@ -17,7 +17,7 @@ interface ManualCompaction {
 
 /** Who aborted the cycle's preparation: the notice must name the sender, or a
  *  cancelled fork reads as a crash. */
-type AbortSource = 'user' | 'switch' | 'disposed' | 'timeout'
+type AbortSource = 'user' | 'switch' | 'disposed' | 'timeout' | 'watchdog'
 
 interface CompactCycle {
   stage: ManualCompactionStage
@@ -82,6 +82,8 @@ export function createManualCompaction(
     withDecisionPending<T>(name: string, pending: Promise<T>): Promise<T>
     notify: Notify
     /** Park every model-bound line while the cycle runs (the shared hold). */
+    /** Observed child output count: zero means the fork has not produced a token yet. */
+    childActivity?(childId: string): number
     holdCompact?(scope: { readonly agentId: string; readonly generation: number }): number
     /** Cycle finished: hand the parked lines over in order. */
     releaseCompact?(): void
@@ -224,6 +226,11 @@ export function createManualCompaction(
   }
   const RP_PROMPT = 'Пользователь набрал /compact: это его явная команда выполнить restruct-plan сейчас, до сжатия контекста. Ты — форк этой сессии, запущенный TUI, история диалога тебе видна. Вызови Skill restruct-plan для плана .dev/<slug>/, над которым шла работа, и запиши на диск всё, что знает только диалог: прогресс, грабли, тупики, проверенные факты. Перед записью в .dev/ прочитай каталог плана — его сторожит гейт dev-docs. Вопросов не задавай, ответить некому. Ничего не коммить и не пушить. Последней строкой ответа выведи ровно RP_DONE <slug> или RP_SKIP <причина>.'
   const RP_TIMEOUT_MS = 15 * 60 * 1000
+  /** A fork that has produced nothing after this long is not slow, it is stuck:
+   *  measured first-token latency on real forks is 19.5s (worst inter-step gap 43.9s). */
+  const RP_FIRST_OUTPUT_MS = 120_000
+  /** How long the row stays silent about the wait before it names it. */
+  const RP_MODEL_WAIT_NOTE_MS = 10_000
   /** `activation.result` settles only when the child finishes: a fork that hangs
    *  (or ignores its abort) would otherwise keep the cycle, and with it the whole
    *  agent hold, waiting long past `RP_TIMEOUT_MS`. The cycle's own signals end
@@ -245,12 +252,13 @@ export function createManualCompaction(
     }
   }
   /** The cycle signal decides when the wait ends; the phrase says who ended it. */
-  const abortPhrase = (source: AbortSource | 'signal', reason: unknown): string => {
+  const abortPhrase = (source: AbortSource | 'signal', reason: unknown, route = ''): string => {
     switch (source) {
       case 'user': return 'отменён пользователем (Esc)'
       case 'switch': return 'прерван сменой сессии'
       case 'disposed': return 'прерван: агент закрыт'
       case 'timeout': return `не уложился в ${RP_TIMEOUT_MS / 60000} минут`
+      case 'watchdog': return `не получил вывода модели за ${RP_FIRST_OUTPUT_MS / 1000} с${route === '' ? '' : ` (${route})`}`
       default: return reason instanceof Error ? reason.message : 'отмена'
     }
   }
@@ -266,6 +274,8 @@ export function createManualCompaction(
     ])
     const abortSource = (): AbortSource | 'signal' => cycle.abortSource
       ?? (signal.reason instanceof Error && signal.reason.name === 'TimeoutError' ? 'timeout' : 'signal')
+    /** The route the fork was told to use, for the no-output notice. */
+    const route = [agent.options?.provider, agent.options?.model].filter(part => typeof part === 'string' && part !== '').join('/')
     let activation: { readonly result: Promise<RestructPlanResult>; readonly dispose?: () => Promise<void>; readonly childId?: unknown } | undefined
     try {
       activation = await subagents.startActivation({
@@ -275,15 +285,43 @@ export function createManualCompaction(
         signal,
         delivery: 'caller',
       })
-      const result = await settledOrAborted(activation.result, signal)
-      const diagnostic = result.diagnostic ?? await diagnosticOfChild(ctx, activation)
-      return restructPlanVerdict({ ...result, diagnostic })
+      const childId = typeof activation.childId === 'string' ? activation.childId : undefined
+      const produced = (): number => childId === undefined ? 0 : deps.childActivity?.(childId) ?? 0
+      let noteTimer: ReturnType<typeof setTimeout> | undefined
+      let watchdog: ReturnType<typeof setTimeout> | undefined
+      if (childId !== undefined) {
+        noteTimer = setTimeout(() => {
+          if (produced() > 0) return
+          if (cycles.get(agent) !== cycle || cycle.stage.phase !== 'restruct-plan') return
+          cycle.stage = { ...cycle.stage, note: 'model-wait' }
+          if (deps.agent() !== agent) return
+          state.manualCompactionStage = cycle.stage
+          state.emit()
+        }, RP_MODEL_WAIT_NOTE_MS)
+        watchdog = setTimeout(() => {
+          if (produced() > 0) return
+          // Nothing arrived: end the wait now instead of at the 15-minute ceiling,
+          // and let the common abort path name the reason and release the fork.
+          cycle.abortSource = 'watchdog'
+          cycle.preparation.abort(new Error('restruct-plan produced no model output'))
+        }, RP_FIRST_OUTPUT_MS)
+        noteTimer.unref?.()
+        watchdog.unref?.()
+      }
+      try {
+        const result = await settledOrAborted(activation.result, signal)
+        const diagnostic = result.diagnostic ?? await diagnosticOfChild(ctx, activation)
+        return restructPlanVerdict({ ...result, diagnostic })
+      } finally {
+        if (noteTimer !== undefined) clearTimeout(noteTimer)
+        if (watchdog !== undefined) clearTimeout(watchdog)
+      }
     } catch (error: unknown) {
       if (activation !== undefined && signal.aborted) {
         // The fork kept its own request after the abort (live probe 2026-11-12),
         // so stop it: the cycle is over and `dispose` is the only handle left.
         void activation.dispose?.().catch(() => {})
-        const why = abortPhrase(abortSource(), signal.reason)
+        const why = abortPhrase(abortSource(), signal.reason, route)
         return { ok: false, reason: `compact-rp: restruct-plan прерван (${why}). Сжатие НЕ выполнено. Без restruct-plan: /compact --pure` }
       }
       return {
@@ -370,6 +408,12 @@ export function createManualCompaction(
       const cycleTask = async (holdSignal: AbortSignal | undefined): Promise<void> => {
         if (input.kind === 'restruct') {
           const verdict = await runRestructPlan(ctx, originAgent, cycle, holdSignal)
+          if (cycle.abortSource === 'watchdog') {
+            // Not a user cancel and not a transport failure: the fork produced
+            // nothing, and `stopped()` would swallow that reason silently.
+            if (!verdict.ok) deps.notify(verdict.reason, { color: 'error', timeoutMs: 12000 })
+            return
+          }
           if (stopped()) return
           if (!verdict.ok) {
             deps.notify(verdict.reason, { color: 'error', timeoutMs: 12000 })

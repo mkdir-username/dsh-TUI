@@ -331,6 +331,14 @@ async function renderRow(compaction, cols, activityPreset) {
   check('scene6: prefill shows the elapsed seconds', prefillRow.includes('26s'), prefillRow)
   check('scene6: a cancellable row advertises Esc', prefillRow.includes(t('compact-esc-cancel')), prefillRow)
 
+  const waiting = await renderRow({ startedAt: Date.now() - 12_000, phase: 'restruct-plan', outputChars: 0, cancellable: true, note: 'model-wait' }, 100)
+  const waitingRow = waiting.find(line => line.includes(t('compact-phase-restruct-plan'))) ?? ''
+  check('scene6: the restruct-plan row names the model wait', waitingRow.includes(t('compact-phase-model-wait')), waitingRow)
+
+  const waitingNarrow = await renderRow({ startedAt: Date.now() - 12_000, phase: 'restruct-plan', outputChars: 0, cancellable: true, note: 'model-wait' }, 34)
+  const waitingNarrowText = waitingNarrow.join('\n')
+  check('scene6: a narrow terminal drops the wait wording', !waitingNarrowText.includes(t('compact-phase-model-wait')), waitingNarrowText)
+
   const summary = await renderRow({ startedAt: Date.now() - 3_000, phase: 'summary', outputChars: 4_800, cancellable: true }, 100)
   const summaryRow = summary.find(line => line.includes(t('compact-working'))) ?? ''
   check('scene6: summary streams the token count instead of the phase', summaryRow.includes('1.2k tokens'), summaryRow)
@@ -632,7 +640,7 @@ async function mountChat(channel, cols = 100, rows = 30, activityStore) {
   await stageChat.instance.unmount()
 }
 
-function holdRestructPlan() {
+function holdRestructPlan({ child = false } = {}) {
   let finish
   const result = new Promise(resolve => { finish = resolve })
   const requests = []
@@ -643,7 +651,8 @@ function holdRestructPlan() {
       getProvider: name => name === 'fork' ? {} : undefined,
       async startActivation(request) {
         requests.push(request)
-        return { result }
+        // A local child always carries its durable id; the watchdog keys on it.
+        return { result, ...(child ? { childId: 'child-watchdog' } : {}) }
       },
     },
   }
@@ -820,6 +829,42 @@ function screenBottom(chat) {
     Date.now = realNow
     globalThis.setTimeout = realSetTimeout
     fork.finish(verdict)
+    channel.releaseContributions()
+  }
+}
+
+// ==== A silent fork is named, then bounded ====
+{
+  const fork = holdRestructPlan({ child: true })
+  const { channel, compaction } = assemble('hang-until-abort', [], fork.service)
+  const realSetTimeout = globalThis.setTimeout
+  const timers = new Map()
+  globalThis.setTimeout = ((callback, ms, ...args) => {
+    if (ms === 10_000 || ms === 120_000) {
+      timers.set(ms, callback)
+      return { unref() {} }
+    }
+    return realSetTimeout(callback, ms, ...args)
+  })
+  try {
+    channel.compact()
+    check('watchdog: the fork starts with no output', await settle(() => fork.requests.length === 1))
+    check('watchdog: the row stays silent inside the note window', channel.manualCompactionStage?.note === undefined)
+    timers.get(10_000)?.()
+    await new Promise(resolve => setImmediate(resolve))
+    check('watchdog: ten silent seconds are named as a model wait',
+      channel.manualCompactionStage?.phase === 'restruct-plan' && channel.manualCompactionStage?.note === 'model-wait',
+      JSON.stringify(channel.manualCompactionStage))
+    timers.get(120_000)?.()
+    globalThis.setTimeout = realSetTimeout
+    check('watchdog: two silent minutes stop the cycle and name the reason',
+      await settle(() => channel.manualCompactionStage === undefined &&
+        channel.notifications.some(note => note.text.includes('не получил вывода модели') && note.text.includes('/compact --pure'))) &&
+        compaction.calls.length === 0,
+      JSON.stringify(channel.notifications.slice(-2)))
+  } finally {
+    globalThis.setTimeout = realSetTimeout
+    fork.finish(rpDone)
     channel.releaseContributions()
   }
 }

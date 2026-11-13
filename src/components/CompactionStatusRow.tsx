@@ -84,7 +84,9 @@ export function CompactionStatusRow({
   })()
   const detail = compaction.phase === 'summary'
     ? `↓ ${formatTokens(Math.round(compaction.outputChars / 4))} tokens`
-    : compaction.phase === 'prefill' ? t('compact-phase-prefill') : undefined
+    : compaction.phase === 'prefill' ? t('compact-phase-prefill')
+      : 'note' in compaction && compaction.note === 'model-wait' ? t('compact-phase-model-wait')
+        : undefined
   const hint = 'cancellable' in compaction && compaction.cancellable ? t('compact-esc-cancel') : undefined
 
   // The hint is actionable and the phase is informative, so a narrow terminal

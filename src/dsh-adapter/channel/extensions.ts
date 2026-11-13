@@ -753,6 +753,7 @@ export function attachDshExtensions(
     agent: () => binding.agent,
     withDecisionPending: core.input.withDecisionPending,
     notify,
+    childActivity: childId => subagentProjection.store.activity(childId),
     // Input queue of the manual /compact cycle.
     holdCompact: scope => core.input.holdCompactInputs(scope),
     releaseCompact: () => core.input.queueUserMessages(),
