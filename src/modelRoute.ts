@@ -158,3 +158,19 @@ export async function validateModelRoute(
   if (models.length === 0 || models.some(model => model.id === route.model)) return { route }
   return { route: fallback, rejected: route }
 }
+
+/**
+ * The route a resumed agent continues on: the route the session's own log
+ * records, else the deployment route — then the same adapter-catalog check a
+ * fresh session gets. A stale recorded route whose provider has no adapter in
+ * THIS launch would otherwise reach the first request (and every subagent that
+ * inherits `parent.options.model`) as `NO_ADAPTER`.
+ */
+export async function resumeModelRoute(
+  llm: Parameters<typeof validateModelRoute>[0],
+  recorded: ModelRoute | undefined,
+  resumeRoute: ModelRoute,
+  fallback: ModelRoute = DEFAULT_MODEL_ROUTE,
+): Promise<{ route: ModelRoute; rejected?: ModelRoute }> {
+  return validateModelRoute(llm, recorded ?? resumeRoute, fallback)
+}

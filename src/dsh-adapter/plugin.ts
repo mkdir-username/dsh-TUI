@@ -113,7 +113,7 @@ import { registerPromptDebug } from './promptDebug.js'
 import { readActivityFrames } from '../activityPrefs.js'
 import { commitFullscreenFactoryMigration, planFullscreenFactoryMigration, readAppliedMigrations } from '../migrationPrefs.js'
 import { readModelPref } from '../modelPrefs.js'
-import { explicitModelRoute, recordedModelRoute, resolveModelRoute, validateModelRoute } from '../modelRoute.js'
+import { explicitModelRoute, resolveModelRoute, resumeModelRoute, validateModelRoute } from '../modelRoute.js'
 import type { ModelRoute } from '../modelRoute.js'
 import { migratePresetPref, presetOverrideFromEnv, readPresetPref } from '../presetPrefs.js'
 import { readEffortPref } from '../effortPrefs.js'
@@ -4068,24 +4068,35 @@ async function resolveAgent(
       const persisted = await resolvePersistedPreset(ctx, resumeId)
       const composed = await composePreset(ctx, persisted)
       const recorded = await resolvePersistedRoute(ctx, resumeId)
+      // The route this launch actually has an adapter for: a recorded direct
+      // route (issue #30) whose provider this process did not register — the
+      // Touch ID gate was not opened this time — must fall back before the
+      // first request, or every fork child inheriting it dies on NO_ADAPTER.
+      const llm = ctx.get('llm') as
+        | { listModels(provider: string): Promise<readonly { id: string }[]> }
+        | undefined
+      const { route: resumeApplied, rejected: resumeRejected } = await resumeModelRoute(llm, recorded, resumeRoute, deploymentRoute)
+      if (resumeRejected !== undefined) {
+        ctx.logger.warn(
+          `dsh-tui: model route ${resumeRejected.provider}/${resumeRejected.model} is not advertised by provider "${resumeRejected.provider}"; falling back to ${resumeApplied.provider}/${resumeApplied.model}`,
+        )
+      }
       const resumeOptions = {
-        provider: recorded?.provider ?? resumeRoute?.provider,
-        model: recorded?.model ?? resumeRoute?.model,
+        provider: resumeApplied.provider,
+        model: resumeApplied.model,
       }
       const resumed = await ctx.agents.resume({
         resumeSessionId: resumeId,
         agentOptions: resumeOptions,
         ...(composed.setup === undefined ? {} : { setup: composed.setup }),
       })
-      // Status-line route on resume: the route the session actually
-      // continues on — its own request/header record, else the complete
-      // cordis.yml deployment route (a bare log that pins none falls back to
-      // the startup resolution, best effort).
+      // Status-line route on resume: the exact route the request above used,
+      // so the display never advertises a provider this launch cannot reach.
       return {
         agent: resumed.agent,
         handle: resumed,
         agentPreset: composed.agentPreset,
-        route: recordedModelRoute(snapshotLiveSessionEvents(resumed.agent.session)) ?? resumeRoute,
+        route: resumeApplied,
       }
     } catch (error) {
       // A claim says "this process is driving the log". A resume that never

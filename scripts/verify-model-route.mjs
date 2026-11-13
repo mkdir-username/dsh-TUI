@@ -37,6 +37,7 @@ import {
   DEFAULT_MODEL_ROUTE,
   explicitModelRoute,
   recordedModelRoute,
+  resumeModelRoute,
   resolveModelRoute,
   validateModelRoute,
 } from '../lib/types/modelRoute.js'
@@ -207,6 +208,41 @@ const PREF = { provider: 'my-gateway', model: 'glm-5.3' }
   check(
     'resume -> malformed header data is skipped',
     recordedModelRoute([{ type: 'request/header', data: { header: {} } }]) === undefined,
+  )
+}
+
+// 10. Launch-time resume checks the route the session's log records against
+//     THIS launch's adapter catalog: a provider nobody registered here (the
+//     direct route without its Touch ID gate, NO_ADAPTER) falls back to the
+//     deployment route instead of dying on the first request — and taking
+//     every fork child that inherits the route down with it.
+{
+  const recorded = { provider: 'deepseek-official', model: 'deepseek-flash' }
+  const deployment = { provider: 'opencode-go', model: 'deepseek-v4.1-flash' }
+  const noAdapter = Object.assign(new Error('no adapter registered for provider "deepseek-official"'), {
+    code: 'NO_ADAPTER',
+  })
+  const applied = await resumeModelRoute(
+    { listModels: () => Promise.reject(noAdapter) }, recorded, deployment, deployment,
+  )
+  check(
+    'resume -> unregistered recorded route falls back to the deployment route',
+    applied.rejected !== undefined && eq(applied.rejected, recorded) && eq(applied.route, deployment),
+    JSON.stringify(applied),
+  )
+  const kept = await resumeModelRoute(
+    { listModels: async () => [{ id: 'deepseek-flash' }] }, recorded, deployment, deployment,
+  )
+  check(
+    'resume -> an advertised recorded route is kept whole',
+    kept.rejected === undefined && eq(kept.route, recorded),
+    JSON.stringify(kept),
+  )
+  const bare = await resumeModelRoute(undefined, undefined, deployment, deployment)
+  check(
+    'resume -> a bare log uses the deployment route',
+    bare.rejected === undefined && eq(bare.route, deployment),
+    JSON.stringify(bare),
   )
 }
 
