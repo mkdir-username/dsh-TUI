@@ -15,11 +15,16 @@ interface ManualCompaction {
   row: ChannelState['compaction']
 }
 
+/** Who aborted the cycle's preparation: the notice must name the sender, or a
+ *  cancelled fork reads as a crash. */
+type AbortSource = 'user' | 'switch' | 'disposed' | 'timeout'
+
 interface CompactCycle {
   stage: ManualCompactionStage
   preparation: AbortController
   /** The user stopped the cycle from the status row. */
   cancelRequested?: boolean
+  abortSource?: AbortSource
 }
 
 type CompactionState = Pick<ChannelState, 'agentId' | 'agentBindingGeneration' | 'cwd' | 'working' | 'compaction' | 'manualCompactionStage' | 'emit' | 'emitStream'>
@@ -115,6 +120,7 @@ export function createManualCompaction(
     if (cycle !== undefined) {
       if (holdOwner === cycle) abandonHold()
       closeCycle(agent, cycle)
+      cycle.abortSource = 'disposed'
       cycle.preparation.abort(new Error('agent disposed'))
     }
     const transaction = active.get(agent)
@@ -129,6 +135,7 @@ export function createManualCompaction(
     const cycle = cycles.get(agent)
     if (cycle !== undefined) {
       closeCycle(agent, cycle)
+      cycle.abortSource = 'switch'
       cycle.preparation.abort(new Error('session switch'))
     }
     abandonHold()
@@ -237,11 +244,28 @@ export function createManualCompaction(
       detach()
     }
   }
-  async function runRestructPlan(ctx: Context, agent: Agent, preparation: AbortSignal): Promise<{ ok: true; notice: string } | { ok: false; reason: string }> {
+  /** The cycle signal decides when the wait ends; the phrase says who ended it. */
+  const abortPhrase = (source: AbortSource | 'signal', reason: unknown): string => {
+    switch (source) {
+      case 'user': return 'отменён пользователем (Esc)'
+      case 'switch': return 'прерван сменой сессии'
+      case 'disposed': return 'прерван: агент закрыт'
+      case 'timeout': return `не уложился в ${RP_TIMEOUT_MS / 60000} минут`
+      default: return reason instanceof Error ? reason.message : 'отмена'
+    }
+  }
+  async function runRestructPlan(ctx: Context, agent: Agent, cycle: CompactCycle, holdSignal?: AbortSignal): Promise<{ ok: true; notice: string } | { ok: false; reason: string }> {
     const subagents = (ctx.get('subagents') ?? (agent.ctx as Context).get('subagents')) as SubagentsService | undefined
     if (subagents === undefined) return { ok: false, reason: 'compact-rp: сервис subagents не смонтирован. Без restruct-plan: /compact --pure' }
     if (subagents.getProvider('fork') === undefined) return { ok: false, reason: 'compact-rp: провайдер «fork» не смонтирован. Без restruct-plan: /compact --pure' }
-    const signal = AbortSignal.any([deps.owner.signal, preparation, AbortSignal.timeout(RP_TIMEOUT_MS)])
+    const signal = AbortSignal.any([
+      deps.owner.signal,
+      cycle.preparation.signal,
+      ...(holdSignal === undefined ? [] : [holdSignal]),
+      AbortSignal.timeout(RP_TIMEOUT_MS),
+    ])
+    const abortSource = (): AbortSource | 'signal' => cycle.abortSource
+      ?? (signal.reason instanceof Error && signal.reason.name === 'TimeoutError' ? 'timeout' : 'signal')
     let activation: { readonly result: Promise<RestructPlanResult>; readonly dispose?: () => Promise<void>; readonly childId?: unknown } | undefined
     try {
       activation = await subagents.startActivation({
@@ -259,8 +283,8 @@ export function createManualCompaction(
         // The fork kept its own request after the abort (live probe 2026-11-12),
         // so stop it: the cycle is over and `dispose` is the only handle left.
         void activation.dispose?.().catch(() => {})
-        const why = signal.reason instanceof Error ? signal.reason.message : 'отмена'
-        return { ok: false, reason: `compact-rp: restruct-plan прерван (${why}). Сжатие остановлено. Без restruct-plan: /compact --pure` }
+        const why = abortPhrase(abortSource(), signal.reason)
+        return { ok: false, reason: `compact-rp: restruct-plan прерван (${why}). Сжатие НЕ выполнено. Без restruct-plan: /compact --pure` }
       }
       return {
         ok: false,
@@ -336,20 +360,16 @@ export function createManualCompaction(
       const stopped = (): boolean => {
         if (!current()) return true
         if (cycle.cancelRequested === true) {
-          deps.notify(t('compact-cancelled'))
+          deps.notify(input.kind === 'restruct'
+            ? 'compact-rp: restruct-plan отменён пользователем (Esc). Сжатие НЕ выполнено — /compact или /compact --pure'
+            : t('compact-cancelled'), input.kind === 'restruct' ? { color: 'warning', timeoutMs: 8000 } : undefined)
           return true
         }
         return cycle.preparation.signal.aborted
       }
       const cycleTask = async (holdSignal: AbortSignal | undefined): Promise<void> => {
         if (input.kind === 'restruct') {
-          const verdict = await runRestructPlan(
-            ctx,
-            originAgent,
-            holdSignal === undefined
-              ? cycle.preparation.signal
-              : AbortSignal.any([cycle.preparation.signal, holdSignal]),
-          )
+          const verdict = await runRestructPlan(ctx, originAgent, cycle, holdSignal)
           if (stopped()) return
           if (!verdict.ok) {
             deps.notify(verdict.reason, { color: 'error', timeoutMs: 12000 })
@@ -554,6 +574,7 @@ export function createManualCompaction(
     // The fork and the pre-transaction prefill are stopped through the
     // cycle's own signal; the summary has its transaction branch above.
     cycle.cancelRequested = true
+    cycle.abortSource = 'user'
     cycle.preparation.abort(new Error('user cancelled compaction'))
   }
 

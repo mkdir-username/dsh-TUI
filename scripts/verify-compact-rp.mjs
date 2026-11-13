@@ -79,5 +79,19 @@ check(
   await diagnosticOfChild(reader([{ type: 'turn/end', data: { reason: { kind: 'completed' } } }]), { childId: 'x' }) === undefined,
 )
 
+// ── 5. the abort phrase names the sender ──────────────────────────────────
+const phraseBody = source.match(/^ {4}const abortPhrase = \(source, reason\) => \{[\s\S]*?\n {4}\};/m)?.[0]
+if (phraseBody === undefined) {
+  console.error('FAIL: abortPhrase не найден в lib/types — сначала pnpm compile')
+  process.exit(1)
+}
+const abortPhrase = new Function('RP_TIMEOUT_MS', `${phraseBody}\nreturn abortPhrase`)(15 * 60 * 1000)
+check('cancel names the user', abortPhrase('user', new Error('user cancelled compaction')) === 'отменён пользователем (Esc)', abortPhrase('user', new Error('x')))
+check('settle names the switch', abortPhrase('switch', new Error('session switch')) === 'прерван сменой сессии', abortPhrase('switch', new Error('x')))
+check('disposal names the closed agent', abortPhrase('disposed', new Error('agent disposed')) === 'прерван: агент закрыт', abortPhrase('disposed', new Error('x')))
+check('timeout names the bound', abortPhrase('timeout', new Error('TimeoutError')) === 'не уложился в 15 минут', abortPhrase('timeout', new Error('x')))
+check('an unknown abort keeps its reason', abortPhrase('signal', new Error('boom')) === 'boom')
+check('a reasonless abort stays neutral', abortPhrase('signal', undefined) === 'отмена')
+
 console.log(failed === 0 ? 'compact-rp battery OK' : `compact-rp battery FAILED (${failed})`)
 process.exit(failed === 0 ? 0 : 1)
