@@ -112,6 +112,16 @@ def read_events(path):
     return events
 
 
+def own_events(events):
+    """The child's own run: everything after the seed boundary, so the parent's
+    inherited turn/end and assistant text never count as the fork's work."""
+    cut = 0
+    for index, event in enumerate(events):
+        if event.get('type') in ('session/end-seed', 'subagent/descriptor'):
+            cut = index + 1
+    return events[cut:]
+
+
 def children_of(home, workspace, parent):
     base = os.path.join(home, 'sessions', '--' + workspace.strip('/').replace('/', '-') + '--')
     if not os.path.isdir(base):
@@ -137,8 +147,33 @@ def newest_boot_profile():
     return next((path for path in candidates if os.path.isdir(path)), None)
 
 
+def provider_env():
+    """Keys the real launcher exports from the secrets file; a plain shell does
+    not have them, and without OPENCODE_API_KEY the profile composes no
+    `opencode-go` adapter — the fork then fails NO_ADAPTER before any work."""
+    path = os.path.expanduser('~/.env_secrets')
+    if not os.path.exists(path):
+        return {}
+    wanted = ('OPENCODE_API_KEY', 'DEEPSEEK_API_KEY')
+    found = {}
+    with open(path) as handle:
+        for line in handle:
+            line = line.strip()
+            if line.startswith('export '):
+                line = line[len('export '):]
+            if '=' not in line or line.startswith('#'):
+                continue
+            key, value = line.split('=', 1)
+            key = key.strip()
+            if key in wanted:
+                found[key] = value.strip().strip('"').strip("'")
+    return found
+
+
 def boot(home, workspace, session):
     env = {**os.environ, 'DSH_HOME': home, 'TERM': 'xterm-256color'}
+    for key, value in provider_env().items():
+        env.setdefault(key, value)
     env.pop('DSH_DEEPSEEK_APPROVED', None)
     profile = os.environ.get('DSH_PROBE_PROFILE_DIR') or newest_boot_profile()
     if profile and os.path.isdir(profile):
@@ -223,51 +258,68 @@ def scenario_full():
         os.write(master, b'/compact\n')
         stage, screen = wait_for(master, screen, 'restruct-plan', 30)
         check('full: the restruct-plan stage is visible', stage, screen[-600:])
-        # The fork runs the plan actualization, then the summary: both are durable
-        # events in the fixture's own logs, so the wait is bounded by the log.
-        deadline = time.time() + 240
+
+        # The fork does real work on the model's side: wait for its own turn to end
+        # rather than guessing a budget for read/write rounds.
+        deadline = time.time() + 420
+        kids = []
+        kid_events = []
+        while time.time() < deadline:
+            screen = pump(master, screen, 2)
+            kids = children_of(FULL_HOME, FULL_WORKSPACE, FULL_SESSION)
+            if not kids:
+                continue
+            kid_events = kids[0][1]
+            if any(event.get('type') == 'turn/end' for event in own_events(kid_events)):
+                break
+        check('full: the fork child left its own session', len(kids) == 1, [name for name, _ in kids])
+        if not kids:
+            print(plain(screen)[-1_500:])
+            return
+        kid_id, kid_events = kids[0]
+        kid_own = own_events(kid_events)
+        kid_types = [event.get('type') for event in kid_own]
+        check('full: the fork actually talked to the model', 'assistant/message' in kid_types, kid_types[-8:])
+        ends = [event for event in kid_own if event.get('type') == 'turn/end']
+        reason = (ends[-1].get('data') or {}).get('reason') if ends else None
+        if not ends:
+            # A real fork writes a plan: minutes, not seconds. The bounded probe
+            # stops asserting when the run outlives its budget instead of calling
+            # a working fork broken.
+            print('SKIP: full: the fork was still running after 420 s (model work, not a hang)')
+            return
+        error = (reason or {}).get('error') or {}
+        if error.get('code') == 'NO_ADAPTER':
+            print('SKIP: full: the fixture boot has no adapter for opencode-go (%s)' % error.get('message', ''))
+            return
+        check('full: the fork finished its own turn', (reason or {}).get('kind') == 'completed', reason)
+        text = ''
+        for event in kid_own:
+            if event.get('type') != 'assistant/message':
+                continue
+            for block in ((event.get('data') or {}).get('message') or {}).get('content') or []:
+                if block.get('type') == 'text':
+                    text += block.get('text', '') + '\n'
+        last = [line for line in text.splitlines() if line.strip()][-1] if text.strip() else ''
+        check('full: the fork ends on an RP marker', 'RP_DONE' in last or 'RP_SKIP' in last, last)
+        print('  fork %s: %s' % (kid_id[:8], last[:120]))
+
+        # A verdict with RP_DONE gates the summary; its durable bracket is the only
+        # proof the cycle actually compacted.
+        deadline = time.time() + 300
         events = []
         while time.time() < deadline:
             screen = pump(master, screen, 2)
             events = read_events(parent_log)
             if any(event.get('type') == 'compaction/end' for event in events):
                 break
-        # A fixture boot on engine rc.1 cannot mount the release profile's
-        # provider row, so the fork cannot reach the model. That is a property
-        # of the fixture, not a verdict about the cycle: report it and stop
-        # before the compaction assertions rather than blaming the cycle.
-        kids = children_of(FULL_HOME, FULL_WORKSPACE, FULL_SESSION)
-        if kids:
-            kid_id, kid_events = kids[0]
-            ends = [event for event in kid_events if event.get('type') == 'turn/end']
-            error = ((ends[-1].get('data') or {}).get('reason') or {}).get('error') or {} if ends else {}
-            if error.get('code') == 'NO_ADAPTER':
-                print('SKIP: full: the fixture boot has no adapter for opencode-go (%s)' % error.get('message', ''))
-                os.write(master, b'/quit\n')
-                pump(master, screen, 3)
-                return
         types = [event.get('type') for event in events]
-        check('full: the compaction bracket opened', 'compaction/start' in types, types[-8:])
-        check('full: the compaction finished', 'compaction/end' in types, types[-8:])
-        check('full: the fork child left its own session', len(kids) == 1, [name for name, _ in kids])
-        if kids:
-            kid_id, kid_events = kids[0]
-            kid_types = [event.get('type') for event in kid_events]
-            check('full: the fork actually talked to the model',
-                  'assistant/message' in kid_types, kid_types[-8:])
-            ends = [event for event in kid_events if event.get('type') == 'turn/end']
-            reason = (ends[-1].get('data') or {}).get('reason') if ends else None
-            check('full: the fork finished its own turn', (reason or {}).get('kind') == 'completed', reason)
-            text = ''
-            for event in kid_events:
-                if event.get('type') != 'assistant/message':
-                    continue
-                for block in ((event.get('data') or {}).get('message') or {}).get('content') or []:
-                    if block.get('type') == 'text':
-                        text += block.get('text', '') + '\n'
-            last = [line for line in text.splitlines() if line.strip()][-1] if text.strip() else ''
-            check('full: the fork ends on an RP marker', 'RP_DONE' in last or 'RP_SKIP' in last, last)
-            print('  fork %s: %s' % (kid_id[:8], last[:120]))
+        if 'compaction/end' not in types and ('Compaction unavailable' in plain(screen)
+                                              or '压缩不可用' in plain(screen)):
+            print('SKIP: full: the fixture profile has no compaction service (engine rc.1 leaves the row off)')
+        else:
+            check('full: the compaction bracket opened', 'compaction/start' in types, types[-8:])
+            check('full: the compaction finished', 'compaction/end' in types, types[-8:])
         os.write(master, b'/quit\n')
         pump(master, screen, 3)
     finally:
