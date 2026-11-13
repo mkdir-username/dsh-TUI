@@ -1,5 +1,7 @@
 import React from 'react'
-import { Box, Text, useInput, useTerminalImages, useTerminalSize } from '../ui.js'
+import { Box, ScrollBox, Text, type ScrollBoxHandle, useApp, useInput, useTerminalImages, useTerminalSize } from '../ui.js'
+import { afterNextTerminalFlush } from '../ink/flush-tick.js'
+import { sanitizeEditableText } from '../utils/inputPaste.js'
 import { getLang, subscribeLang, t } from '../i18n.js'
 import { Divider } from './design-system/Divider.js'
 import { HintLine } from './design-system/HintLine.js'
@@ -8,6 +10,7 @@ import { getActiveBrand } from '../branding.js'
 import { WhaleGirlHappyArt } from './WhaleGirl.js'
 import { useTerminalBackground } from './design-system/ThemeProvider.js'
 import type { WhaleCouponNotice } from '../dsh-adapter/oauth/bonus.js'
+import type { AccountNotificationNotice } from '../dsh-adapter/oauth/account-notifications.js'
 
 /** Art slot width — the pixel whale fallback is 40 columns wide, and the
  * raster portrait fits inside the same slot so the card width never moves. */
@@ -109,13 +112,31 @@ function couponExpiry(expiresAt: string): { month: string; day: string; time: st
     ? null : { month, day, time: `${hour}:${minute}` }
 }
 
-export function WhaleCouponPrompt({
+type CouponCardNotice = Pick<WhaleCouponNotice, 'orderId' | 'amount' | 'currency' | 'expiresAt'>
+
+/** One existing account-notice lane, with server copy when no coupon data exists. */
+export function WhaleCouponPrompt(props: {
+  readonly notice: WhaleCouponNotice | AccountNotificationNotice
+  readonly onShown: (orderId: string) => void
+  readonly onClose: () => void
+}): React.ReactNode {
+  const notice = props.notice
+  if (notice.kind !== 'account-notification') return <LegacyWhaleCouponPrompt {...props} notice={notice} />
+  if (notice.amount !== undefined && notice.currency !== undefined && notice.expiresAt !== undefined) {
+    // Keep the store's snapshot identity: allocating a presentation object here
+    // would re-arm the write receipt on every unrelated Chat commit.
+    return <LegacyWhaleCouponPrompt {...props} notice={notice as CouponCardNotice} />
+  }
+  return <ServerAccountNotice {...props} notice={notice} />
+}
+
+function LegacyWhaleCouponPrompt({
   notice,
   onShown,
   onClose,
 }: {
-  readonly notice: WhaleCouponNotice
-  readonly onShown: (orderId: WhaleCouponNotice['orderId']) => void
+  readonly notice: CouponCardNotice
+  readonly onShown: (orderId: string) => void
   readonly onClose: () => void
 }): React.ReactNode {
   const lang = React.useSyncExternalStore(subscribeLang, getLang)
@@ -133,10 +154,17 @@ export function WhaleCouponPrompt({
   const unit = lang === 'zh' ? notice.currency === 'CNY' ? '元' : '美元' : notice.currency
   const expiry = couponExpiry(notice.expiresAt)
 
-  React.useEffect(() => {
-    const timer = setTimeout(() => onShown(notice.orderId), 0)
-    return () => { clearTimeout(timer) }
-  }, [notice.orderId, onShown])
+  const { stdout } = useApp()
+  // Register during mutation so even synchronous commits capture this card.
+  // A queued write is not presentation: wait for its successful completion.
+  // Register once per snapshot identity: an unrelated commit with a fresh
+  // parent callback must not re-arm the receipt, but a refreshed same-id
+  // snapshot must (the store rejects an ack carrying the previous snapshot).
+  const receipt = React.useRef({ onShown, orderId: notice.orderId })
+  receipt.current.onShown = onShown
+  receipt.current.orderId = notice.orderId
+  React.useInsertionEffect(() => afterNextTerminalFlush(stdout,
+    () => receipt.current.onShown(receipt.current.orderId)), [stdout, notice])
   useInput((_input, key) => {
     if (key.return || key.escape) onClose()
   })
@@ -178,4 +206,49 @@ export function WhaleCouponPrompt({
       </Box>
     </>
   )
+}
+
+/** Server-authored account text uses the existing account-notice modal lane. */
+function ServerAccountNotice({ notice, onShown, onClose }: {
+  readonly notice: AccountNotificationNotice
+  readonly onShown: (id: string) => void
+  readonly onClose: () => void
+}): React.ReactNode {
+  const { columns, rows } = useTerminalSize()
+  const { stdout } = useApp()
+  const background = useTerminalBackground()
+  const scroll = React.useRef<ScrollBoxHandle | null>(null)
+  const width = Math.max(1, Math.min(columns, 72))
+  const height = Math.max(1, Math.min(rows, 20))
+  // Mutation-phase registration precedes even the synchronous test renderer's
+  // resetAfterCommit. The callback requires a real write, never a timer guess;
+  // it re-arms only when this snapshot changes (a language refresh keeps the
+  // same id) and reads the latest callback through the ref.
+  const receipt = React.useRef({ onShown, orderId: notice.orderId })
+  receipt.current.onShown = onShown
+  receipt.current.orderId = notice.orderId
+  React.useInsertionEffect(() => afterNextTerminalFlush(stdout,
+    () => receipt.current.onShown(receipt.current.orderId)), [stdout, notice])
+  useInput((_input, key, event) => {
+    event.stopImmediatePropagation()
+    if (key.return || key.escape) onClose()
+    else if (key.upArrow || key.wheelUp || key.pageUp) scroll.current?.scrollBy(key.pageUp ? -Math.max(1, height - 5) : -3)
+    else if (key.downArrow || key.wheelDown || key.pageDown) scroll.current?.scrollBy(key.pageDown ? Math.max(1, height - 5) : 3)
+  })
+  const accountAction = notice.actions.find(action => action.target.type === 'app_route')
+  const dismiss = notice.actions.find(action => action.target.type === 'dismiss')
+  return <>
+    <Box position="absolute" bottom={0} left={0} width="100%" height={rows} backdrop="dim" onClick={onClose} />
+    <Box position="absolute" left={Math.max(0, Math.floor((columns - width) / 2))}
+      bottom={Math.max(0, Math.floor((rows - height) / 2))} width={width} height={height}
+      flexDirection="column" borderStyle="round" borderColor="inactive" paddingX={1}
+      backgroundColor={background} opaque overflow="hidden" onClick={event => event.stopImmediatePropagation()}>
+      <Box flexShrink={0}><Text bold color="accent" wrap="truncate-end">{sanitizeEditableText(notice.title)}</Text></Box>
+      <ScrollBox ref={scroll} flexDirection="column" flexGrow={1} height={Math.max(1, height - 5)}>
+        <Text wrap="wrap">{sanitizeEditableText(notice.body)}</Text>
+        {accountAction !== undefined && <Text dimColor wrap="wrap">{t('account-notice-account-route', { label: sanitizeEditableText(accountAction.label) })}</Text>}
+      </ScrollBox>
+      <Box flexShrink={0}><Text dimColor wrap="wrap">{t('account-notice-hint', { label: dismiss === undefined ? t('account-notice-close') : sanitizeEditableText(dismiss.label) })}</Text></Box>
+    </Box>
+  </>
 }
