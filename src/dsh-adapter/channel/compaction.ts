@@ -181,14 +181,32 @@ export function createManualCompaction(
   }
   /** The child's own terminal error, for the notice: an in-process fork settles
    *  with `stopReason: 'error'` and no diagnostic, and the durable child log is
-   *  the one place the provider failure text lives. Missing agent/log/event
-   *  leaves the notice as before — never worse. */
-  function diagnosticOfChild(ctx: Context, activation: { readonly childId?: unknown }): string | undefined {
-    const agents = (ctx as Context & {
-      agents?: { get?(id: unknown): { session?: { snapshotEvents?(): readonly { readonly type: string; readonly data?: unknown }[] } } | undefined }
-    }).agents
-    const child = activation.childId === undefined ? undefined : agents?.get?.(activation.childId)
-    const events = child?.session?.snapshotEvents?.() ?? []
+   *  the one place the provider failure text lives. Read through the session
+   *  persistence seam (the live child Agent is released when a continuable run
+   *  settles). Missing log/event leaves the notice as before — never worse. */
+  async function diagnosticOfChild(ctx: Context, activation: { readonly childId?: unknown }): Promise<string | undefined> {
+    const childId = activation.childId
+    if (typeof childId !== 'string') return undefined
+    type StoredEvent = { readonly type: string; readonly data?: unknown }
+    const persistence = ctx.get('sessionPersistence') as {
+      open?(id: never, access: 'read'): Promise<{
+        read(): Promise<{ readonly events: readonly StoredEvent[] }>
+        close(): Promise<void>
+      }>
+      load?(id: never): Promise<{ readonly events: readonly StoredEvent[] }>
+    } | undefined
+    if (persistence === undefined) return undefined
+    let events: readonly StoredEvent[]
+    try {
+      if (typeof persistence.open === 'function') {
+        const handle = await persistence.open(childId as never, 'read')
+        try { events = (await handle.read()).events } finally { await handle.close() }
+      } else if (typeof persistence.load === 'function') {
+        events = (await persistence.load(childId as never)).events
+      } else return undefined
+    } catch {
+      return undefined
+    }
     for (let index = events.length - 1; index >= 0; index--) {
       const event = events[index]
       if (event?.type !== 'turn/end') continue
@@ -234,7 +252,8 @@ export function createManualCompaction(
         delivery: 'caller',
       })
       const result = await settledOrAborted(activation.result, signal)
-      return restructPlanVerdict({ ...result, diagnostic: result.diagnostic ?? diagnosticOfChild(ctx, activation) })
+      const diagnostic = result.diagnostic ?? await diagnosticOfChild(ctx, activation)
+      return restructPlanVerdict({ ...result, diagnostic })
     } catch (error: unknown) {
       if (activation !== undefined && signal.aborted) {
         // The fork kept its own request after the abort (live probe 2026-11-12),

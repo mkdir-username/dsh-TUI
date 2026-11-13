@@ -55,7 +55,7 @@ const diagnostic = verdict('error', '', 'model failed')
 check('diagnostic reaches the reason', String(diagnostic.reason).includes('model failed'), diagnostic.reason)
 
 // ── 4. the child's own error text reaches the notice ──────────────────────
-const diagnosticBody = source.match(/^ {4}function diagnosticOfChild\([\s\S]*?\n {4}\}/m)?.[0]
+const diagnosticBody = source.match(/^ {4}async function diagnosticOfChild\([\s\S]*?\n {4}\}/m)?.[0]
 if (diagnosticBody === undefined) {
   console.error('FAIL: diagnosticOfChild не найден в lib/types — сначала pnpm compile')
   process.exit(1)
@@ -65,16 +65,18 @@ const childEvents = [
   { type: 'turn/start' },
   { type: 'turn/end', data: { reason: { kind: 'error', error: { message: 'no adapter registered for provider "deepseek-official"' } } } },
 ]
-const childCtx = { agents: { get: id => id === 'child-1' ? { session: { snapshotEvents: () => childEvents } } : undefined } }
+const reader = events => ({ get: name => name === 'sessionPersistence' ? { load: async () => ({ events }) } : undefined })
+const childCtx = reader(childEvents)
+const childDiagnostic = await diagnosticOfChild(childCtx, { childId: 'child-1' })
 check(
   'child error reaches the diagnostic',
-  String(diagnosticOfChild(childCtx, { childId: 'child-1' })).includes('no adapter registered'),
-  String(diagnosticOfChild(childCtx, { childId: 'child-1' })),
+  String(childDiagnostic).includes('no adapter registered'),
+  String(childDiagnostic),
 )
-check('missing child leaves no diagnostic', diagnosticOfChild(childCtx, { childId: 'gone' }) === undefined)
+check('missing child leaves no diagnostic', await diagnosticOfChild(reader([]), { childId: 'gone' }) === undefined)
 check(
   'a completed child end yields no diagnostic',
-  diagnosticOfChild({ agents: { get: () => ({ session: { snapshotEvents: () => [{ type: 'turn/end', data: { reason: { kind: 'completed' } } }] } }) } }, { childId: 'x' }) === undefined,
+  await diagnosticOfChild(reader([{ type: 'turn/end', data: { reason: { kind: 'completed' } } }]), { childId: 'x' }) === undefined,
 )
 
 console.log(failed === 0 ? 'compact-rp battery OK' : `compact-rp battery FAILED (${failed})`)
