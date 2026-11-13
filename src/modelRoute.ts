@@ -123,6 +123,12 @@ function isUnregisteredProvider(error: unknown): boolean {
   )
 }
 
+/** The adapter catalog seam: mounted models plus the providers this launch configured. */
+interface AdapterCatalog {
+  listModels(provider: string): Promise<readonly { id: string }[]>
+  readonly listConfigurableProviders?: () => readonly { readonly provider: string }[]
+}
+
 /**
  * Best-effort combination check (issue #67): when the llm runtime advertises
  * a non-empty catalog for the route's provider and the model is not in it,
@@ -167,10 +173,31 @@ export async function validateModelRoute(
  * inherits `parent.options.model`) as `NO_ADAPTER`.
  */
 export async function resumeModelRoute(
-  llm: Parameters<typeof validateModelRoute>[0],
+  llm: AdapterCatalog | undefined,
   recorded: ModelRoute | undefined,
   resumeRoute: ModelRoute,
   fallback: ModelRoute = DEFAULT_MODEL_ROUTE,
 ): Promise<{ route: ModelRoute; rejected?: ModelRoute }> {
-  return validateModelRoute(llm, recorded ?? resumeRoute, fallback)
+  const first = await validateModelRoute(llm, recorded ?? resumeRoute, fallback)
+  if (first.rejected === undefined) return first
+  const deployed = await validateModelRoute(llm, fallback, fallback)
+  if (deployed.rejected === undefined && deployed.route.provider !== first.rejected.provider) {
+    return { route: deployed.route, rejected: first.rejected }
+  }
+  // The deployment route can be the same stale route (a complete pin in the
+  // profile). Ask the catalog for a provider this launch actually mounted.
+  for (const entry of llm?.listConfigurableProviders?.() ?? []) {
+    if (typeof entry?.provider !== 'string' || entry.provider.length === 0) continue
+    let models: readonly { id: string }[]
+    try {
+      models = await llm!.listModels(entry.provider)
+    } catch {
+      continue
+    }
+    const model = models[0]?.id
+    if (typeof model === 'string' && model.length > 0) {
+      return { route: { provider: entry.provider, model }, rejected: first.rejected }
+    }
+  }
+  return { route: fallback, rejected: first.rejected }
 }

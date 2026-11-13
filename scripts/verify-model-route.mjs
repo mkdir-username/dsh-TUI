@@ -244,6 +244,28 @@ const PREF = { provider: 'my-gateway', model: 'glm-5.3' }
     bare.rejected === undefined && eq(bare.route, deployment),
     JSON.stringify(bare),
   )
+  // A complete profile pin can make the deployment route the SAME stale route.
+  // The catalog then decides: the first provider this launch mounted wins.
+  const pinned = await resumeModelRoute({
+    listModels: provider => provider === 'deepseek-official'
+      ? Promise.reject(noAdapter)
+      : Promise.resolve([{ id: 'deepseek-v4.1-flash' }]),
+    listConfigurableProviders: () => [{ provider: 'deepseek-official' }, { provider: 'opencode-go' }],
+  }, recorded, recorded, recorded)
+  check(
+    'resume -> a stale deployment pin falls through to a mounted provider',
+    pinned.rejected !== undefined && eq(pinned.route, { provider: 'opencode-go', model: 'deepseek-v4.1-flash' }),
+    JSON.stringify(pinned),
+  )
+  const nothing = await resumeModelRoute({
+    listModels: () => Promise.reject(noAdapter),
+    listConfigurableProviders: () => [{ provider: 'deepseek-official' }],
+  }, recorded, recorded, recorded)
+  check(
+    'resume -> no mounted provider leaves the recorded route (notice still blocks)',
+    nothing.rejected !== undefined && eq(nothing.route, recorded),
+    JSON.stringify(nothing),
+  )
 }
 
 if (failed > 0) {
