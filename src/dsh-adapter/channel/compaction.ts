@@ -179,6 +179,24 @@ export function createManualCompaction(
       reason: `compact-rp: ${why}. Сжатие остановлено, знание не потеряно. Без restruct-plan: /compact --pure`,
     }
   }
+  /** The child's own terminal error, for the notice: an in-process fork settles
+   *  with `stopReason: 'error'` and no diagnostic, and the durable child log is
+   *  the one place the provider failure text lives. Missing agent/log/event
+   *  leaves the notice as before — never worse. */
+  function diagnosticOfChild(ctx: Context, activation: { readonly childId?: unknown }): string | undefined {
+    const agents = (ctx as Context & {
+      agents?: { get?(id: unknown): { session?: { snapshotEvents?(): readonly { readonly type: string; readonly data?: unknown }[] } } | undefined }
+    }).agents
+    const child = activation.childId === undefined ? undefined : agents?.get?.(activation.childId)
+    const events = child?.session?.snapshotEvents?.() ?? []
+    for (let index = events.length - 1; index >= 0; index--) {
+      const event = events[index]
+      if (event?.type !== 'turn/end') continue
+      const reason = (event.data as { reason?: { kind?: string; error?: { message?: string } } } | undefined)?.reason
+      return reason?.kind === 'error' && typeof reason.error?.message === 'string' ? reason.error.message : undefined
+    }
+    return undefined
+  }
   const RP_PROMPT = 'Пользователь набрал /compact: это его явная команда выполнить restruct-plan сейчас, до сжатия контекста. Ты — форк этой сессии, запущенный TUI, история диалога тебе видна. Вызови Skill restruct-plan для плана .dev/<slug>/, над которым шла работа, и запиши на диск всё, что знает только диалог: прогресс, грабли, тупики, проверенные факты. Перед записью в .dev/ прочитай каталог плана — его сторожит гейт dev-docs. Вопросов не задавай, ответить некому. Ничего не коммить и не пушить. Последней строкой ответа выведи ровно RP_DONE <slug> или RP_SKIP <причина>.'
   const RP_TIMEOUT_MS = 15 * 60 * 1000
   /** `activation.result` settles only when the child finishes: a fork that hangs
@@ -206,7 +224,7 @@ export function createManualCompaction(
     if (subagents === undefined) return { ok: false, reason: 'compact-rp: сервис subagents не смонтирован. Без restruct-plan: /compact --pure' }
     if (subagents.getProvider('fork') === undefined) return { ok: false, reason: 'compact-rp: провайдер «fork» не смонтирован. Без restruct-plan: /compact --pure' }
     const signal = AbortSignal.any([deps.owner.signal, preparation, AbortSignal.timeout(RP_TIMEOUT_MS)])
-    let activation: { readonly result: Promise<RestructPlanResult>; readonly dispose?: () => Promise<void> } | undefined
+    let activation: { readonly result: Promise<RestructPlanResult>; readonly dispose?: () => Promise<void>; readonly childId?: unknown } | undefined
     try {
       activation = await subagents.startActivation({
         provider: 'fork',
@@ -215,7 +233,8 @@ export function createManualCompaction(
         signal,
         delivery: 'caller',
       })
-      return restructPlanVerdict(await settledOrAborted(activation.result, signal))
+      const result = await settledOrAborted(activation.result, signal)
+      return restructPlanVerdict({ ...result, diagnostic: result.diagnostic ?? diagnosticOfChild(ctx, activation) })
     } catch (error: unknown) {
       if (activation !== undefined && signal.aborted) {
         // The fork kept its own request after the abort (live probe 2026-11-12),
