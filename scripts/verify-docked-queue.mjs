@@ -835,6 +835,119 @@ const selectorHighlightVisible = (term, texts) =>
   instance.unmount()
 }
 
+// ─── UI level (queue peek): every pending preview is ONE row ───────────────
+// The reported symptom: a queued message carrying hard newlines painted every
+// one of them over the transcript (the ⏸ Queue: block covered the session
+// while the model was still accepting). The row now speaks the composer
+// chip's language — `▸ N lines・M chars・<first line>・hover to peek` — and
+// hovering peeks the full text in a card above the block. Only presentation
+// folds: the submitted/edited text stays the row's own text.
+/** SGR mode-1003 motion with no buttons → dispatchHover. Coords 1-indexed. */
+const hoverUI = (col, row) => uiStdin.write(`\x1b[<35;${col};${row}M`)
+
+{
+  // Q1 — a short multi-line preview joins into one fitting row: nothing is
+  // hidden, so it carries neither stats nor the peek hint.
+  const channel = makeUiChannel([
+    { id: 'q1', text: 'first bit\nsecond bit\nthird bit', placement: 'followup' },
+  ])
+  const instance = await mountUI(channel)
+  check('Q1 a short multi-line preview joins into one row',
+    await settled(() => findUI('first bit second bit third bit') !== null))
+  check('Q1 a fitting row carries no stats and no peek hint',
+    findUI('3 lines') === null && findUI('hover to peek') === null)
+  instance.unmount()
+}
+
+{
+  // Q2 — a long multi-line preview folds: stats + first line + hint, and the
+  // deeper lines exist only in the hover card.
+  const hidden = 'QUEUE_HIDDEN_LINE'
+  const text = ['queued preview head', 'x'.repeat(60), hidden, 'tail line four'].join('\n')
+  const channel = makeUiChannel([
+    { id: 'q2', text, placement: 'followup' },
+  ])
+  const instance = await mountUI(channel)
+  check('Q2 the long preview folds to one row with stats',
+    await settled(() => findUI('4 lines') !== null && findUI('hover to peek') !== null))
+  check('Q2 the first line stays as the preview', findUI('queued preview head') !== null)
+  check('Q2 the deeper lines are not painted', findUI(hidden) === null)
+  const pos = findUI('queued preview head')
+  if (pos) hoverUI(pos.col + 1, pos.row + 1)
+  check('Q2 hovering peeks the hidden lines', await settled(() => findUI(hidden) !== null))
+  hoverUI(1, 1)
+  check('Q2 leaving the row closes the peek', await settled(() => findUI(hidden) === null))
+  instance.unmount()
+}
+
+{
+  // Q3 — the docked (⏸ Queue:) row peeks too, and clicking the folded row
+  // still recalls the WHOLE text into the editor.
+  const hidden = 'HIDDEN_DOCK_MARKER'
+  const text = ['QUEUE_CARD_HEAD', 'line two ' + 'y'.repeat(40), hidden, 'line four', 'line five', 'line six'].join('\n')
+  const channel = makeUiChannel([
+    { id: 'qd', text, placement: 'followup', docked: true, heldCompact: true },
+  ])
+  const instance = await mountUI(channel)
+  check('Q3 the compact dock labels itself Queue:', await settled(() => findUI('Queue:') !== null))
+  check('Q3 the docked text folds to one row with stats and hint',
+    findUI('6 lines') !== null && findUI('hover to peek') !== null)
+  check('Q3 the docked hidden line is not painted', findUI(hidden) === null)
+  let pos = findUI('QUEUE_CARD_HEAD')
+  if (pos) hoverUI(pos.col + 1, pos.row + 1)
+  check('Q3 hovering the docked row peeks the hidden line', await settled(() => findUI(hidden) !== null))
+  hoverUI(1, 1)
+  check('Q3 the docked peek closes on leave', await settled(() => findUI(hidden) === null))
+  pos = findUI('QUEUE_CARD_HEAD')
+  if (pos) clickUI(pos.col + 3, pos.row + 1)
+  check('Q3 clicking the folded row recalls the whole text',
+    await settled(() => uiController.current?.text() === text), JSON.stringify(uiController.current?.text()))
+  instance.unmount()
+}
+
+{
+  // Q4 — the reported screen: 30 docked rows, each with 5 hard lines. The
+  // overlay budget is one row per item, so the label and the hint must
+  // survive (before the fold they painted 5×30 rows and the top — the label
+  // included — was clipped away).
+  const rows = []
+  for (let i = 0; i < 30; i++) {
+    const label = String(i).padStart(2, '0')
+    rows.push({
+      id: 'mq' + i,
+      text: Array.from({ length: 5 }, (_, j) => `multi-row-${label} line-${j} ` + 'z'.repeat(20)).join('\n'),
+      placement: 'followup',
+      docked: true,
+      heldCompact: true,
+    })
+  }
+  const channel = makeUiChannel(rows)
+  const instance = await mountUI(channel)
+  check('Q4 a long multi-line dock paints its label', await settled(() => findUI('Queue:') !== null))
+  const cap = paintedDockRows(termUI, 'multi')
+  check('Q4 one row per item inside the overlay budget (0 < n < 30)', cap > 0 && cap < 30, String(cap))
+  check('Q4 the ↑ Edit hint survives the long dock', findUI('↑ Edit') !== null)
+  check('Q4 the newest row paints', findUI('multi-row-29') !== null)
+  check('Q4 the head row is outside the window', findUI('multi-row-00') === null)
+  instance.unmount()
+}
+
+{
+  // Q5 — the peek card keeps the composer's cap: ten rows, then the total.
+  const text = Array.from({ length: 12 }, (_, i) => 'peek-line-' + i).join('\n')
+  const channel = makeUiChannel([
+    { id: 'qp', text, placement: 'followup', docked: true },
+  ])
+  const instance = await mountUI(channel)
+  check('Q5 the twelve-line preview folds', await settled(() => findUI('12 lines') !== null))
+  const pos = findUI('peek-line-0')
+  if (pos) hoverUI(pos.col + 1, pos.row + 1)
+  check('Q5 the card paints the tenth row', await settled(() => findUI('peek-line-9') !== null))
+  check('Q5 the card caps at ten rows', findUI('peek-line-11') === null)
+  check('Q5 the clipped card reports the total', findUI('12 lines total') !== null)
+  instance.unmount()
+}
+
 // ─────── Section E (R7): dock rights are HELD while the receipt is in flight
 // The blocker: rows parked by interruptAndDock were fully editable /
 // re-sendable / swappable BEFORE the cancel receipt settled. A late

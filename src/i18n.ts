@@ -1080,6 +1080,7 @@ const dict = {
   'input-fold-stats': { zh: '{{lines}} 行・{{chars}} 字', en: '{{lines}} lines・{{chars}} chars' },
   'input-fold-hover': { zh: '悬停查看', en: 'hover to peek' },
   'input-fold-peek-footer': { zh: '… 共 {{lines}} 行・点击展开编辑', en: '… {{lines}} lines total・click to edit' },
+  'input-pending-peek-footer': { zh: '… 共 {{lines}} 行', en: '… {{lines}} lines total' },
 
   // ── 全屏草稿编辑（PromptInput 展开态 + PromptEditor Layer）─────────
   'input-expand-editor-title': { zh: '草稿编辑', en: 'Draft editor' },

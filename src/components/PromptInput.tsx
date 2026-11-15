@@ -236,6 +236,64 @@ const FOLD_MIN_CHARS = 600
 const isBigInput = (text: string): boolean =>
   text.split('\n').length >= FOLD_MIN_LINES || text.length >= FOLD_MIN_CHARS
 
+/** U+30FB KATAKANA MIDDLE DOT — the folded chip's separator. U+00B7 is not
+ *  usable here: it is East-Asian-ambiguous (model 1 cell, CJK terminal fonts
+ *  paint 2) and every stats→preview→hint truncation runs through
+ *  `stringWidth`, so a painted-wide separator would drift the row. */
+const PENDING_STATS_SEP = '・'
+
+/** Visual rows a peek card paints before it reports the total. */
+const PEEK_MAX_ROWS = 10
+
+/**
+ * One-row body for a pending (steer / queued / docked) preview.
+ *
+ * A queued message may carry hard newlines (a pasted plan, a command
+ * transcript). Painted verbatim they turn one preview into N overlay rows,
+ * while the dock's window budget counts one row per item — the overflow is
+ * then clipped from the TOP (the `⏸ Queue:` label and its hint) and the block
+ * covers the transcript for as long as the model is still accepting the turn.
+ * Multi-line text joins into one row while that still fits; otherwise it
+ * folds into the composer chip's language:
+ *
+ *   ▸ 6 lines・607 chars・<first line>・hover to peek
+ *
+ * `hover to peek` is the chip's own hint, so both folds teach one gesture.
+ * Returns null when the text already is one fitting row (render it as-is);
+ * `folded` says whether the row hides content and therefore owns the peek.
+ */
+function pendingPreviewBody(
+  text: string,
+  width: number,
+): { body: string; folded: boolean } | null {
+  const normalized = text.replace(/\r\n?/gu, '\n')
+  const lines = normalized.split('\n')
+  if (lines.length === 1) {
+    return stringWidth(normalized) <= width
+      ? null
+      : { body: pendingPreviewChip(normalized, 1, normalized.length, width), folded: true }
+  }
+  const flat = lines.map(line => line.trim()).filter(line => line !== '').join(' ')
+  if (stringWidth(flat) <= width) return { body: flat, folded: false }
+  const first = lines.find(line => line.trim() !== '')?.trimStart() ?? ''
+  return { body: pendingPreviewChip(first, lines.length, normalized.length, width), folded: true }
+}
+
+/**
+ * The folded row itself: stats badge, first-line preview, hover hint. Every
+ * segment is pre-truncated against the display width, so the row can never
+ * wrap; `Text wrap="truncate"` at the call site is only a final guard.
+ */
+function pendingPreviewChip(firstLine: string, lines: number, chars: number, width: number): string {
+  const badge = `▸ ${t('input-fold-stats', { lines, chars })}`
+  const tail = `${PENDING_STATS_SEP}${t('input-fold-hover')}`
+  const previewWidth =
+    width - stringWidth(badge) - stringWidth(PENDING_STATS_SEP) - stringWidth(tail)
+  const preview = previewWidth >= 8 ? truncateToWidth(firstLine, previewWidth) : ''
+  const head = preview === '' ? badge : `${badge}${PENDING_STATS_SEP}${preview}`
+  return truncateToWidth(`${head}${tail}`, width)
+}
+
 /** Format label for one image media type, matching the image preview card's
  *  title (`JPEG`, `PNG`, `WEBP`, `GIF`). */
 const mediaTypeLabel = (mediaType: string): string =>
@@ -840,6 +898,28 @@ export function PromptInput({
     if (hoverLeaveTimerRef.current) clearTimeout(hoverLeaveTimerRef.current)
     hoverLeaveTimerRef.current = setTimeout(() => setHovered(false), 120)
   }, [])
+  /** Pending row whose full text the pointer is peeking. Keyed by id, not
+   *  index: the dock window moves under a stationary pointer. */
+  const [pendingPeekId, setPendingPeekId] = React.useState<string | null>(null)
+  const pendingPeekLeaveTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null)
+  const pendingPeekEnter = React.useCallback((id: string) => {
+    if (pendingPeekLeaveTimerRef.current) {
+      clearTimeout(pendingPeekLeaveTimerRef.current)
+      pendingPeekLeaveTimerRef.current = null
+    }
+    setPendingPeekId(id)
+  }, [])
+  const pendingPeekLeave = React.useCallback(() => {
+    if (pendingPeekLeaveTimerRef.current) clearTimeout(pendingPeekLeaveTimerRef.current)
+    // 160ms: the pointer crosses the queue label between a row and its card.
+    pendingPeekLeaveTimerRef.current = setTimeout(() => setPendingPeekId(null), 160)
+  }, [])
+  React.useEffect(() => {
+    // The overlay unmounts on suspension and behind the fullscreen editor, so
+    // the row's mouseleave never arrives; a stale id would pop the card on the
+    // way back.
+    if (suspended || expanded) setPendingPeekId(null)
+  }, [suspended, expanded])
   const valueRef = React.useRef(value)
   const cursorRef = React.useRef(cursor)
   const history = React.useRef<PromptHistoryEntry[]>([])
@@ -1205,6 +1285,7 @@ export function PromptInput({
     return () => {
       if (escTimerRef.current) clearTimeout(escTimerRef.current)
       if (hoverLeaveTimerRef.current) clearTimeout(hoverLeaveTimerRef.current)
+      if (pendingPeekLeaveTimerRef.current) clearTimeout(pendingPeekLeaveTimerRef.current)
       /**
        * Hand the draft to the owner's slot as this component goes away.
        *
@@ -4111,17 +4192,10 @@ export function PromptInput({
 
   // Peek card content: the BLOCK's text wrapped to the card's inner width,
   // capped at PEEK_MAX_ROWS visual rows (a preview — click to expand and
-  // edit the real input). The footer reports the clipped remainder.
-  const PEEK_MAX_ROWS = 10
-  const peekVisualLines: string[] = []
-  for (const line of foldText.split('\n')) {
-    for (const row of wrapToWidth(line, cardContentWidth(columns))) {
-      if (peekVisualLines.length >= PEEK_MAX_ROWS) break
-      peekVisualLines.push(row)
-    }
-    if (peekVisualLines.length >= PEEK_MAX_ROWS) break
-  }
-  const peekClipped = peekVisualLines.length >= PEEK_MAX_ROWS
+  // edit the real input). The footer reports the clipped remainder. The same
+  // bounded row builder feeds the pending-queue peek card.
+  const { rows: peekVisualLines, clipped: peekClipped } =
+    peekRowsWithin(foldText, cardContentWidth(columns), PEEK_MAX_ROWS)
 
   // Composer height shrink: clearing multi-line text (Enter/Esc/Ctrl+C/
   // Backspace) collapses the input area within one commit, shifting the
@@ -4436,6 +4510,34 @@ export function PromptInput({
     dockFocus,
     dockWindowRows,
   )
+  // Pending previews are one row each (`pendingPreviewBody`), so the budget
+  // above is exact. A collapsed row owns the hover peek; the card names the
+  // row by id and disappears when that row leaves the painted window (a
+  // keyboard walk can shift the dock window under a stationary pointer).
+  const pendingRowWidth = Math.max(8, columns - 6)
+  const peekPendingItem = pendingPeekId === null
+    ? undefined
+    : channel.pending.find(item => item.id === pendingPeekId)
+  const peekPendingIndex = peekPendingItem === undefined
+    ? -1
+    : dockedPending.findIndex(item => item.id === peekPendingItem.id)
+  const peekPendingVisible =
+    peekPendingItem !== undefined
+    && (peekPendingIndex < 0 || (peekPendingIndex >= dockStart && peekPendingIndex < dockEnd))
+    && !selectionActive
+    && !helpOpen
+    && !expanded
+    && !suspended
+  const peekPending = peekPendingVisible
+    ? {
+        item: peekPendingItem,
+        stats: t('input-fold-stats', {
+          lines: peekPendingItem.text.split('\n').length,
+          chars: peekPendingItem.text.length,
+        }),
+        ...peekRowsWithin(peekPendingItem.text, cardContentWidth(columns), PEEK_MAX_ROWS),
+      }
+    : null
 
   const floatersOpen =
     !suspended &&
@@ -4639,6 +4741,30 @@ export function PromptInput({
             />
           </Box>
         )}
+        {/* Pending peek: the composer chip's card language. It renders BEFORE
+            the pending block because OverlayAbove pins its bottom edge and
+            clips the top: a card after the block would push the hovered row up
+            from under the pointer, re-fire mouseleave, and flicker the card. */}
+        {peekPending !== null && (
+          <Box
+            onMouseEnter={() => { pendingPeekEnter(peekPending.item.id) }}
+            onMouseLeave={pendingPeekLeave}
+          >
+            <SuggestionCard
+              title={peekPending.stats}
+              columns={columns}
+              accent={promptAccent}
+              footer={peekPending.clipped
+                ? t('input-pending-peek-footer', {
+                    lines: peekPending.item.text.split('\n').length,
+                  })
+                : undefined}
+              rows={peekPending.rows.map((row, index) => (
+                <Text key={index} wrap="truncate-end">{row}</Text>
+              ))}
+            />
+          </Box>
+        )}
         {!helpOpen && channel.pending.length > 0 && (
           <Box flexDirection="column" paddingLeft={2} paddingBottom={1}>
             {channel.pending.some(item => item.placement === 'steer' && item.docked !== true) && (
@@ -4646,11 +4772,21 @@ export function PromptInput({
                 <Text dimColor>⚡ {t('input-pending-steer-label')}</Text>
                 {channel.pending
                   .filter(item => item.placement === 'steer' && item.docked !== true)
-                  .map(item => (
-                    <Text key={item.id} dimColor wrap="truncate">
-                      {'  '}↳ {item.text}
-                    </Text>
-                  ))}
+                  .map(item => {
+                    const preview = pendingPreviewBody(item.text, pendingRowWidth)
+                    const peekable = preview?.folded === true
+                    return (
+                      <Box
+                        key={item.id}
+                        onMouseEnter={peekable ? () => pendingPeekEnter(item.id) : undefined}
+                        onMouseLeave={peekable ? pendingPeekLeave : undefined}
+                      >
+                        <Text dimColor wrap="truncate">
+                          {'  '}↳ {preview?.body ?? item.text}
+                        </Text>
+                      </Box>
+                    )
+                  })}
               </Box>
             )}
             {channel.pending.some(item => item.placement === 'followup' && item.docked !== true) && (
@@ -4658,11 +4794,21 @@ export function PromptInput({
                 <Text dimColor>⏳ {t('input-pending-queue-label')}</Text>
                 {channel.pending
                   .filter(item => item.placement === 'followup' && item.docked !== true)
-                  .map(item => (
-                    <Text key={item.id} dimColor wrap="truncate">
-                      {'  '}↳ {item.text}
-                    </Text>
-                  ))}
+                  .map(item => {
+                    const preview = pendingPreviewBody(item.text, pendingRowWidth)
+                    const peekable = preview?.folded === true
+                    return (
+                      <Box
+                        key={item.id}
+                        onMouseEnter={peekable ? () => pendingPeekEnter(item.id) : undefined}
+                        onMouseLeave={peekable ? pendingPeekLeave : undefined}
+                      >
+                        <Text dimColor wrap="truncate">
+                          {'  '}↳ {preview?.body ?? item.text}
+                        </Text>
+                      </Box>
+                    )
+                  })}
               </Box>
             )}
             {dockCount > 0 && (
@@ -4672,14 +4818,18 @@ export function PromptInput({
                   // The window maps to absolute dock indices: the click and
                   // the highlight name the same row the user sees.
                   const absoluteIndex = dockStart + index
+                  const preview = pendingPreviewBody(item.text, pendingRowWidth)
+                  const peekable = preview?.folded === true
                   return (
                     <Box
                       key={item.id}
                       // 点击停靠行 = 撤回该条进输入框编辑（与选择器 ⏎ 同路径）
                       onClick={() => { editDocked(absoluteIndex) }}
+                      onMouseEnter={peekable ? () => pendingPeekEnter(item.id) : undefined}
+                      onMouseLeave={peekable ? pendingPeekLeave : undefined}
                     >
                       <Text wrap="truncate" dimColor={dockSelected === null || dockSelected !== absoluteIndex} color={dockSelected === absoluteIndex ? promptAccent : undefined}>
-                        {'  '}{dockSelected === absoluteIndex ? '❯' : '↳'} {item.text}
+                        {'  '}{dockSelected === absoluteIndex ? '❯' : '↳'} {preview?.body ?? item.text}
                       </Text>
                     </Box>
                   )
@@ -4976,6 +5126,28 @@ function wrapToWidth(text: string, width: number): string[] {
   return text.split('\n').flatMap(line =>
     wrapLineRows(line, width).map(r => line.slice(r.start, r.end)),
   )
+}
+
+/**
+ * First `maxRows` visual rows of `text`, plus whether the cap was reached
+ * (the card's footer reports the remainder). Bounded on purpose: peek is
+ * hover-only, but a queued transcript can be tens of kilobytes and the card
+ * must not wrap what it never paints.
+ */
+function peekRowsWithin(
+  text: string,
+  width: number,
+  maxRows: number,
+): { rows: string[]; clipped: boolean } {
+  const rows: string[] = []
+  for (const line of text.replace(/\r\n?/gu, '\n').split('\n')) {
+    for (const row of wrapToWidth(line, width)) {
+      if (rows.length >= maxRows) break
+      rows.push(row)
+    }
+    if (rows.length >= maxRows) break
+  }
+  return { rows, clipped: rows.length >= maxRows }
 }
 
 /**
