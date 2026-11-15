@@ -40,7 +40,7 @@ const [
   { isUnavailableLocalCommand, BACKEND_GOAL_COMMAND },
   { createChannelProjection },
   { createInitialChannelView },
-  { GoalStatusChip },
+  { GoalStatusChip, GoalTodoPanel },
   { setLang, t },
   { default: instances },
   { settled, sleep, viewportLines },
@@ -240,7 +240,7 @@ const toastsOf = (channel: { notifications: readonly { text: string }[] }): stri
 
   const { roundsStarted: _rounds, ...snapshot } = goal
   h.emit([{ type: 'goal.change', operation: 'set', goal: snapshot }])
-  check('4 the goal panel shows the budget instead of rounds', await settled(() => h.screen().includes('Ship the parser') && h.screen().includes('Used 12.3k / 50k tokens · 4m')) && !h.screen().includes('0/0'), h.screen())
+  check('4 a budgeted goal keeps a budgeted panel chip', await settled(() => h.screen().includes('12.3k/50k')) && !h.screen().includes('0/0'), h.screen())
   await h.typeLine('/goal')
   await h.enter()
   check('4 bare /goal prints the status into the transcript', await settled(() => h.screen().includes(t('goal-backend-objective', { objective: 'Ship the parser' })) && h.screen().includes(t('goal-backend-phase', { phase: t('goal-phase-active') }))), h.screen())
@@ -255,6 +255,42 @@ const toastsOf = (channel: { notifications: readonly { text: string }[] }): stri
   check('4 a long objective survives the goals-capability status block', await settled(() => h.screen().includes('LOCAL_GOAL_TAIL')), h.screen())
   check('4 nothing ever reached the model', h.submits.length === 0)
   await h.unmount()
+}
+{
+  // A goal with no todos never reaches the chat footer (verify-goal-todo pins
+  // that), so the phase badge's budget-over-rounds swap is asserted on the
+  // side-panel variant — the surface that still renders a goal-only list.
+  const COLS = 80
+  const ROWS = 12
+  const term = new XTerm({ cols: COLS, rows: ROWS, scrollback: 100, allowProposedApi: true })
+  const stdout = new Writable({
+    write(chunk: unknown, _encoding: BufferEncoding, callback: () => void): void { term.write(String(chunk), callback) },
+  })
+  Object.assign(stdout, { columns: COLS, rows: ROWS, isTTY: true })
+  const stdin = new PassThrough() as PassThrough & {
+    isTTY: boolean
+    setRawMode: () => unknown
+    ref: () => unknown
+    unref: () => unknown
+  }
+  stdin.isTTY = true
+  stdin.setRawMode = () => stdin
+  stdin.ref = () => stdin
+  stdin.unref = () => stdin
+  const instance = await ui.render(
+    React.createElement(GoalTodoPanel, {
+      channel: { goal, todos: [], working: false, sessionId: 's-goal-budget' } as never,
+      variant: 'panel',
+      width: 60,
+      height: 8,
+    }),
+    { stdout: stdout as never, stdin: stdin as never, stderr: stdout as never, exitOnCtrlC: false, patchConsole: false },
+  )
+  await sleep(150) // 固定窗:pacing the side panel paints its first frame
+  const panelScreen = viewportLines(term, ROWS).join('\n')
+  check('4 the goal panel shows the budget instead of rounds', panelScreen.includes('Ship the parser') && panelScreen.includes('Used 12.3k / 50k tokens · 4m') && !panelScreen.includes('0/0'), panelScreen)
+  instance.unmount()
+  await sleep(50) // 固定窗:pacing unmount settles before the next harness mounts
 }
 {
   const h = await mountChat({})
