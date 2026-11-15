@@ -1,8 +1,9 @@
 /**
  * How the goal text is displayed now that the full-text overlay is gone:
  *
- *  - truncated goal text: hovering shows the whole objective, a fitting goal
- *    stays tooltip-silent, leaving clears it;
+ *  - a long objective reads WHOLE in the side panel (it wraps there); the chat
+ *    footer carries the todo list only, so there is no truncated goal row left
+ *    to hover — the full-text overlay it replaced is gone;
  *  - clicking the goal text opens nothing — the keyboard stays on the
  *    composer (the removed panel used to own it);
  *  - bare `/goal` over a DSH-style registry row prints a transcript BLOCK
@@ -158,38 +159,21 @@ const type = async (io, text) => {
   await app.unmount(); io.term.dispose()
 }
 
-// ── 3. fullscreen: hover reads the goal, the click opens nothing ─────────
+// ── 3. the side panel reads a long goal whole ────────────────────────────
+// The chat footer is the todo list, and the full-text overlay is gone: a long
+// objective's reading path is the side panel, which wraps it instead of
+// truncating, so hover has nothing left to reveal.
 {
   const io = makeTerm()
   const channel = makeChannel({ goal: { id: 'g1', revision: 1, objective, phase: 'active', roundsStarted: 0, maxGoalRounds: 12 } })
-  const app = await mount(io, channel, true)
-  await settle(() => findText(io.term, 'GOAL_HEAD') !== null)
-  const hover = (hit) => io.stdin.write(`\x1b[<35;${hit.col + 1};${hit.row + 1}M`)
-  const click = (hit) => io.stdin.write(`\x1b[<0;${hit.col + 1};${hit.row + 1}M\x1b[<0;${hit.col + 1};${hit.row + 1}m`)
-  hover(findText(io.term, 'GOAL_HEAD'))
-  check('fullscreen: hovering truncated goal text shows the whole objective',
-    await settled(() => getTooltipSnapshot()?.content.includes('GOAL_TAIL') === true), String(getTooltipSnapshot()?.content?.length))
-  io.stdin.write('\x1b[<35;1;1M')
-  check('fullscreen: leaving the goal clears the tooltip', await settled(() => getTooltipSnapshot() === null))
-  channel.goal = { ...channel.goal, objective: 'Short goal' }
-  channel.emit()
-  await settle(() => findText(io.term, 'Short goal') !== null)
-  hover(findText(io.term, 'Short goal'))
-  await sleep(700) // 固定窗:墙钟 tooltip dwell must finish before checking absence.
-  check('fullscreen: a fitting goal stays tooltip-silent', getTooltipSnapshot() === null)
-  io.stdin.write('\x1b[<35;1;1M')
-  channel.goal = { ...channel.goal, objective }
-  channel.emit()
-  await settle(() => findText(io.term, 'GOAL_HEAD') !== null)
-  const rowsBefore = channel.rows.length
-  click(findText(io.term, 'GOAL_HEAD'))
-  // The removed overlay owned the keyboard here; the composer must keep it.
-  await type(io, 'leak')
-  io.stdin.write('\r')
-  check('fullscreen: clicking the goal text opens nothing (composer keeps the keyboard)',
-    await settled(() => channel.submitted === 1) && channel.rows.length === rowsBefore && channel.cancelled === 0,
-    `submitted=${channel.submitted} rows=${channel.rows.length - rowsBefore}`)
-  clearTooltip()
+  const { GoalTodoPanel } = await import('../src/components/GoalTodoPanel.js')
+  const app = await render(
+    React.createElement(GoalTodoPanel, { channel, variant: 'panel', width: 88, height: 24 }),
+    { stdout: io.stdout, stderr: io.stderr, stdin: io.stdin, exitOnCtrlC: false, patchConsole: false },
+  )
+  check('side panel: a long objective is readable whole (wrapped, not truncated)',
+    await settled(() => bufferText(io.term).includes('GOAL_HEAD') && bufferText(io.term).includes('GOAL_TAIL')),
+    bufferText(io.term).split('\n').slice(-14).join('\n'))
   await app.unmount(); io.term.dispose()
 }
 // Footer dismissal is a Chat action, so exercise its real key route in both modes.
@@ -204,10 +188,10 @@ for (const fullscreen of [false, true]) {
   const app = await mount(io, channel, fullscreen)
   await settle(() => io.screen().includes('Ready.'))
   check(`${fullscreen}: completed idle goal and stale todos leave the footer`,
-    !io.screen().includes('COMPLETED_FOOTER') && !io.screen().includes('RESIDUAL_TODO'))
+    !io.screen().includes('RESIDUAL_TODO'))
   io.stdin.write('\x11')
   check(`${fullscreen}: Ctrl+Q restores an automatically hidden completed footer`,
-    await settled(() => io.screen().includes('COMPLETED_FOOTER') && io.screen().includes('RESIDUAL_TODO')))
+    await settled(() => io.screen().includes('RESIDUAL_TODO')))
   io.stdin.write('\x11')
   await settle(() => !io.screen().includes('COMPLETED_FOOTER') && !io.screen().includes('RESIDUAL_TODO'))
   channel.todos = [...originalTodos]
@@ -228,7 +212,9 @@ for (const fullscreen of [false, true]) {
   check(`${fullscreen}: a new todo snapshot reveals the footer`, await settled(() => io.screen().includes('NEW_TODO_SNAPSHOT')))
   channel.goal = { id: 'finished', revision: 2, objective: 'REACTIVATED_GOAL', phase: 'active', roundsStarted: 1, maxGoalRounds: 3 }
   channel.emit()
-  check(`${fullscreen}: a reactivated goal is visible`, await settled(() => io.screen().includes('REACTIVATED_GOAL')))
+  // The footer is the todo list: a goal row never joins it, so a reactivated
+  // goal must not paint one.
+  check(`${fullscreen}: a reactivated goal paints no footer row`, await settled(() => !io.screen().includes('REACTIVATED_GOAL')))
   await app.unmount()
   io.term.dispose()
 }
