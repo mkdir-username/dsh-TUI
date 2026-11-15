@@ -948,6 +948,35 @@ const hoverUI = (col, row) => uiStdin.write(`\x1b[<35;${col};${row}M`)
   instance.unmount()
 }
 
+{
+  // Q6 — the reported screenshot end to end: a twenty-line message queued
+  // while the model still accepts the turn. The dock pays ONE row (label and
+  // hint intact), the card peeks the body, a click recalls every line.
+  const lines = Array.from({ length: 20 }, (_, i) => `queued-line-${String(i).padStart(2, '0')} ` + 'q'.repeat(24))
+  const text = lines.join('\n')
+  const hidden = lines[8]
+  const channel = makeUiChannel([{ id: 'q6', text, placement: 'followup', docked: true, heldCompact: true }])
+  const instance = await mountUI(channel)
+  check('Q6 the 20-line dock keeps its label and hint',
+    await settled(() => findUI('Queue:') !== null) && findUI('hover to peek') !== null)
+  check('Q6 the preview folds into stats plus the first line',
+    findUI('20 lines') !== null && findUI('queued-line-00') !== null)
+  check('Q6 the twenty lines cost exactly one painted row',
+    termTestLib.viewportLines(termUI).filter(line => line.includes('queued-line-')).length === 1,
+    JSON.stringify(termTestLib.viewportLines(termUI).filter(line => line.includes('queued-line-'))))
+  const pos = findUI('queued-line-00')
+  if (pos) hoverUI(pos.col + 1, pos.row + 1)
+  check('Q6 hovering peeks a deeper line', await settled(() => findUI(hidden) !== null))
+  check('Q6 the peek reports the total line count', findUI('20 lines total') !== null)
+  hoverUI(1, 1)
+  check('Q6 leaving the row closes the peek', await settled(() => findUI(hidden) === null))
+  const again = findUI('queued-line-00')
+  if (again) clickUI(again.col + 3, again.row + 1)
+  check('Q6 clicking recalls all twenty lines verbatim',
+    await settled(() => uiController.current?.text() === text), JSON.stringify(uiController.current?.text()))
+  instance.unmount()
+}
+
 // ─────── Section E (R7): dock rights are HELD while the receipt is in flight
 // The blocker: rows parked by interruptAndDock were fully editable /
 // re-sendable / swappable BEFORE the cancel receipt settled. A late
