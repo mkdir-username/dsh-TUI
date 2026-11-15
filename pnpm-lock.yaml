@@ -142,8 +142,8 @@ importers:
         specifier: ^3.0.0 || ^4.0.0
         version: 4.0.0
       diff:
-        specifier: ^8.0.4
-        version: 8.0.4
+        specifier: ^9.0.0
+        version: 9.0.0
       dsh-working-activity:
         specifier: ^0.5.0
         version: 0.5.1(20fe4d86fab78e2004150125b8c7891d)
@@ -3751,10 +3751,6 @@ packages:
 
   dfa@1.2.0:
     resolution: {integrity: sha512-ED3jP8saaweFTjeGX8HQPjeC1YYyZs98jGNZx6IiBvxW7JG5v492kamAQB3m2wop07CvU/RQmzcKr6bgcC5D/Q==}
-
-  diff@8.0.4:
-    resolution: {integrity: sha512-DPi0FmjiSU5EvQV0++GFDOJ9ASQUVFh5kD+OzOnYdi7n3Wpm9hWWGfB/O2blfHcMVTL5WkQXSnRiK9makhrcnw==}
-    engines: {node: '>=0.3.1'}
 
   diff@9.0.0:
     resolution: {integrity: sha512-svtcdpS8CgJyqAjEQIXdb3OjhFVVYjzGAPO8WGCmRbrml64SPw/jJD4GoE98aR7r25A0XcgrK3F02yw9R/vhQw==}
@@ -8169,8 +8165,6 @@ snapshots:
     optional: true
 
   dfa@1.2.0: {}
-
-  diff@8.0.4: {}
 
   diff@9.0.0: {}
 
