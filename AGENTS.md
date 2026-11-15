@@ -27,6 +27,7 @@ src/*Prefs.ts etc. Persistent user preferences and session metadata under ~/.dsh
 .agents/skills/ Project skills for repository maintainers only; not distributed with the npm package
 presets/ Presets distributed with the package (liangshen)
 bin/dsh-tui.js Direct dsh-tui command entry point
+cli/ Automation CLI: an independent application outside src/, MCP surface included
 vendor/dsh-std Vendored dependency (built with a frozen lockfile; see the scripts/build-related scripts)
 tui-profile/ In-repository TUI profile: plugin admission + private protocol definitions (plain files, revised alongside this repository's code)
 cordis.patch.yml Package-level overlay for profile installation; row order, row IDs, and insert/override semantics are critical
@@ -37,6 +38,18 @@ lib/ Artifacts generated from src/ — excluded from version control, distribute
 ```
 
 See [docs/contributing.md](docs/contributing.md) for the complete repository map and runtime flow.
+
+## Reference requests: resolve the phrase before searching
+
+Some asks name a reference, not a file in this tree. Route them first, then search.
+
+| The ask | What it is | Read first |
+| --- | --- | --- |
+| "исходники claude cli", "исходники Claude Code", "claude cli source" | Claude Code sources. Not vendored here: a readable snapshot lives outside the repo, its path is in `LOCAL-FORK-NOTES.md` | that snapshot; this repo's adapter is `src/backends/claude/` |
+| "reference-map", "refference-map", "референс-мап", "рефференс-мап", "reference map" | The pinned upstream dsh-TUI reference map — not a symbol index, and not Claude | `docs/references.en.md` (`.upstream/README.md` is the local copy) |
+| "посмотри как устроено в claude", "как в claude code", "how does claude do X" | Behaviour of Claude Code, unless the ask names a layer | `docs/agent-navigation.en.md` splits sources / this backend / the upstream pin |
+
+`cli/` is this package's own automation CLI, unrelated to Claude. `.upstream/` is gitignored on purpose, so codegraph and serena never see it, and its line numbers belong to the pin, not the working tree. Details and worked examples: [docs/agent-navigation.en.md](docs/agent-navigation.en.md).
 
 ## Commands
 
