@@ -34,6 +34,10 @@ import { t } from '../../i18n.js'
 import { Box, Text, useInput, ScrollBox, useTerminalSize, type ScrollBoxHandle } from '../../ui.js'
 import wrapText from '../../ink/wrap-text.js'
 import { useDeclaredCursor, useNativeCursor } from '../../ink/hooks/use-declared-cursor.js'
+import measureElement from '../../ink/measure-element.js'
+import type { ClickEvent } from '../../ink/events/click-event.js'
+import type { DOMElement } from '../../ink/dom.js'
+import { clickToCursorOffset } from '../../utils/textClick.js'
 import { Divider } from '../design-system/Divider.js'
 import { Markdown } from '../Markdown.js'
 import { POINTER } from '../../terminal-utils/figures.js'
@@ -143,6 +147,20 @@ export function PlanReviewPanel({
   // layout-affecting wrapper Box.
   const nativeCursor = useNativeCursor()
   const caretRef = useDeclaredCursor({ line: 0, column: 0, active: true, visible: nativeCursor && inputFocused })
+
+  /** Click inside the feedback text parks the caret on the clicked cell
+   *  (the composer's mapping; the decision-row click only moves the focus). */
+  const answerBoxRef = React.useRef<DOMElement | null>(null)
+  const clickAnswer = (event: ClickEvent): void => {
+    focusFeedbackRow()
+    const node = answerBoxRef.current
+    if (node === null) return
+    const width = measureElement(node).width
+    if (width <= 0) return
+    const painted = answerPainted.join('')
+    const offset = clickToCursorOffset(painted, width, event.localRow, event.localCol)
+    field.placeCaret(answerWin.start + [...painted.slice(0, offset)].length)
+  }
 
   const moveFocus = (delta: 1 | -1): void => {
     setFocusIndex(index => (index + delta + rowCount) % rowCount)
@@ -349,14 +367,16 @@ export function PlanReviewPanel({
                 <Text dimColor>{t('plan-review-feedback-placeholder')}</Text>
               </>
             ) : (
-              <Text wrap="wrap">
-                {answerSplit.head}
+              <Box ref={answerBoxRef} onClick={clickAnswer}>
+                <Text wrap="wrap">
+                  {answerSplit.head}
                 {/* Inside the wrapping text: a sibling caret lands on the
                     block's corner once the feedback wraps (same fix as the ask
                     panel — the renderer records the nested node's cell). */}
-                <Text ref={caretRef} inverse={!nativeCursor && inputFocused}>{answerSplit.glyph}</Text>
-                {answerSplit.tail}
-              </Text>
+                  <Text ref={caretRef} inverse={!nativeCursor && inputFocused}>{answerSplit.glyph}</Text>
+                  {answerSplit.tail}
+                </Text>
+              </Box>
             )}
           </Box>
         </Box>

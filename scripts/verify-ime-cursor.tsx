@@ -19,7 +19,7 @@ export {} // 模块边界：避免顶层 await/全局名与其他 verify 脚本�
 process.env.FORCE_COLOR = '3'
 process.env.DSH_TUI_LANG = 'zh' // 光标定位使用中文「自定义回答」行，不能随宿主语言漂移。
 
-const [{ PassThrough, Writable }, React, { Terminal: XTerm }, { render }, { AskUserQuestionPanel }, { HistorySearchDialog }, { SearchBox }, { stringWidth }] = await Promise.all([
+const [{ PassThrough, Writable }, React, { Terminal: XTerm }, { render, AlternateScreen }, { AskUserQuestionPanel }, { HistorySearchDialog }, { SearchBox }, { stringWidth }] = await Promise.all([
   import('node:stream'),
   import('react'),
   import('@xterm/headless'),
@@ -418,6 +418,96 @@ const report = (name: string, ok: boolean, detail: string) => {
       `row=${row} bar=${JSON.stringify(bar)} cursor=${JSON.stringify(cur)} tail=${JSON.stringify(tail.slice(-20))}`)
   }
   app2.unmount()
+  await sleep(100)
+}
+
+/**
+ * Scenario 9: a click inside the answer text parks the caret on the clicked
+ * cell (the composer's click-to-caret mapping). Proved behaviorally: after
+ * clicking on the `w` of "world", typing lands before it — "hello Xworld".
+ * Mouse reports are parsed only inside <AlternateScreen mouseTracking>.
+ */
+{
+  const { stdout, stdin, lines, findCharCell } = makeHarness(80, 24)
+  const app = await render(
+    React.createElement(
+      AlternateScreen,
+      { mouseTracking: true },
+      React.createElement(AskUserQuestionPanel, { ...panelProps, key: 'q-click', question: QUESTION }),
+    ),
+    { stdout, stdin, stderr: stdout, exitOnCtrlC: false, patchConsole: false },
+  )
+  await sleep(300)
+  stdin.write('\x1b[B')
+  stdin.write('\x1b[B')
+  await sleep(150)
+  stdin.write('hello world')
+  await sleep(350)
+  const row = lines().findIndex(line => line.includes('hello world'))
+  const cell = row < 0 ? undefined : findCharCell('w', row, row)
+  if (cell !== undefined) {
+    stdin.write(`\x1b[<0;${cell.x + 1};${cell.y + 1}M`)
+    stdin.write(`\x1b[<0;${cell.x + 1};${cell.y + 1}m`)
+  }
+  await sleep(350)
+  stdin.write('X')
+  await sleep(350)
+  {
+    const text = lines().join('\n')
+    report('click in the answer parks the caret at the clicked cell', cell !== undefined && text.includes('hello Xworld'),
+      `cell=${JSON.stringify(cell)} has="${text.includes('hello Xworld') ? 'hello Xworld' : text.includes('hello worldX') ? 'hello worldX (caret stayed at tail)' : 'neither'}"`)
+  }
+  app.unmount()
+  await sleep(100)
+}
+
+/**
+ * Scenario 10: the same click-to-caret on the plan-review decision card (the
+ * ask panel delegates to PlanReviewPanel on the `plan-review` intent; both
+ * rows share useAnswerField and the same mapping).
+ */
+{
+  const { stdout, stdin, lines, findCharCell } = makeHarness(100, 24)
+  const app = await render(
+    React.createElement(
+      AlternateScreen,
+      { mouseTracking: true },
+      React.createElement(AskUserQuestionPanel, {
+        ...panelProps,
+        key: 'q-click-plan',
+        question: {
+          header: 'Plan review',
+          question: 'Approve this plan and leave plan mode?',
+          detail: '## Step 1\n\nDo the thing.',
+          options: [
+            { label: 'Approve', description: 'Leave plan mode.' },
+            { label: 'Keep planning', description: 'Stay in plan mode.' },
+          ],
+          intent: { kind: 'plan-review' as const, approve: 'Approve' },
+        },
+      }),
+    ),
+    { stdout, stdin, stderr: stdout, exitOnCtrlC: false, patchConsole: false },
+  )
+  await sleep(350)
+  stdin.write('hello world')
+  await sleep(350)
+  const row = lines().findIndex(line => line.includes('hello world'))
+  const cell = row < 0 ? undefined : findCharCell('w', row, row)
+  if (cell !== undefined) {
+    stdin.write(`\x1b[<0;${cell.x + 1};${cell.y + 1}M`)
+    stdin.write(`\x1b[<0;${cell.x + 1};${cell.y + 1}m`)
+  }
+  await sleep(350)
+  stdin.write('X')
+  await sleep(350)
+  {
+    const text = lines().join('\n')
+    report('plan-review feedback: click parks the caret at the clicked cell',
+      cell !== undefined && text.includes('hello Xworld'),
+      `cell=${JSON.stringify(cell)} has="${text.includes('hello Xworld') ? 'hello Xworld' : 'not moved'}"`)
+  }
+  app.unmount()
   await sleep(100)
 }
 

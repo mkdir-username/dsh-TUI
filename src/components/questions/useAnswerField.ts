@@ -63,6 +63,8 @@ export interface AnswerField {
   handleKey(input: string, key: Key, host: AnswerFieldHost): void
   /** Clear the buffer (a successful send leaves nothing behind). */
   reset(): void
+  /** Click-to-caret: park the caret at a code-point index (mouse). */
+  placeCaret(at: number): void
   insertPasted(raw: string, atCaret: boolean, onAppended?: () => void): PasteOutcome
   pasteFromClipboard(
     atCaret: boolean,
@@ -150,6 +152,12 @@ export function useAnswerField(
 
   const reset = (): void => {
     commit({ text: '', cursor: 0 })
+  }
+
+  const placeCaret = (at: number): void => {
+    const before = { text: textRef.current, cursor: cursorRef.current }
+    const next = caretTo(before, at)
+    if (next.cursor !== before.cursor) commit(next)
   }
 
   const pasteFromClipboard = (
@@ -303,5 +311,5 @@ export function useAnswerField(
     }
   }
 
-  return { text, cursor, textRef, cursorRef, append, backspace, handleKey, insertPasted, pasteFromClipboard, reset }
+  return { text, cursor, textRef, cursorRef, append, backspace, handleKey, insertPasted, pasteFromClipboard, reset, placeCaret }
 }

@@ -23,6 +23,7 @@ import instances from '../ink/instances.js'
 import { stringWidth } from '../ink/stringWidth.js'
 import { truncateToWidth } from '../ink/truncateToWidth.js'
 import { getGraphemeSegmenter } from '../utils/intl.js'
+import { clickToCursorOffset, wrapGraphemeRows } from '../utils/textClick.js'
 import { draftWordRangeAt, isDraftWordBoundary } from '../utils/draftWordBoundary.js'
 import { wordBoundaryLeft, wordBoundaryRight } from '../utils/inputWordBoundary.js'
 import { formatClipboardInsert, readClipboard } from '../utils/clipboard.js'
@@ -4201,10 +4202,10 @@ export function PromptInput({
     if (block) {
       if (clamped === chipRow) return null
       return clamped < chipRow
-        ? clickToCursorOffset(head, width, clamped, col)
-        : block.end + clickToCursorOffset(tail, width, clamped - chipRow - 1, col)
+        ? clickOffset(head, width, clamped, col)
+        : block.end + clickOffset(tail, width, clamped - chipRow - 1, col)
     }
-    return clickToCursorOffset(value, width, clamped, col)
+    return clickOffset(value, width, clamped, col)
   }
 
   /**
@@ -4296,8 +4297,8 @@ export function PromptInput({
       if (clamped === chipRow) return
       const offset =
         clamped < chipRow
-          ? clickToCursorOffset(head, inputWidth, clamped, localCol, isDouble ? 'grapheme-start' : 'nearest')
-          : block.end + clickToCursorOffset(tail, inputWidth, clamped - chipRow - 1, localCol, isDouble ? 'grapheme-start' : 'nearest')
+          ? clickOffset(head, inputWidth, clamped, localCol, isDouble ? 'grapheme-start' : 'nearest')
+          : block.end + clickOffset(tail, inputWidth, clamped - chipRow - 1, localCol, isDouble ? 'grapheme-start' : 'nearest')
       if (isDouble) {
         // Word select stays inside the clicked side: the block is atomic.
         const side = offset <= block.start
@@ -4334,7 +4335,7 @@ export function PromptInput({
     }
     const col =
       clamped === 0 && prefixCols > 0 ? Math.max(0, localCol - prefixCols) : localCol
-    const offset = clickToCursorOffset(
+    const offset = clickOffset(
       value,
       clamped === 0 && prefixCols > 0 ? inputWidth - prefixCols : inputWidth,
       clamped,
@@ -4948,47 +4949,27 @@ export function PromptInput({
 }
 
 /**
- * Grapheme word-wrap for one logical line: break at the last space when
- * the row overflows; hard-wrap a word that cannot fit; never split a
- * cluster (ZWJ emoji, combining sequences, CJK wide cells stay whole).
+ * Composer row boundaries: the shared grapheme wrap plus the composer's own
+ * rule that `[Image #N]` tokens never break, so the token stays one unit on
+ * screen (its caret cluster and chip styling span it).
  */
 function wrapLineRows(
   line: string,
   width: number,
 ): Array<{ start: number; end: number }> {
-  if (line === '') return [{ start: 0, end: 0 }]
-  const rows: Array<{ start: number; end: number }> = []
-  const segmenter = getGraphemeSegmenter()
-  // The space inside `[Image #N]` is not a break opportunity: the token is
-  // one unit on screen (its caret cluster and chip styling span it), so it
-  // wraps whole, like a word.
   const unbreakable = imageTokenSpans(line)
-  let rowStart = 0
-  let currentWidth = 0
-  let offset = 0
-  let lastBreak = -1
-  for (const { segment } of segmenter.segment(line)) {
-    const w = stringWidth(segment)
-    while (currentWidth + w > width && offset > rowStart) {
-      if (lastBreak > rowStart) {
-        rows.push({ start: rowStart, end: lastBreak })
-        rowStart = lastBreak
-        currentWidth = stringWidth(line.slice(rowStart, offset))
-        lastBreak = -1
-      } else {
-        rows.push({ start: rowStart, end: offset })
-        rowStart = offset
-        currentWidth = 0
-        lastBreak = -1
-      }
-    }
-    currentWidth += w
-    offset += segment.length
-    if (segment === ' ' && imageTokenAround(unbreakable, offset) === undefined) lastBreak = offset
-  }
-  rows.push({ start: rowStart, end: offset })
-  return rows
+  return wrapGraphemeRows(line, width, (_content, offset) =>
+    imageTokenAround(unbreakable, offset) === undefined)
 }
+
+/** Click mapping with the composer's row boundaries. */
+const clickOffset = (
+  text: string,
+  width: number,
+  visualLine: number,
+  visualCol: number,
+  snapWithin: 'nearest' | 'grapheme-start' = 'nearest',
+): number => clickToCursorOffset(text, width, visualLine, visualCol, snapWithin, wrapLineRows)
 
 /** Wrap text to `width` columns via {@link wrapLineRows} (newlines honoured). */
 function wrapToWidth(text: string, width: number): string[] {
@@ -5035,44 +5016,6 @@ function caretInText(
  * boundary nearest the click: a grapheme whose midpoint lies past the
  * click column takes the caret before it, otherwise after.
  */
-function clickToCursorOffset(
-  text: string,
-  width: number,
-  visualLine: number,
-  visualCol: number,
-  snapWithin: 'nearest' | 'grapheme-start' = 'nearest',
-): number {
-  const segmenter = getGraphemeSegmenter()
-  let row = 0
-  let lineBase = 0
-  for (const line of text.split('\n')) {
-    for (const r of wrapLineRows(line, width)) {
-      if (row === visualLine) {
-        let currentWidth = 0
-        let local = 0
-        for (const { segment } of segmenter.segment(line.slice(r.start, r.end))) {
-          const w = stringWidth(segment)
-          // Caret positioning uses the nearest edge. Double-click selection
-          // instead needs the grapheme UNDER the cell: on the second cell of a
-          // CJK/emoji glyph, nearest-edge would point after the glyph (and the
-          // final glyph would select nothing).
-          if (snapWithin === 'grapheme-start' && currentWidth + w > visualCol) {
-            return lineBase + r.start + local
-          }
-          if (currentWidth + w / 2 > visualCol) return lineBase + r.start + local
-          if (currentWidth + w > visualCol) return lineBase + r.start + local + segment.length
-          currentWidth += w
-          local += segment.length
-        }
-        return lineBase + r.end
-      }
-      row++
-    }
-    lineBase += line.length + 1
-  }
-  return lineBase
-}
-
 /**
  * Offset range [start, end) of every visual row, using the same {@link
  * wrapLineRows} boundaries as `wrapToWidth`. The selection highlight

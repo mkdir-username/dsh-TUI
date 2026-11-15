@@ -46,6 +46,10 @@ import { Box, Text, ScrollBox, useInput, useTerminalSize, type ScrollBoxHandle }
 import wrapText from '../../ink/wrap-text.js'
 import { stringWidth } from '../../ink/stringWidth.js'
 import { useDeclaredCursor, useNativeCursor } from '../../ink/hooks/use-declared-cursor.js'
+import measureElement from '../../ink/measure-element.js'
+import type { ClickEvent } from '../../ink/events/click-event.js'
+import type { DOMElement } from '../../ink/dom.js'
+import { clickToCursorOffset } from '../../utils/textClick.js'
 import { Divider } from '../design-system/Divider.js'
 import { POINTER } from '../../terminal-utils/figures.js'
 import type { QuestionDraft, QuestionIntentView, QuestionSelection } from '../../channel/questions.js'
@@ -663,6 +667,21 @@ export function AskUserQuestionPanel({
     placeFocus(options.length)
     setError(null)
   }
+
+  /** Click inside the answer text parks the caret on the clicked cell — the
+   *  composer's mapping, so it stays exact under wrapping and CJK widths
+   *  (the row's own onClick only moves the focus). */
+  const answerBoxRef = React.useRef<DOMElement | null>(null)
+  const clickAnswer = (event: ClickEvent): void => {
+    focusInputRow()
+    const node = answerBoxRef.current
+    if (node === null) return
+    const width = measureElement(node).width
+    if (width <= 0) return
+    const painted = answerWindowMasked.join('')
+    const offset = clickToCursorOffset(painted, width, event.localRow, event.localCol)
+    field.placeCaret(answerWin.start + [...painted.slice(0, offset)].length)
+  }
   /** Single-select answer plus whatever the answer field already holds. */
   const answerOption = (index: number): void => {
     const label = options[index]?.label
@@ -727,8 +746,9 @@ export function AskUserQuestionPanel({
             <Text dimColor>{t('question-direct-input')}</Text>
           </>
         ) : (
-          <Text wrap="wrap">
-            {answerSplit.head}
+          <Box ref={answerBoxRef} onClick={clickAnswer}>
+            <Text wrap="wrap">
+              {answerSplit.head}
             {/* The caret rides INSIDE the wrapping text: as a sibling it sat
                 on the block's top-right corner as soon as the answer wrapped,
                 which put the visible bar (and the IME anchor) at the end of
@@ -736,9 +756,10 @@ export function AskUserQuestionPanel({
                 records a nested text node's painted cell, so (0, 0) here is
                 the caret cell; the glyph stays plain so the terminal can
                 animate it and paint IME preedit with the input's style. */}
-            <Text ref={caretRef} inverse={!nativeCursor && inputFocused}>{answerSplit.glyph}</Text>
-            {answerSplit.tail}
-          </Text>
+              <Text ref={caretRef} inverse={!nativeCursor && inputFocused}>{answerSplit.glyph}</Text>
+              {answerSplit.tail}
+            </Text>
+          </Box>
         )}
       </Box>
     </Box>
