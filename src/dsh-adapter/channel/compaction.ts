@@ -419,22 +419,28 @@ export function createManualCompaction(
             deps.notify(verdict.reason, { color: 'error', timeoutMs: 12000 })
             return
           }
-          deps.notify(verdict.notice)
-          if (holdSignal === undefined && state.working) {
-            // A host without runMaintenance: a turn that started while the
-            // fork ran still has to finish before the summary.
-            // Esc and Ctrl+C hand the key to the running turn first, so this row
-            // must not advertise a cancel it cannot deliver.
+          // A host without runMaintenance: a turn that started while the fork
+          // ran still has to finish before the summary. Esc and Ctrl+C hand the
+          // key to the running turn first, so this row must not advertise a
+          // cancel it cannot deliver.
+          //
+          // The inverted guard is deliberate: this path WAITS for the turn
+          // instead of refusing it, so it is not one of the mid-turn refusals
+          // whose notice owes itself to WORKING_GATE_NOTICES.
+          const waitForTurnBeforeSummary = async (): Promise<boolean> => {
+            if (holdSignal !== undefined || !state.working) return true
             cycle.stage = { ...cycle.stage, phase: 'wait-idle', cancellable: false }
             state.manualCompactionStage = cycle.stage
             state.emit()
             if (!await waitUntilIdle(() => current() && !cycle.preparation.signal.aborted)) {
               if (cycle.cancelRequested === true) deps.notify(t('compact-cancelled'))
               else if (current()) deps.notify(`compact-rp: ход не освободился за ${IDLE_WAIT_MS / 60000} минут — сжатие отменено. Повтори /compact`, { color: 'warning', timeoutMs: 12000 })
-              return
+              return false
             }
-            if (stopped()) return
+            return !stopped()
           }
+          deps.notify(verdict.notice)
+          if (!await waitForTurnBeforeSummary()) return
           cycle.stage = { ...cycle.stage, phase: 'checking', cancellable: true }
           state.manualCompactionStage = cycle.stage
           state.emit()
