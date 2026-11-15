@@ -4,7 +4,9 @@
  * session log containing `todo/write` and goal-sourced `user/message`
  * events, and asserts the folded `channel.goal`/`channel.todos`. Then fires
  * live events through the captured `session/event` handler and asserts the
- * panel state updates in real time (subscribers notified, version bumped).
+ * panel state updates in real time (subscribers notified, version bumped). Todo
+ * snapshots are asserted to stay out of the view: the no-todo patch removed the
+ * panel and the preset no longer carries the todo tool.
  *
  * Run with plain node against the compiled lib: `node scripts/verify-channel-goal-todo.mjs`
  */
@@ -131,11 +133,9 @@ check('goal folded from seed', channel.goal?.objective === 'Ship the release' &&
 check('goal revision from last change', channel.goal?.revision === 2)
 check('goal roundsStarted from last change', channel.goal?.roundsStarted === 1)
 check('goal maxGoalRounds kept', channel.goal?.maxGoalRounds === 5)
-check(
-  'todos = last whole-list snapshot',
-  channel.todos?.length === 3 && channel.todos[2]?.content === 'Announce on Slack' && channel.todos[2]?.status === 'pending',
-  JSON.stringify(channel.todos),
-)
+// The no-todo patch (3912f31c): the preset carries no todo tool and the Todo
+// panel is unregistered, so a durable snapshot is not folded into the view.
+check('todos stay empty: no todo panel to feed', channel.todos?.length === 0, JSON.stringify(channel.todos))
 
 // ---- live events through the captured session/event handler
 const sessionHandler = handlers.get('session/event')
@@ -192,7 +192,7 @@ if (sessionHandler === undefined) {
       { content: 'Announce on Slack', status: 'in_progress' },
     ] },
   })
-  check('live todo/write replaces the list', channel.todos?.length === 2 && channel.todos[1]?.status === 'in_progress')
+  check('live todo/write leaves the removed panel empty', channel.todos?.length === 0)
   check('subscriber notified after todo write', notified === 2)
 
   // 3. Malformed optional-plugin data must not poison the last good snapshot.
@@ -202,7 +202,7 @@ if (sessionHandler === undefined) {
     time: now + 2,
     data: { todos: [{ content: 42, status: 'pending' }] },
   })
-  check('malformed todo/write is ignored', channel.todos?.length === 2 && channel.todos[1]?.status === 'in_progress')
+  check('malformed todo/write is ignored', channel.todos?.length === 0)
 
   // 4. Positive-round continuation prompt advances roundsStarted only.
   sessionHandler(session, {
@@ -247,7 +247,7 @@ if (sessionHandler === undefined) {
     time: now + 5,
     data: { source: { kind: 'plugin', plugin: 'skills' }, content: [] },
   })
-  check('non-goal injected message ignored', channel.goal === undefined && channel.todos?.length === 2)
+  check('non-goal injected message ignored', channel.goal === undefined && channel.todos?.length === 0)
 }
 
 // ---- REAL-SHAPE scenario: the goal service writes durable snapshots as
