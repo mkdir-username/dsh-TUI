@@ -9,6 +9,14 @@ export type StyledSegment = {
   text: string
   styles: TextStyles
   hyperlink?: string
+  /**
+   * The nested text node that owns this run, when it comes from a child
+   * `<Text>` rather than from the painted node's own characters. The
+   * renderer records such a node's painted cell in `nodeCache`, which is how
+   * an input caret rendered INSIDE a wrapping text can park the native
+   * cursor on its own cell (a sibling caret would sit on the block's corner).
+   */
+  origin?: DOMElement
 }
 
 /**
@@ -18,6 +26,8 @@ export type StyledSegment = {
  * @param inheritedStyles - styles inherited from ancestors, merged with the node's own.
  * @param inheritedHyperlink - the hyperlink inherited from ancestor ink-link elements.
  * @param out - the array segments are appended to; defaults to a fresh array.
+ * @param owner - the nested text node that owns the run; unset for the
+ *   painted node's own characters.
  * @returns `out` containing one segment per non-empty text node.
  */
 export function squashTextNodesToSegments(
@@ -25,6 +35,7 @@ export function squashTextNodesToSegments(
   inheritedStyles: TextStyles = {},
   inheritedHyperlink?: string,
   out: StyledSegment[] = [],
+  owner?: DOMElement,
 ): StyledSegment[] {
   const mergedStyles = node.textStyles
     ? { ...inheritedStyles, ...node.textStyles }
@@ -41,6 +52,7 @@ export function squashTextNodesToSegments(
           text: childNode.nodeValue,
           styles: mergedStyles,
           hyperlink: inheritedHyperlink,
+          ...(owner === undefined ? {} : { origin: owner }),
         })
       }
     } else if (
@@ -52,6 +64,7 @@ export function squashTextNodesToSegments(
         mergedStyles,
         inheritedHyperlink,
         out,
+        childNode,
       )
     } else if (childNode.nodeName === 'ink-link') {
       const href = childNode.attributes['href'] as string | undefined
@@ -60,6 +73,7 @@ export function squashTextNodesToSegments(
         mergedStyles,
         href || inheritedHyperlink,
         out,
+        owner,
       )
     }
   }

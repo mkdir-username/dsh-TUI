@@ -353,5 +353,73 @@ const report = (name: string, ok: boolean, detail: string) => {
   app2.unmount()
   await sleep(100)
 }
+/**
+ * Scenario 8: a WIDE terminal with an answer long enough to WRAP. The caret
+ * must stay in the text flow: on the row that carries the last typed
+ * characters, not on the first row of the wrapped block (which is where a
+ * caret rendered as the block's sibling lands — the reported "bar in the
+ * wrong place" bug). Both paint variants are covered: the focused row draws
+ * the caret as an inverse space after the tail, an option-row draft draws
+ * the plain `▏` glyph there.
+ */
+{
+  const { stdout, stdin, lines, cursor, findAfterChar, findCharCell } = makeHarness(150, 30)
+  const app = await render(
+    React.createElement(AskUserQuestionPanel, {
+      ...panelProps,
+      key: 'q-long',
+      question: QUESTION,
+    }),
+    { stdout, stdin, stderr: stdout, exitOnCtrlC: false, patchConsole: false },
+  )
+  await sleep(300)
+  stdin.write('\x1b[B')
+  stdin.write('\x1b[B') // focus the custom-answer row
+  await sleep(150)
+  // Past the field width at 150 columns, so the answer wraps.
+  stdin.write('x'.repeat(200) + 'TAILEND')
+  await sleep(500)
+  {
+    const ls = lines()
+    const row = ls.findIndex(line => line.includes('TAILEND'))
+    const tail = row < 0 ? '' : ls[row]!.trimEnd()
+    const cur = cursor()
+    const ok = row >= 0 && /TAILEND$/.test(tail)
+      && cur.y === row && cur.x === stringWidth(tail)
+    report('wide terminal, wrapped answer, focused row: cursor follows the tail', ok,
+      `row=${row} cursor=${JSON.stringify(cur)} expectX=${stringWidth(tail)} tail=${JSON.stringify(tail.slice(-20))}`)
+  }
+  app.unmount()
+  await sleep(100)
+
+  // Same wrap, but typed on an option row: the draft keeps a plain caret
+  // glyph, which must sit on the row that carries the tail as well.
+  const second = makeHarness(150, 30)
+  const app2 = await render(
+    React.createElement(AskUserQuestionPanel, {
+      ...panelProps,
+      key: 'q-long-option',
+      question: QUESTION,
+    }),
+    { stdout: second.stdout, stdin: second.stdin, stderr: second.stdout, exitOnCtrlC: false, patchConsole: false },
+  )
+  await sleep(300)
+  second.stdin.write('x'.repeat(200) + 'TAILEND')
+  await sleep(500)
+  {
+    const ls = second.lines()
+    const row = ls.findIndex(line => line.includes('TAILEND'))
+    const tail = row < 0 ? '' : ls[row]!.trimEnd()
+    const bar = row >= 0 ? second.findCharCell('▏', row, row) : undefined
+    const cur = second.cursor()
+    const ok = row >= 0 && bar !== undefined && bar.y === row
+      && cur.x === bar.x && cur.y === bar.y && /TAILEND▏$/.test(tail)
+    report('wide terminal, wrapped answer, option-row draft: caret follows the tail', ok,
+      `row=${row} bar=${JSON.stringify(bar)} cursor=${JSON.stringify(cur)} tail=${JSON.stringify(tail.slice(-20))}`)
+  }
+  app2.unmount()
+  await sleep(100)
+}
+
 console.log(failures === 0 ? '\nALL PASS' : `\n${failures} FAILURES`)
 process.exit(failures === 0 ? 0 : 1)

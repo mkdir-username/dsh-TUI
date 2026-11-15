@@ -349,11 +349,14 @@ export function PlanReviewPanel({
                 <Text dimColor>{t('plan-review-feedback-placeholder')}</Text>
               </>
             ) : (
-              <>
-                <Text wrap="wrap">{answerSplit.head}</Text>
+              <Text wrap="wrap">
+                {answerSplit.head}
+                {/* Inside the wrapping text: a sibling caret lands on the
+                    block's corner once the feedback wraps (same fix as the ask
+                    panel — the renderer records the nested node's cell). */}
                 <Text ref={caretRef} inverse={!nativeCursor && inputFocused}>{answerSplit.glyph}</Text>
-                <Text wrap="wrap">{answerSplit.tail}</Text>
-              </>
+                {answerSplit.tail}
+              </Text>
             )}
           </Box>
         </Box>

@@ -727,13 +727,18 @@ export function AskUserQuestionPanel({
             <Text dimColor>{t('question-direct-input')}</Text>
           </>
         ) : (
-          <>
-            <Text wrap="wrap">{answerSplit.head}</Text>
-            {/* Leave the native caret's glyph plain so the terminal can
+          <Text wrap="wrap">
+            {answerSplit.head}
+            {/* The caret rides INSIDE the wrapping text: as a sibling it sat
+                on the block's top-right corner as soon as the answer wrapped,
+                which put the visible bar (and the IME anchor) at the end of
+                the first row instead of at the typing position. The renderer
+                records a nested text node's painted cell, so (0, 0) here is
+                the caret cell; the glyph stays plain so the terminal can
                 animate it and paint IME preedit with the input's style. */}
             <Text ref={caretRef} inverse={!nativeCursor && inputFocused}>{answerSplit.glyph}</Text>
-            <Text wrap="wrap">{answerSplit.tail}</Text>
-          </>
+            {answerSplit.tail}
+          </Text>
         )}
       </Box>
     </Box>

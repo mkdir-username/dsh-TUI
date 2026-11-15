@@ -90,6 +90,11 @@ const GROUPS = {
     ["verify-question-backtrack", ['node', '--import', 'tsx/esm', 'scripts/verify-question-backtrack.tsx']],
 // 提问面板全应用布局回归：短/长高录、activity tick 差分、resize 风暴。
     ["verify-askpanel-layout", ['node', '--import', 'tsx/esm', 'scripts/verify-askpanel-layout.tsx']],
+// Caret anchoring inside text inputs: the painted caret and the native
+// cursor (IME preedit) must sit on the caret cell — including an answer long
+// enough to WRAP on a wide terminal, where a caret outside the text flow
+// lands on the block corner.
+    ["verify-ime-cursor", ['node', '--import', 'tsx/esm', 'scripts/verify-ime-cursor.tsx']],
     ["repro-toolcards", ['node', '--import', 'tsx/esm', 'scripts/repro-toolcards.tsx']],
 // 运行中工具的实时输出（tool.output）：有界尾部（200 行 / 16 KiB、丢弃计数、代理对边界）、
 // 共享投影器（追加、未知/已落定/子代理/问卷调用忽略、结果到达即清除）、卡片（最新 5 行

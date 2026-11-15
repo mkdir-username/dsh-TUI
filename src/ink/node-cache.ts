@@ -39,6 +39,17 @@ export type TextNoSelectRun = {
   width: number
 }
 
+/** A nested text node's painted cell, relative to the painted text block's
+ *  top-left. Only nodes from a child `<Text>` get one (see StyledSegment's
+ *  `origin`); the caret of a wrapped input is exactly such a node. */
+export type TextOriginRect = {
+  node: DOMElement
+  dx: number
+  dy: number
+  width: number
+  height: number
+}
+
 /** Current prepared text only: scrolling changes its position, not its lines.
  * Weak keys release unmounted nodes; mutations discard the previous version.
  * `decoration` participates in the hit check (producers memo the object);
@@ -54,6 +65,9 @@ export const textPaintCache = new WeakMap<DOMElement, {
   softWrap: SoftWrapFlag[] | undefined
   decoration: TextDecoration | undefined
   noSelectRuns: readonly TextNoSelectRun[] | undefined
+  /** Painted cells of nested text runs; re-applied on every frame (a blit or
+   *  scroll keeps the prepared lines but the block moves). */
+  originRects: readonly TextOriginRect[] | undefined
 }>()
 
 /** Rects of removed children that need clearing on next render */

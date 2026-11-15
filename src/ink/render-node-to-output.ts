@@ -11,6 +11,7 @@ import {
   pendingClears,
   textPaintCache,
   type TextNoSelectRun,
+  type TextOriginRect,
 } from './node-cache.js'
 import type Output from './output.js'
 import type { SoftWrapFlag } from './output.js'
@@ -729,6 +730,89 @@ function wrapWithSoftWrap(
   return { wrapped: outLines.join('\n'), softWrap }
 }
 
+/**
+ * Painted cell of every run that comes from a nested text node.
+ *
+ * A wrapped input renders its caret as a nested `<Text>` so the glyph stays
+ * inside the text flow; a sibling caret would sit on the text block's
+ * top-right corner as soon as the block wraps. The rect recorded here is what
+ * parks the native cursor (IME preedit, screen readers, console echo) exactly
+ * on that cell — (0, 0) of the nested node then IS the caret.
+ */
+function textOriginRects(
+  segments: readonly StyledSegment[],
+  plainText: string,
+  maxWidth: number,
+  textWrap: Parameters<typeof wrapText>[2],
+): readonly TextOriginRect[] | undefined {
+  if (!segments.some(segment => segment.origin !== undefined)) return undefined
+  const lines = wrapWithSoftWrap(plainText, maxWidth, textWrap).wrapped.split('\n')
+  const rects: TextOriginRect[] = []
+  let offset = 0
+  for (const segment of segments) {
+    if (segment.origin !== undefined && segment.text.length > 0) {
+      const cell = textCellAt(lines, plainText, offset, maxWidth)
+      rects.push({
+        node: segment.origin,
+        dx: cell.column,
+        dy: cell.line,
+        width: Math.max(1, stringWidth([...segment.text][0] ?? ' ')),
+        height: 1,
+      })
+    }
+    offset += segment.text.length
+  }
+  return rects
+}
+
+/**
+ * Line and display column of the character at `offset` in the wrapped text.
+ * Soft wrap may drop the space it breaks at (and a 'gap' row elides one) —
+ * those characters are skipped when crossing a line boundary.
+ */
+function textCellAt(
+  lines: readonly string[],
+  plainText: string,
+  offset: number,
+  maxWidth: number,
+): { line: number; column: number } {
+  let index = 0
+  for (let line = 0; line < lines.length; line++) {
+    let column = 0
+    for (const char of lines[line]!) {
+      if (index >= offset) return { line, column }
+      index += char.length
+      column += stringWidth(char)
+    }
+    if (index >= offset) {
+      // The character at the boundary starts the next row once this one is full.
+      return column >= maxWidth && line + 1 < lines.length
+        ? { line: line + 1, column: 0 }
+        : { line, column }
+    }
+    while (index < offset && /\s/u.test(plainText[index] ?? '')) index += 1
+  }
+  const last = lines[lines.length - 1] ?? ''
+  return { line: Math.max(0, lines.length - 1), column: stringWidth(last) }
+}
+
+/** Record each nested text node's painted cell for this frame. */
+function paintOriginRects(
+  rects: readonly TextOriginRect[] | undefined,
+  x: number,
+  y: number,
+): void {
+  if (rects === undefined) return
+  for (const rect of rects) {
+    nodeCache.set(rect.node, {
+      x: x + rect.dx,
+      y: y + rect.dy,
+      width: rect.width,
+      height: rect.height,
+    })
+  }
+}
+
 // If parent container is `<Box>`, text nodes will be treated as separate nodes in
 // the tree and will have their own coordinates in the layout.
 // To ensure text nodes are aligned correctly, take X and Y of the first text node
@@ -843,6 +927,7 @@ function paintDecoratedTextNode(
       maxWidth, background: inheritedBackgroundColor, paddingLeft, paddingTop,
       text: headerRow, lines: [headerRow], softWrap: undefined, decoration,
       noSelectRuns: runs.length > 0 ? runs : undefined,
+      originRects: undefined,
     })
     output.write(Math.floor(x), Math.floor(y), headerRow, undefined, [headerRow])
     pushNoSelectRuns(output, x, y, runs)
@@ -978,6 +1063,7 @@ function paintDecoratedTextNode(
     maxWidth, background: inheritedBackgroundColor, paddingLeft, paddingTop,
     text, lines: rows, softWrap: flags, decoration,
     noSelectRuns: noSelectRuns.length > 0 ? noSelectRuns : undefined,
+    originRects: undefined,
   })
   output.write(Math.floor(x), Math.floor(y), text, flags, rows)
   pushNoSelectRuns(output, x, y, noSelectRuns)
@@ -1257,6 +1343,7 @@ function renderNodeToOutput(
       ) {
         output.write(x, y, prepared.text, prepared.softWrap, prepared.lines)
         pushNoSelectRuns(output, x, y, prepared.noSelectRuns)
+        paintOriginRects(prepared.originRects, x, y)
       } else if (decoration !== undefined) {
         paintDecoratedTextNode(
           node,
@@ -1342,12 +1429,15 @@ function renderNodeToOutput(
           text = applyPaddingToText(node, text, softWrap)
 
           const lines = text.split('\n')
+          const originRects = textOriginRects(segments, plainText, maxWidth, textWrap)
           textPaintCache.set(node, {
             maxWidth, background: inheritedBackgroundColor, paddingLeft, paddingTop,
             text, lines, softWrap,
             decoration: undefined, noSelectRuns: undefined,
+            originRects,
           })
           output.write(x, y, text, softWrap, lines)
+          paintOriginRects(originRects, x, y)
         }
       }
     } else if (
