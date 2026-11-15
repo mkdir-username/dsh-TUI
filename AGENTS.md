@@ -62,6 +62,10 @@ The repository **has no root-level `test` or `lint` scripts** — do not claim t
 - Framework packages under `@deepseek-ai/*` referenced at runtime or by published types must be both peer and dev dependencies (the `verify:manifest-deps` gate); framework packages used only by tests/scripts belong only in dev dependencies.
 - Changes to official rows made by `cordis.patch.yml` are snapshotted in `patch-surface.snapshot.json`; keep them synchronized when making changes (the `verify:patch-surface` gate).
 
+## Upstream merges: the fork wins
+
+Incoming upstream work never outranks ours. When a release from `ccch1mneyyy/dsh-TUI` conflicts with a fork patch or behavior, the fork side stays and upstream adapts: a merge may drop an upstream nuance, never a fork feature. Removing superseded fork code is an explicit decision, with evidence that the upstream replacement is equivalent or better. Upstream fixes are welcome as long as every fork behavior stays intact.
+
 ## Conventions and hard rules
 
 - **Language**: If you encounter text in any language other than English or Russian (e.g. Chinese characters), you MUST rewrite it in English while preserving its meaning.
