@@ -761,7 +761,7 @@ const toasts = (channel: { notifications: readonly { text: string }[] }) =>
     channel.cancelCompact()
     check('scene21: Esc aborts the fork', await settle(() => fork.signal?.aborted === true))
     fork.finish(verdict)
-    check('scene21: the cancellation is announced', await settle(() => toasts(channel).includes('压缩已取消')))
+    check('scene21: the cancellation is announced', await settle(() => toasts(channel).includes('restruct-plan отменён')))
     check('scene21: the stage is cleared', await settle(() => channel.manualCompactionStage === undefined))
     check('scene21: no compaction runs after the late fork result', compaction.calls.length === 0)
     check('scene21: the queued line is released',
@@ -787,7 +787,7 @@ const toasts = (channel: { notifications: readonly { text: string }[] }) =>
     channel.cancelCompact()
     check('scene22: the hung fork is disposed on cancel',
       await settle(() => fork.disposed && fork.signal?.aborted === true))
-    check('scene22: the cancellation is announced', await settle(() => toasts(channel).includes('压缩已取消')))
+    check('scene22: the cancellation is announced', await settle(() => toasts(channel).includes('restruct-plan отменён')))
     check('scene22: the stage is cleared without the fork result',
       await settle(() => channel.manualCompactionStage === undefined))
     check('scene22: no compaction runs after the hung fork', compaction.calls.length === 0)
@@ -815,7 +815,7 @@ const toasts = (channel: { notifications: readonly { text: string }[] }) =>
         && channel.manualCompactionStage?.phase === 'restruct-plan'))
     channel.cancelCompact()
     check('scene23: cancel disposes the hung fork', await settle(() => fork.disposed && fork.signal?.aborted === true))
-    check('scene23: the cancellation is announced', await settle(() => toasts(channel).includes('压缩已取消')))
+    check('scene23: the cancellation is announced', await settle(() => toasts(channel).includes('restruct-plan отменён')))
     check('scene23: the phase ends and the stage is cleared',
       await settle(() => channel.manualCompactionStage === undefined))
     check('scene23: no compaction runs after the cancel', compaction.calls.length === 0)
