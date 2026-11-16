@@ -3480,7 +3480,9 @@ export function PromptInput({
       return
     }
     // Local: Cmd+Z is the draft undo on macOS (upstream leaves Cmd out).
-    if (isMac && key.super && !key.ctrl && input === 'z') {
+    // Chat consumes Ctrl+Z to close the session, so the same undo answers the
+    // terminal's Ctrl+_ byte (0x1f) — the binding the exit branch documents.
+    if ((isMac && key.super && !key.ctrl && input === 'z') || (key.ctrl && !key.super && input === '_')) {
       undoDraft()
       return
     }

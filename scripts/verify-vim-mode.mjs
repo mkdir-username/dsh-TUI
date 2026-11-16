@@ -329,14 +329,15 @@ await settle(() => badge() === 'NORMAL')
 stdin.write('u')
 check("R3: '/' is one vim-undo step (u reverts the slash)", await settled(() => screen().includes('>ab') && !screen().includes('>/ab')), JSON.stringify(screen()))
 // R3: and it must NOT enter the draft stack. After '/' + INSERT typing,
-// Ctrl+Z returns to the text that already holds the '/', never peeling the
-// slash off on its own.
+// Ctrl+_ (the live-chat undo; Chat keeps Ctrl+Z for closing the session)
+// returns to the text that already holds the '/', never peeling the slash off
+// on its own.
 stdin.write('/') // NORMAL → INSERT, slash inserted again
 await settled(() => screen().includes('>/ab') && badge() === 'INSERT')
 stdin.write('x') // INSERT typing after the slash
 await settle(() => screen().includes('>/xab'))
-stdin.write('\x1a') // Ctrl+Z: the draft stack (not the vim one)
-check('R3: Ctrl+Z after slash typing keeps the slash', await settled(() => screen().includes('>/ab') && !screen().includes('>/xab')), JSON.stringify(screen()))
+stdin.write('\x1f') // Ctrl+_: the draft stack (not the vim one)
+check('R3: Ctrl+_ after slash typing keeps the slash', await settled(() => screen().includes('>/ab') && !screen().includes('>/xab')), JSON.stringify(screen()))
 stdin.write('\x1b') // INSERT → NORMAL
 await settle(() => badge() === 'NORMAL')
 await settle(() => badge() === 'NORMAL')
