@@ -82,7 +82,7 @@ for (const source of ['env', 'memory', 'config', 'dsh', 'dsh-rc2', 'proxy-failur
     { id: 'third-party-row', name: pathToFileURL(join(home, 'plugin.js')).href },
   ]))
   const profile = {
-    name: 'verify', dir: profileDir, patchPath, patches: userPatches, skippedBundles: [],
+    name: profileName, dir: profileDir, patchPath, patches: userPatches, skippedBundles: [],
     layers: bundles.map(packageName => ({ packageName, packageDir: profileDir, patchPaths: [], patches: [] })),
   }
   const preparedLayers: string[][] = []

@@ -25,7 +25,7 @@
  */
 import assert from 'node:assert/strict'
 import { execFileSync, spawn } from 'node:child_process'
-import { mkdirSync, mkdtempSync, readFileSync, symlinkSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, realpathSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -214,7 +214,9 @@ const inside = join(roots, 'claude-1000', 'proj', 'sess', 'tasks')
 const outside = mkdtempSync(join(tmpdir(), 'dsh-tui-task-outside-'))
 mkdirSync(inside, { recursive: true })
 {
-  const allowed = [roots]
+  // The guard resolves symlinks before the containment check; macOS tmpdir()
+  // is /var/folders/... whose real path is /private/var/folders/...
+  const allowed = [realpathSync(roots)]
   const file = join(inside, 'tid1.output')
   const big = Array.from({ length: 4000 }, (_, index) => `line ${String(index).padStart(5, '0')} ${'x'.repeat(30)}`).join('\n') + '\n'
   writeFileSync(file, big)
@@ -251,7 +253,7 @@ mkdirSync(inside, { recursive: true })
     unblocker.kill('SIGKILL')
     check('a FIFO named <taskId>.output is refused without blocking (non-blocking open)', fifoRefused && elapsed < 400, elapsed)
   }
-  check('the default roots are the temp dir and the Claude config dir, resolved', taskOutputRoots({ CLAUDE_CONFIG_DIR: roots }).includes(roots))
+  check('the default roots are the temp dir and the Claude config dir, resolved', taskOutputRoots({ CLAUDE_CONFIG_DIR: roots }).includes(realpathSync(roots)))
 }
 
 // ── polling bounds (manual timer) ──────────────────────────────────────

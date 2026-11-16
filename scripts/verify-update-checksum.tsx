@@ -101,7 +101,9 @@ const MANIFEST_STREAM_CHUNKS = 128 // 总量 2MB，注入上限 64KB → 中断�
 const realAssetBytes = makeAssetArchive('legit-new-binary\n')
 const evilAssetBytes = makeAssetArchive('evil-tampered-binary\n')
 const realDigest = createHash('sha256').update(realAssetBytes).digest('hex')
-const ASSET_NAME = 'dsh-tui-standalone-linux-x64.tar.gz'
+// The updater resolves the asset for THIS host; a hardcoded linux name makes
+// every checksum assertion fail on macOS (the release no longer lists it).
+const ASSET_NAME = (updateModule.getStandaloneAssetName as () => string)()
 
 const server = http.createServer(async (req, res) => {
   const url = req.url ?? ''
