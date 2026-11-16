@@ -93,24 +93,53 @@
   # active. Newer packages disable it only when the shipped standard preset
   # really owns the command; reading the capability avoids guessing from
   # another optional Loader row.
+  #
+  # A missing package is the documented legacy shape and stays silent. Any
+  # other failure (EACCES, a broken package tree, no profile root) means the
+  # probe could not answer: the host row stays enabled AND the reason is
+  # logged, so the fallback is not a silent choice of the newer shape.
   disabled: !!js >-
     (() => {
-      const require = process.getBuiltinModule('node:module').createRequire(ctx.baseUrl)
-      const fs = process.getBuiltinModule('node:fs')
-      const path = process.getBuiltinModule('node:path')
+      const unresolved = (probe, error) => {
+        const reason = error?.code ?? error?.message ?? String(error)
+        ctx.logger?.warn?.(`dsh-tui: capability probe for command-goal could not resolve ${probe} (${reason}); keeping the host command row enabled`)
+        return false
+      }
+      const absent = error => error?.code === 'MODULE_NOT_FOUND'
+      if (!ctx.baseUrl) return unresolved('the profile root', new Error('ctx.baseUrl is unavailable'))
+      let require
+      try {
+        require = process.getBuiltinModule('node:module').createRequire(ctx.baseUrl)
+      } catch (error) {
+        return unresolved('the profile root', error)
+      }
       try {
         require.resolve('@deepseek-ai/dsh-agent-preset-registry/package.json')
         return true
-      } catch {}
-      try {
-        const manifest = require.resolve('@deepseek-ai/dsh-agent-presets/package.json')
-        const preset = path.join(path.dirname(manifest), 'presets', 'standard', 'agent.cordis.yml')
-        return fs.readFileSync(preset, 'utf8')
-          .split(/\r?\n/u)
-          .some(line => line.trim() === '- id: command-goal')
-      } catch {
-        return false
+      } catch (error) {
+        // The registry replaces directory discovery on the newer generation;
+        // its absence is the documented middle of the version range.
+        if (!absent(error)) return unresolved('@deepseek-ai/dsh-agent-preset-registry/package.json', error)
       }
+      let manifest
+      try {
+        manifest = require.resolve('@deepseek-ai/dsh-agent-presets/package.json')
+      } catch (error) {
+        if (absent(error)) return false
+        return unresolved('@deepseek-ai/dsh-agent-presets/package.json', error)
+      }
+      const path = process.getBuiltinModule('node:path')
+      const preset = path.join(path.dirname(manifest), 'presets', 'standard', 'agent.cordis.yml')
+      let text
+      try {
+        text = process.getBuiltinModule('node:fs').readFileSync(preset, 'utf8')
+      } catch (error) {
+        // Generations without a bundled presets/ directory have no file to
+        // read: the same documented absence as a missing package.
+        if (error?.code === 'ENOENT' || error?.code === 'ENOTDIR') return false
+        return unresolved(preset, error)
+      }
+      return text.split(/\r?\n/u).some(line => line.trim() === '- id: command-goal')
     })()
 
 - id: tool-goal
@@ -320,20 +349,36 @@
         })()
       config: !!js >-
         (() => {
-          const require = process.getBuiltinModule('node:module').createRequire(ctx.baseUrl)
-          const fs = process.getBuiltinModule('node:fs')
           const path = process.getBuiltinModule('node:path')
-          try {
-            const manifest = require.resolve('@deepseek-ai/dsh-agent-presets/package.json')
-            if (fs.existsSync(path.join(path.dirname(manifest), 'presets'))) {
-              return { default: 'standard' }
-            }
-          } catch {
-            // Let the roster import report a missing package; preserve the rc
-            // root fallback below for every package generation without one.
+          const absent = error => error?.code === 'MODULE_NOT_FOUND'
+          const unresolved = (probe, error) => {
+            const reason = error?.code ?? error?.message ?? String(error)
+            ctx.logger?.warn?.(`dsh-tui: capability probe for the agent-preset roster could not resolve ${probe} (${reason}); falling back to the CLI preset root`)
           }
           const base = ctx.baseUrl
-          if (!base) return { default: 'standard' }
+          if (!base) {
+            unresolved('the profile root', new Error('ctx.baseUrl is unavailable'))
+            return { default: 'standard' }
+          }
+          let require
+          try {
+            require = process.getBuiltinModule('node:module').createRequire(base)
+          } catch (error) {
+            unresolved('the profile root', error)
+            return { default: 'standard' }
+          }
+          try {
+            const manifest = require.resolve('@deepseek-ai/dsh-agent-presets/package.json')
+            if (process.getBuiltinModule('node:fs').existsSync(path.join(path.dirname(manifest), 'presets'))) {
+              return { default: 'standard' }
+            }
+          } catch (error) {
+            // The rc.2 generation ships no bundled presets directory; that
+            // absence is expected and keeps the CLI root below without a
+            // warning. Anything else is reported: the fallback root would
+            // otherwise be chosen silently.
+            if (!absent(error)) unresolved('@deepseek-ai/dsh-agent-presets/package.json', error)
+          }
           const root = new URL('../node_modules/@deepseek-ai/dsh/config/agent-presets/', base)
           let rootPath = decodeURIComponent(root.pathname)
           if (/^\/[A-Za-z]:/.test(rootPath)) rootPath = rootPath.slice(1)

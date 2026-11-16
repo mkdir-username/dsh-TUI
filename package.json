@@ -161,6 +161,7 @@
     "verify:manifest-deps": "node --import tsx/esm scripts/verify-manifest-deps.ts",
     "verify:oauth": "node scripts/verify-oauth.mjs && node --import tsx/esm scripts/verify-coupon-notification-lifecycle.ts && node --import tsx/esm scripts/verify-coupon-paint.tsx && node --import tsx/esm scripts/verify-account-notification-poll.ts && node --import tsx/esm scripts/verify-account-notification-state.ts && node --import tsx/esm scripts/verify-account-notification-owner.ts && node --import tsx/esm scripts/verify-account-notification-paint.tsx && node --import tsx/esm scripts/verify-account-notification-stable-frame.tsx && node --import tsx/esm scripts/verify-account-notification-chat-geometry.tsx",
     "verify:patch-surface": "node --import tsx/esm scripts/verify-patch-surface.ts && node --import tsx/esm scripts/verify-lite-profile-rows.mjs",
+    "verify:patch-probes": "node scripts/verify-patch-probes.mjs",
     "verify:fixed-window": "node scripts/verify-fixed-window.mjs",
     "verify:subagent-failure": "node --import tsx/esm scripts/verify-subagent-failure.ts",
     "verify:web-coexistence": "node scripts/verify-web-coexistence.mjs",
