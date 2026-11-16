@@ -287,6 +287,17 @@ preset registry: `@deepseek-ai/dsh-agent-preset-registry` on 0.1.7, or
   rc rosters keep their real `code` id, and session logs are never rewritten.
 - Resuming a session restores the preset recorded in that session's log and
   does not overwrite it with the current default.
+- A requested preset that the local roster does not have, or cannot resolve,
+  **fails before the agent is published** and carries the reason instead of
+  quietly swapping in the host composition. A host without the roster keeps the
+  documented host-composition path and logs one warning.
+- A preset recorded in a session log that this host no longer has does not make
+  the transcript unresumable: the session runs on the host composition after a
+  warning and the log is not rewritten, so old logs, downgrades and machines
+  without the preset stay restorable.
+- A malformed `preset-patch` declaration (no non-empty `preset`, `config` not a
+  map) fails startup and names the declaring row id. Several declarations for
+  one preset still merge; an unknown preset only warns.
 
 ### Liangshen mode
 
@@ -401,7 +412,7 @@ for the complete field reference.
 | `DEEPSEEK_API_KEY` | Required DeepSeek credential |
 | `DEEPSEEK_BASE_URL` | Override the compatible DeepSeek API endpoint |
 | `DSH_HOME` | Harness home (profiles, sessions, credentials, attachments); falls back to the upstream default `~/.dsh` |
-| `DSH_TUI_PERSONA` | Override the Agent persona injected by the composition |
+| `DSH_TUI_PERSONA` | Override the Agent persona injected by the composition; both configuration slots (`personaPrefix` and the legacy `persona`) are filled, so the host keeps the one its schema knows; unset stays an empty persona |
 | `DSH_TUI_PRESET` | Override the default Agent preset for new sessions |
 | `DSH_TUI_THEME` | Pin a built-in (`auto`/`light`/`dark`/`dark-ansi`/`pink-day`/`pink-night`/`pink-ansi`), static theme, or registered plugin theme ahead of persisted selection |
 | `DSH_TUI_DISABLE_MOUSE` | Temporarily disable mouse handling in fullscreen mode |

@@ -252,6 +252,13 @@ DeepSeek 品牌下，开启标题图形（`whale`）时，`companion.skin` 与�
 - 名册不再提供 `code` 时，旧偏好回退解析为 `ptc`，解析成功后迁移；rc 名册
   仍保留真实 `code` id，历史会话日志始终不改写。
 - 恢复旧会话时，以该会话日志记录的 preset 为准，不读取当前默认值覆盖它。
+- 请求的 preset 在本机名册里不存在或无法解析时，**在发布 Agent 之前失败**并带出原因，
+  不会悄悄换成宿主组合；宿主根本没有名册（老版本、最小组合）时保留文档化的宿主组合
+  路径，并记录一条警告。
+- 会话日志里记录的 preset 在本机已经丢失时，会话仍可恢复：记一条警告后按宿主组合运行，
+  日志不改写——旧日志、降级与跨机器迁移不会因此变成不可恢复。
+- `preset-patch` 声明不合法（`preset` 不是非空字符串、`config` 不是映射）时启动失败，
+  错误里带声明行的 id；同一 preset 的多条声明继续合并，指向未知 preset 只警告。
 
 ### 梁神模式
 
@@ -352,7 +359,7 @@ Profile 模式不再使用旧的 `DSH_TUI_COMPACT_RATIO`、`DSH_TUI_COMPACT_RETA
 | `DEEPSEEK_API_KEY` | DeepSeek 凭证；运行模型的必需项 |
 | `DEEPSEEK_BASE_URL` | 覆盖 DeepSeek 兼容 API 端点 |
 | `DSH_HOME` | harness 家目录（profile、会话、凭据、附件）；未设置时用上游默认 `~/.dsh` |
-| `DSH_TUI_PERSONA` | 覆盖组合注入的 Agent persona |
+| `DSH_TUI_PERSONA` | 覆盖组合注入的 Agent persona；同时写入新旧两个配置槽（`personaPrefix` 与旧名 `persona`），宿主取自己 schema 认识的那个，未设置时保持空 persona |
 | `DSH_TUI_PRESET` | 覆盖新会话默认 Agent preset |
 | `DSH_TUI_THEME` | 锁定内置（`auto`/`light`/`dark`/`dark-ansi`/`pink-day`/`pink-night`/`pink-ansi`）、静态主题或已注册的插件主题，优先于持久化选择 |
 | `DSH_TUI_DISABLE_MOUSE` | 在 fullscreen 模式临时关闭鼠标处理 |
