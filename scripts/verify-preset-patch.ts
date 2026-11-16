@@ -154,6 +154,15 @@ assert.equal(await runAsSideBranch(closing, agent, async () => 'ran'), 'ran', 'c
   assert.equal(warnings.length, 1, 'a recorded preset on a rosterless host is announced')
   assert.match(warnings[0]!, /liangshen/u, 'the warning names the preset')
 
+  // Callers build partial contexts too (headless surfaces, tests): announcing
+  // an absent preset must not turn the documented legacy path into a crash.
+  const ctxWithoutLogger = { get: () => undefined } as never
+  assert.deepEqual(
+    await composePreset(ctxWithoutLogger, 'liangshen', { recorded: true }),
+    {},
+    'a rosterless host without a logger still composes nothing',
+  )
+
   const roster = {
     defaultId: 'standard',
     list: async () => [{ id: 'standard' }],

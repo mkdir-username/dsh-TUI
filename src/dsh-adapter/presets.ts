@@ -110,7 +110,7 @@ export async function composePreset(
   const presets = rosterOf(ctx)
   if (presets === undefined) {
     if (requested !== undefined) {
-      ctx.logger.warn(
+      ctx.logger?.warn?.(
         `dsh-tui: agent preset "${requested}" cannot be composed on this host ` +
           '(no agentPresets service) — the session runs on the host composition',
       )
@@ -122,7 +122,7 @@ export async function composePreset(
     try {
       return await settled(requested)
     } catch (error) {
-      ctx.logger.warn(
+      ctx.logger?.warn?.(
         `dsh-tui: agent preset "${requested}" recorded by the session cannot be composed ` +
           `(${error instanceof Error ? error.message : String(error)}) — the session runs on the host composition`,
       )
