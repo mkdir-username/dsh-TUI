@@ -1690,8 +1690,18 @@ check(
 
 console.log('cross-process occupancy:')
 check('the occupied row is listed', text().includes('held session'))
-check('the occupied row carries the badge', line(rowOf('held session')).includes('held by pid'))
-check('the occupied row names the holder pid', text().includes(String(FOREIGN_PID)))
+// The screen reads the ledger on its OWN pulse: under CI load the first tick
+// can land after this render, so the badge/pid assertions poll like the rest.
+check(
+  'the occupied row carries the badge',
+  await settled(() => line(rowOf('held session')).includes('held by pid')),
+  text(),
+)
+check(
+  'the occupied row names the holder pid',
+  await settled(() => text().includes(String(FOREIGN_PID))),
+  text(),
+)
 
 // Click the title text itself (located by search), not a control cell: a
 // hard-coded x would land in the rail on any width where the rail is visible,
@@ -1731,7 +1741,10 @@ console.log('occupancy follows the LEDGER, not a snapshot taken at first render'
   await settled(() => app.lines().join('\n').includes('Sessions in Alpha'))
   check(
     'the ledger holder is shown while the peer is alive',
-    app.lines().some(line => line.includes('held session') && line.includes('held by pid')),
+    await settled(
+      () => app.lines().some(line => line.includes('held session') && line.includes('held by pid')),
+      { timeoutMs: 8_000 },
+    ),
     app.lines().join('\n'),
   )
   writeFileSync(ledgerPath, owner([]), 'utf8')
