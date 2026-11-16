@@ -906,6 +906,12 @@ const GROUPS = {
 // 的 `/…` run 触发——嵌在消息中间也弹菜单、Tab/Enter 只替换该 run、Esc 只收
 // 菜单不清草稿，行首 Enter 仍直接执行命令。
     ["verify-command-completion", ['node', '--import', 'tsx/esm', 'scripts/verify-command-completion.tsx']],
+// Arrow ownership of the `/` menu: while the completion list is open, ↑/↓ move
+// the list only — a multiline draft or a folded paste block (`▸ 12 lines・…`)
+// must not let the caret branch take the key, jump the caret to the block head
+// and close the menu. A history walk still holds the arrows (#673); Esc closes
+// the menu and gives the caret back.
+    ["verify-command-menu-arrows", ['node', '--import', 'tsx/esm', 'scripts/verify-command-menu-arrows.tsx']],
   ],
   'channel-ui': [
 // L4 composition boundary plus report/metadata lifetime fences.

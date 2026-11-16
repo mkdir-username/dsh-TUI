@@ -3221,6 +3221,17 @@ export function PromptInput({
         )
         return
       }
+      // The slash menu owns the arrows ahead of any caret movement: a draft
+      // may hold a folded paste block or several lines, and the caret branch
+      // would eat the key, step out of the `/…` run and close the menu — the
+      // list row would never move. Esc closes the menu and hands the arrows
+      // back (a history walk keeps them until it returns to the draft, #673).
+      if (overlayOpen && historyIndex.current < 0) {
+        setSelectedCommand(index =>
+          index <= 0 ? suggestions.length - 1 : index - 1,
+        )
+        return
+      }
       // With a fold block the caret in the tail walks the TAIL's lines
       // (the block is one atomic row); the first tail line steps over the
       // block to its head.
@@ -3249,12 +3260,6 @@ export function PromptInput({
           upToLineStart === -1 ? 0 : value.lastIndexOf('\n', upToLineStart - 1) + 1
         const prevLine = value.slice(prevLineStart, upToLineStart)
         setInput(value, prevLineStart + Math.min(cursorColumn(value, cursor), prevLine.length))
-        return
-      }
-      if (overlayOpen && historyIndex.current < 0) {
-        setSelectedCommand(index =>
-          index <= 0 ? suggestions.length - 1 : index - 1,
-        )
         return
       }
       // An EMPTY draft while idle with a docked queue takes ↑ into the dock
@@ -3308,9 +3313,17 @@ export function PromptInput({
         )
         return
       }
+      // Mirror of ↑: the slash menu owns ↓ ahead of the caret/block walk, so
+      // a folded block or a multi-line draft cannot steal the key.
+      if (overlayOpen && historyIndex.current < 0) {
+        setSelectedCommand(index =>
+          index >= suggestions.length - 1 ? 0 : index + 1,
+        )
+        return
+      }
       // Mirror of the tail-side ↑ walk: with a fold block the caret walks
-      // the TAIL's lines; past its last line it falls through to the
-      // overlay/history handling below.
+      // the TAIL's lines; past its last line it falls through to the history
+      // walk below.
       if (block && cursor >= block.end) {
         const tailCursor = cursor - block.end
         const line = cursorLine(tail, tailCursor)
@@ -3359,12 +3372,6 @@ export function PromptInput({
           nextLineEnd === -1 ? value.length : nextLineEnd,
         )
         setInput(value, nextLineStart + Math.min(cursorColumn(value, cursor), nextLine.length))
-        return
-      }
-      if (overlayOpen && historyIndex.current < 0) {
-        setSelectedCommand(index =>
-          index >= suggestions.length - 1 ? 0 : index + 1,
-        )
         return
       }
       // A walk cut short by a workspace switch has no position in the new
