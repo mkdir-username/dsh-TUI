@@ -1,0 +1,17 @@
+{
+  "repository": "https://github.com/deepseek-ai/deepseek-harness",
+  "version": "0.2.2-rc.3",
+  "packages": [
+    "@deepseek-ai/dsh-agent",
+    "@deepseek-ai/dsh-agent-loop",
+    "@deepseek-ai/dsh-agent-preset-registry",
+    "@deepseek-ai/dsh-llm",
+    "@deepseek-ai/dsh-session",
+    "@deepseek-ai/dsh-session-projection",
+    "@deepseek-ai/dsh-system-prompt",
+    "@deepseek-ai/dsh-tool-executor-native",
+    "@deepseek-ai/dsh-tools"
+  ],
+  "sources": {},
+  "note": "upstream sources are not pinned here: no clone of the repository exists on this machine; the cohort is the installed package version"
+}
