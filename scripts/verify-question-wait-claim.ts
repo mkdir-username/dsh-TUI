@@ -90,21 +90,25 @@ async function harness(): Promise<Harness> {
   ctx.provide('agents')
   ;(ctx as unknown as { agents: unknown }).agents = { get: (id: string) => (id === agent.id ? agent : undefined) }
   const service = new UserQuestionService(ctx)
+  // The live composition hands both the tool and this binding the traceable
+  // proxy from `ctx.get`, not the raw instance: the claim has to work through it.
+  const host = ctx.get('userQuestions') as typeof service
+  if (host !== service) assert.equal(typeof host.attachWait, 'function', 'the proxy exposes attachWait')
   const store = new QuestionStore()
-  const registration = prepareQuestionAnswerer(ctx as never, service, store)
+  const registration = prepareQuestionAnswerer(ctx as never, host, store)
   if (registration.kind !== 'waterfall') throw new Error('the regression needs the waterfall answerer')
   registration.register({ agentId: agent.id })
   const claims: string[] = []
   const spy = {
     attachWait: (agent: unknown, callId: string, signal: AbortSignal) => {
       claims.push(callId)
-      return service.attachWait(agent as never, callId as never, signal)
+      return host.attachWait(agent as never, callId as never, signal)
     },
   }
   const claim = createQuestionWaitClaim(spy, { log: () => {} })
   if (claim === undefined) throw new Error('the host exposes attachWait, so a claim must exist')
   store.setActivityObserver(claim)
-  return { agent, service: service as never, store, claims, claim } as Harness
+  return { agent, service: host as never, store, claims, claim } as Harness
 }
 
 const question = { id: 'q1', question: 'Which colour?', options: [{ label: 'Red' }] }
