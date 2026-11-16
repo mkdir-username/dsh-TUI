@@ -110,6 +110,7 @@ import { adapterRuntimeFor } from '../adapter/kernel/runtime-context.js'
 import { ApprovalStore, bindApprovalStore, reasonOf } from './approvals.js'
 import { PermissionStore } from '../channel/permissions.js'
 import { registerPromptDebug } from './promptDebug.js'
+import { registerModelInputValidation } from './model-input-validation.js'
 import { readActivityFrames } from '../activityPrefs.js'
 import { commitFullscreenFactoryMigration, planFullscreenFactoryMigration, readAppliedMigrations } from '../migrationPrefs.js'
 import { readModelPref } from '../modelPrefs.js'
@@ -1388,6 +1389,7 @@ export async function apply(ctx: Context, runtimeConfig: RuntimeConfig<Config>, 
     })
     // `/debug-prompt` snapshots the final provider-neutral request at the
     // llm/stream boundary, after every prompt and tool contributor has run.
+    registerModelInputValidation(dshCtx)
     registerPromptDebug(dshCtx)
     // API selection and registration live behind one adapter boundary. The UI
     // bootstrap only translates a legacy seat conflict into its visible notice.
