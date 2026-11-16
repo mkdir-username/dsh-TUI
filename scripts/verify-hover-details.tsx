@@ -581,7 +581,8 @@ try {
     await sleep(150) // 固定窗:pacing 换实例前等上一个卸载收尾
   }
 
-  // K2. 缺席（DSH 会话）：渲染逐字节等于改动前的输出。
+  // K2. 缺席（DSH 会话）：渲染逐字节钉住左右分组的底栏布局
+  // （e5259120：mode 段在左组尾部，标题在右组）。
   const DSH_GOLDEN = [
     {
       key: '基础模式（不显示 mode 段）',
@@ -592,20 +593,20 @@ try {
     {
       key: '标记模式（Shift+Tab 到第 2 档）',
       channel: { ...K_STUB, modeIndex: 1 },
-      line: ' TM · 默认 · dsh-tui',
-      sig: '1@ffffff/ffffff 2@aab2c2/ffffff 3@8d95a6/ffffff 4@d8b270/ffffff 3@8d95a6/ffffff 7@aab2c2/ffffff 40@ffffff/ffffff',
+      line: ' TM · dsh-tui · 默认',
+      sig: '1@ffffff/ffffff 2@aab2c2/ffffff 3@8d95a6/ffffff 7@aab2c2/ffffff 3@8d95a6/ffffff 4@d8b270/ffffff 40@ffffff/ffffff',
     },
     {
       key: '计划模式',
       channel: { ...K_STUB, mode: { id: 'plan', plan: true, sandbox: 'read-only', approval: 'ask' } },
-      line: ' TM · 计划模式 · dsh-tui',
-      sig: '1@ffffff/ffffff 2@aab2c2/ffffff 3@8d95a6/ffffff 8@7fae99/ffffff 3@8d95a6/ffffff 7@aab2c2/ffffff 36@ffffff/ffffff',
+      line: ' TM · dsh-tui · 计划模式',
+      sig: '1@ffffff/ffffff 2@aab2c2/ffffff 3@8d95a6/ffffff 7@aab2c2/ffffff 3@8d95a6/ffffff 8@7fae99/ffffff 36@ffffff/ffffff',
     },
     {
       key: '完全访问（danger-full-access + approval never）',
       channel: { ...K_STUB, mode: { id: 'full', plan: false, sandbox: 'danger-full-access', approval: 'never' } },
-      line: ' TM · 完全访问 · dsh-tui',
-      sig: '1@ffffff/ffffff 2@aab2c2/ffffff 3@8d95a6/ffffff 8@d8b270/ffffff 3@8d95a6/ffffff 7@aab2c2/ffffff 36@ffffff/ffffff',
+      line: ' TM · dsh-tui · 完全访问',
+      sig: '1@ffffff/ffffff 2@aab2c2/ffffff 3@8d95a6/ffffff 7@aab2c2/ffffff 3@8d95a6/ffffff 8@d8b270/ffffff 36@ffffff/ffffff',
     },
   ]
   for (const golden of DSH_GOLDEN) {
