@@ -1,5 +1,7 @@
 /**
- * Offline Task* → todo panel regression through the translator and projector.
+ * Offline Task* → todo snapshot regression through the translator and projector.
+ * The fork has no Todo panel: the projector drops todo.write, so the assertions
+ * below read the translated snapshot stream and one check pins the empty panel.
  * TaskCreate/Update/List/Get apply from their results; failed updates preserve
  * the current table, while TodoWrite keeps its input-driven whole-list path.
  * Covers resume seeds and the additive allowedTools policy without replacing
@@ -63,6 +65,10 @@ function frames() {
 }
 
 const todosOf = (events: readonly AgentEvent[]): readonly AgentEvent[] => events.filter(event => event.type === 'todo.write')
+const lastSnapshotItems = (events: readonly AgentEvent[]) => {
+  const last = todosOf(events).at(-1)
+  return last === undefined ? [] : items(last)
+}
 const items = (event: AgentEvent | undefined): { content: string; status: string }[] =>
   event !== undefined && event.type === 'todo.write' ? event.items.map(item => ({ content: item.content, status: item.status })) : []
 const same = (actual: unknown, expected: unknown): boolean => JSON.stringify(actual) === JSON.stringify(expected)
@@ -118,8 +124,8 @@ const first = scenario(f => [
     writes.map(event => items(event)))
   check('update: the input patches status in place, order untouched',
     same(items(writes[2]), [{ content: 'First chore', status: 'completed' }, { content: 'Second chore', status: 'pending' }]), items(writes[2]))
-  check('panel state adopts the last snapshot',
-    same(first.harness.state.todos, [{ content: 'First chore', status: 'completed' }, { content: 'Second chore', status: 'pending' }]), first.harness.state.todos)
+  check('the projector drops todo.write: no Todo panel to feed (fork decision)',
+    first.harness.state.todos.length === 0, first.harness.state.todos)
   check('never a card: no tool rows, every call suppressed as todo',
     first.harness.state.rows.every(row => row.kind !== 'tool') && first.events.every(event => event.type !== 'tool.call' || event.presentation?.card === 'todo'),
     first.harness.state.rows.map(row => row.kind))
@@ -143,7 +149,7 @@ const deleted = scenario(f => [
 {
   const last = items(todosOf(deleted.events).at(-1))
   check('deleted: gone from the snapshot, the survivor keeps its place', same(last, [{ content: 'Keep', status: 'pending' }]), last)
-  check('deleted: the panel state cleared it too', same(deleted.harness.state.todos, [{ content: 'Keep', status: 'pending' }]), deleted.harness.state.todos)
+  check('deleted: the last snapshot cleared it too', same(lastSnapshotItems(deleted.events), [{ content: 'Keep', status: 'pending' }]), lastSnapshotItems(deleted.events))
   const unknown = scenario(f => [
     f.call('TaskUpdate', { taskId: 'never-created', status: 'completed' }),
     f.resultOf(1, { success: false, taskId: 'never-created', updatedFields: [], error: 'not found' }),
@@ -180,8 +186,8 @@ const synced = scenario(f => [
     same(afterList, [{ content: 'Local A', status: 'pending' }, { content: 'Fresh C', status: 'in_progress' }]), afterList)
   check('TaskGet result wins: renamed and completed in place',
     same(items(writes.at(-1)), [{ content: 'Local A', status: 'pending' }, { content: 'Fresh C (done)', status: 'completed' }]), items(writes.at(-1)))
-  check('sync: the panel state matches the authoritative view',
-    same(synced.harness.state.todos, [{ content: 'Local A', status: 'pending' }, { content: 'Fresh C (done)', status: 'completed' }]), synced.harness.state.todos)
+  check('sync: the last snapshot matches the authoritative view',
+    same(lastSnapshotItems(synced.events), [{ content: 'Local A', status: 'pending' }, { content: 'Fresh C (done)', status: 'completed' }]), lastSnapshotItems(synced.events))
   const missing = scenario(f => [
     f.call('TaskCreate', { subject: 'Survivor', description: 'stays' }),
     f.resultOf(1, { task: { id: 's', subject: 'Survivor' } }),
@@ -208,10 +214,10 @@ const synced = scenario(f => [
   const writes = todosOf(legacy.events)
   check('TodoWrite: exactly one snapshot, straight from the input',
     writes.length === 1 && same(items(writes[0]), [{ content: 'Write tests', status: 'in_progress' }, { content: 'Ship it', status: 'pending' }]), writes.map(event => items(event)))
-  check('TodoWrite: activeForm still dropped, panel adopts as-is',
-    same(legacy.harness.state.todos, [{ content: 'Write tests', status: 'in_progress' }, { content: 'Ship it', status: 'pending' }])
+  check('TodoWrite: activeForm still dropped; the snapshot is the input verbatim',
+    same(lastSnapshotItems(legacy.events), [{ content: 'Write tests', status: 'in_progress' }, { content: 'Ship it', status: 'pending' }])
       && writes[0] !== undefined && writes[0].type === 'todo.write' && writes[0].items.every(item => !('activeForm' in item)),
-    legacy.harness.state.todos)
+    lastSnapshotItems(legacy.events))
   const mixed = scenario(f => [
     f.call('TaskCreate', { subject: 'Task-family entry', description: 'x' }),
     f.resultOf(1, { task: { id: 't', subject: 'Task-family entry' } }),
@@ -220,8 +226,8 @@ const synced = scenario(f => [
     f.turnEnd(),
   ])
   const mixedWrites = todosOf(mixed.events)
-  check('TodoWrite after a task snapshot: the whole-list write still wins the panel (last write wins)',
-    same(items(mixedWrites.at(-1)), [{ content: 'Legacy entry', status: 'completed' }]) && same(mixed.harness.state.todos, [{ content: 'Legacy entry', status: 'completed' }]), mixed.harness.state.todos)
+  check('TodoWrite after a task snapshot: the whole-list write is the last snapshot (last write wins)',
+    same(items(mixedWrites.at(-1)), [{ content: 'Legacy entry', status: 'completed' }]) && same(lastSnapshotItems(mixed.events), [{ content: 'Legacy entry', status: 'completed' }]), lastSnapshotItems(mixed.events))
 }
 
 // ── options: additive + pre-approved, the preset untouched ───────────────
@@ -326,8 +332,8 @@ const synced = scenario(f => [
     f.resultOf(3, undefined, true),
     f.turnEnd(),
   ])
-  check('failed delete: the task stays on the panel (the CLI did not drop it)',
-    same(failedDelete.harness.state.todos, [{ content: 'Keep', status: 'pending' }, { content: 'Drop', status: 'pending' }]), failedDelete.harness.state.todos)
+  check('failed delete: the snapshot keeps both tasks (the CLI did not drop one)',
+    same(lastSnapshotItems(failedDelete.events), [{ content: 'Keep', status: 'pending' }, { content: 'Drop', status: 'pending' }]), lastSnapshotItems(failedDelete.events))
   check('… the pending delete and its failure emitted no snapshot', todosOf(failedDelete.events).length === 2, todosOf(failedDelete.events).length)
   check('… the suppressed-card path still renders the failure card (the user sees why)',
     failureCards(failedDelete.harness).length === 1 && failureCards(failedDelete.harness)[0]?.tool?.errorText === 'ok', failureCards(failedDelete.harness).map(card => card.tool))
@@ -342,8 +348,8 @@ const synced = scenario(f => [
     f.resultOf(3, { success: false, taskId: 't', updatedFields: ['subject'], error: 'read-only' }),
     f.turnEnd(),
   ])
-  check('success:false without is_error: status and subject stay unchanged',
-    same(refused.harness.state.todos, [{ content: 'Chore', status: 'pending' }]), refused.harness.state.todos)
+  check('success:false without is_error: the last snapshot keeps status and subject unchanged',
+    same(lastSnapshotItems(refused.events), [{ content: 'Chore', status: 'pending' }]), lastSnapshotItems(refused.events))
   check('… and both failures surface as error cards', failureCards(refused.harness).length === 2, failureCards(refused.harness).length)
 
   // The rename result arrives first; the later failed result changes nothing.
@@ -357,7 +363,7 @@ const synced = scenario(f => [
     f.turnEnd(),
   ])
   check('out-of-order: rename succeeds, failed completion leaves Renamed/pending',
-    same(outOfOrder.harness.state.todos, [{ content: 'Renamed', status: 'pending' }]), outOfOrder.harness.state.todos)
+    same(lastSnapshotItems(outOfOrder.events), [{ content: 'Renamed', status: 'pending' }]), lastSnapshotItems(outOfOrder.events))
 
   // Both updates fail, with their results arriving in reverse order.
   const bothFailed = scenario(f => [
@@ -370,7 +376,7 @@ const synced = scenario(f => [
     f.turnEnd(),
   ])
   check('both failed in reverse: the confirmed state remains unchanged',
-    same(bothFailed.harness.state.todos, [{ content: 'B', status: 'pending' }]), bothFailed.harness.state.todos)
+    same(lastSnapshotItems(bothFailed.events), [{ content: 'B', status: 'pending' }]), lastSnapshotItems(bothFailed.events))
 
   // Both updates fail, with their results arriving in call order.
   const bothFailedInOrder = scenario(f => [
@@ -383,7 +389,7 @@ const synced = scenario(f => [
     f.turnEnd(),
   ])
   check('both failed in emission order: the confirmed state remains unchanged',
-    same(bothFailedInOrder.harness.state.todos, [{ content: 'B2', status: 'pending' }]), bothFailedInOrder.harness.state.todos)
+    same(lastSnapshotItems(bothFailedInOrder.events), [{ content: 'B2', status: 'pending' }]), lastSnapshotItems(bothFailedInOrder.events))
 
   // A successful delete stays deleted after an earlier update fails.
   const deletedThenFail = scenario(f => [
@@ -396,7 +402,7 @@ const synced = scenario(f => [
     f.turnEnd(),
   ])
   check('delete success then older failure: the task stays deleted (no resurrection)',
-    same(deletedThenFail.harness.state.todos, []), deletedThenFail.harness.state.todos)
+    same(lastSnapshotItems(deletedThenFail.events), []), lastSnapshotItems(deletedThenFail.events))
 
   // A TaskList result clears pending updates; their late results cannot rebuild omitted tasks.
   const ghost = scenario(f => [
@@ -409,7 +415,7 @@ const synced = scenario(f => [
     f.turnEnd(),
   ])
   check('late success of an update cleared by TaskList fabricates nothing',
-    same(ghost.harness.state.todos, []), ghost.harness.state.todos)
+    same(lastSnapshotItems(ghost.events), []), lastSnapshotItems(ghost.events))
 
   // A new update after TaskList applies to the list's current record.
   const rebuild = scenario(f => [
@@ -424,7 +430,7 @@ const synced = scenario(f => [
     f.turnEnd(),
   ])
   check('TaskList record stands; a later update applies to its current state',
-    same(rebuild.harness.state.todos, [{ content: 'A relaunched', status: 'completed' }]), rebuild.harness.state.todos)
+    same(lastSnapshotItems(rebuild.events), [{ content: 'A relaunched', status: 'completed' }]), lastSnapshotItems(rebuild.events))
 
   // An empty TaskList also clears an unknown-id update before it can create an entry.
   const unknownGhost = scenario(f => [
@@ -435,7 +441,7 @@ const synced = scenario(f => [
     f.turnEnd(),
   ])
   check('an unknown-id update cleared by an empty TaskList fabricates nothing',
-    same(unknownGhost.harness.state.todos, []), unknownGhost.harness.state.todos)
+    same(lastSnapshotItems(unknownGhost.events), []), lastSnapshotItems(unknownGhost.events))
 
   // A new update applies after TaskList reintroduces the id.
   const unknownRebuild = scenario(f => [
@@ -448,7 +454,7 @@ const synced = scenario(f => [
     f.turnEnd(),
   ])
   check('unknown-id update after TaskList uses its reintroduced record',
-    same(unknownRebuild.harness.state.todos, [{ content: 'A relaunched', status: 'completed' }]), unknownRebuild.harness.state.todos)
+    same(lastSnapshotItems(unknownRebuild.events), [{ content: 'A relaunched', status: 'completed' }]), lastSnapshotItems(unknownRebuild.events))
 
   // A late failed update leaves the authoritative List result unchanged.
   const authoritative = scenario(f => [
@@ -461,7 +467,7 @@ const synced = scenario(f => [
     f.turnEnd(),
   ])
   check('authoritative List wins over the late failure',
-    same(authoritative.harness.state.todos, [{ content: 'C', status: 'in_progress' }]), authoritative.harness.state.todos)
+    same(lastSnapshotItems(authoritative.events), [{ content: 'C', status: 'in_progress' }]), lastSnapshotItems(authoritative.events))
   const deletedSync = scenario(f => [
     f.call('TaskCreate', { subject: 'D', description: 'x' }),
     f.resultOf(1, { task: { id: 'd', subject: 'D' } }),
@@ -472,7 +478,7 @@ const synced = scenario(f => [
     f.turnEnd(),
   ])
   check('… a delete the List confirmed stays gone (the failure does not resurrect it)',
-    same(deletedSync.harness.state.todos, []), deletedSync.harness.state.todos)
+    same(lastSnapshotItems(deletedSync.events), []), lastSnapshotItems(deletedSync.events))
 
   // TodoWrite clears the task table; a subsequent update starts from its result.
   const legacyWins = scenario(f => [
@@ -485,7 +491,7 @@ const synced = scenario(f => [
     f.turnEnd(),
   ])
   check('TodoWrite success clears the stale Task* view: the later update confirms on a clean table (no empty-panel glitch)',
-    same(legacyWins.harness.state.todos, [{ content: 'Chore done', status: 'completed' }]), legacyWins.harness.state.todos)
+    same(lastSnapshotItems(legacyWins.events), [{ content: 'Chore done', status: 'completed' }]), lastSnapshotItems(legacyWins.events))
   const legacyOnly = scenario(f => [
     f.call('TaskCreate', { subject: 'Chore', description: 'x' }),
     f.resultOf(1, { task: { id: 't', subject: 'Chore' } }),
@@ -494,7 +500,7 @@ const synced = scenario(f => [
     f.turnEnd(),
   ])
   check('… the legacy list owns the panel after its write',
-    same(legacyOnly.harness.state.todos, [{ content: 'Legacy entry', status: 'pending' }]), legacyOnly.harness.state.todos)
+    same(lastSnapshotItems(legacyOnly.events), [{ content: 'Legacy entry', status: 'pending' }]), lastSnapshotItems(legacyOnly.events))
 
   // Coexistence after the wipe: a fresh Task* family builds and confirms
   // normally (the last full write owns the panel).
@@ -508,6 +514,6 @@ const synced = scenario(f => [
     f.turnEnd(),
   ])
   check('TodoWrite then fresh Task* work: create and update confirm normally (last full write wins)',
-    same(coexist.harness.state.todos, [{ content: 'Fresh', status: 'completed' }]), coexist.harness.state.todos)}
+    same(lastSnapshotItems(coexist.events), [{ content: 'Fresh', status: 'completed' }]), lastSnapshotItems(coexist.events))}
 
 console.log(passed + ' passed')

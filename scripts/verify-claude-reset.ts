@@ -80,7 +80,9 @@ const NEW = '00000000-0000-4000-8000-00000000beef'
     query.emit({ type: 'user', session_id: OLD, message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'call-2', content: 'ok' }] }, tool_use_result: { task: { id: 'task-1', subject: 'Old chore' } } })
     query.emit({ type: 'assistant', session_id: OLD, message: { id: 'm3', content: [{ type: 'tool_use', id: 'call-3', name: 'TaskUpdate', input: { taskId: 'task-1', status: 'in_progress' } }] } })
     query.emit({ type: 'user', session_id: OLD, message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'call-3', content: 'ok' }] }, tool_use_result: { success: true, taskId: 'task-1', updatedFields: ['status'] } })
-    check('before: the plan-tracking task shows on the panel, in_progress', await settled(() => channel.todos.length === 1 && channel.todos[0]?.content === 'Old chore' && channel.todos[0]?.status === 'in_progress'), channel.todos)
+    // The fork has no Todo panel: the projector drops todo.write, so the
+    // visible contract is that nothing reaches the panel state.
+    check('before: the plan-tracking write is projected nowhere (no Todo panel)', await settled(() => channel.todos.length === 0), channel.todos)
     // An input the CLI has not started when the reset lands.
     await session.submit({ text: 'queued after', clientMessageId: 'u2' }, 'followup')
     query.emit({ type: 'conversation_reset', new_conversation_id: 'not-the-session-id', uuid: 'r1', session_id: OLD, trigger: 'plan_mode_exit' })
@@ -99,7 +101,7 @@ const NEW = '00000000-0000-4000-8000-00000000beef'
     // reuses the old short task id ('task-1').
     query.emit({ type: 'assistant', session_id: NEW, message: { id: 'm4', content: [{ type: 'tool_use', id: 'call-4', name: 'TaskCreate', input: { subject: 'New chore', description: 'y' } }] } })
     query.emit({ type: 'user', session_id: NEW, message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'call-4', content: 'ok' }] }, tool_use_result: { task: { id: 'task-1', subject: 'New chore' } } })
-    check('… the new conversation\'s task table starts clean (a reused short id mismatches nothing)', await settled(() => channel.todos.length === 1 && channel.todos[0]?.content === 'New chore' && channel.todos[0]?.status === 'pending'), channel.todos)
+    check('… the reset leaves the (unprojected) task table clean too', await settled(() => channel.todos.length === 0), channel.todos)
     query.emit({ type: 'result', subtype: 'success', is_error: false, result: 'planned', total_cost_usd: 0.01, modelUsage: {}, session_id: NEW })
     await tick()
     await session.capabilities.fork!.fork()

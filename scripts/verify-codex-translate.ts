@@ -231,7 +231,10 @@ function delta(method: string, itemId: string, value: string, extra: Record<stri
   assertAgentEventInvariants(run.events)
   check('§7.3: each synthetic attempt settles explicitly', of(run.events, 'assistant.attempt.start').length === 3 && of(run.events, 'assistant.attempt.end').length === 3)
   check('§7.5: context measurement clamps below the 12k baseline', run.harness.projector.contextUsage()?.used === 0 && run.harness.projector.contextUsage()?.max === 0)
-  check('§7.5: turn/plan/updated → the todo panel', JSON.stringify(run.harness.state.todos) === JSON.stringify([{ content: 'one', status: 'completed' }, { content: 'two', status: 'in_progress' }]))
+  const planWrite = of(run.events, 'todo.write').at(-1)
+  check('§7.5: turn/plan/updated → the todo snapshot (the fork projects none)',
+    JSON.stringify(planWrite?.items) === JSON.stringify([{ content: 'one', status: 'completed' }, { content: 'two', status: 'in_progress' }])
+    && run.harness.state.todos.length === 0)
   check('§7.2: the user row is the client id, anchored on the item', of(run.events, 'user.message')[0]?.id === 'c1' && of(run.events, 'user.message')[0]?.anchor === 'u1' && run.ctx.anchorTurns.get('u1') === 't1')
   check('§7.4: the turn end carries the turn usage', of(run.events, 'turn.end')[0]?.usage?.output === 20)
 }

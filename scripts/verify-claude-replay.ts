@@ -181,7 +181,9 @@ const userRows = (name: string) => run(name).harness.state.rows.filter(row => ro
   check('/compact shows no user row of its own', !rows.some(row => row.kind === 'user'))
   check('local-command echoes and stdout are hidden', !rows.some(row => row.text.includes('<local-command') || row.text.includes('<command-name>')))
   const compactAt = rows.findIndex(row => row.kind === 'compact')
-  check('the compact summary renders the compaction rows', compactAt > 0 && rows[compactAt - 1]!.kind === 'notice' && rows[compactAt - 1]!.text === t('compact-done') && rows[compactAt]!.text.includes('pineapple'))
+  check('the compact summary renders the compaction row without a duplicate notice',
+    compactAt >= 0 && rows[compactAt]!.text.includes('pineapple')
+    && !rows.some(row => row.kind === 'notice' && row.text === t('compact-done')))
   check('… the preserved tail follows the summary (the model-visible chain)', rows.slice(compactAt + 1).some(row => row.kind === 'assistant' && row.text === 'ok'))
   const events = run('compaction').replay.events
   check('… and the boundary is a settled compaction end', ofType(events, 'compaction.end').length === 1 && ofType(events, 'compaction.end')[0]!.ok && run('compaction').harness.state.compaction === undefined)
