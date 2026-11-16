@@ -138,6 +138,19 @@ export interface QuestionStoreLike {
   ask(request: QuestionRequest, options?: { redact?: boolean }): Promise<QuestionAnswer>
 }
 
+/**
+ * Who is told about the on-screen question's lifetime: the store reports the
+ * ask that is displayed and every touch by the user. The DSH binding holds the
+ * host's timed wait from it (a claimed wait stops the host clock) and re-arms
+ * that claim while the user is still working on the answer.
+ */
+export interface QuestionActivityObserver {
+  /** The ask on screen changed; `undefined` when none is displayed. */
+  active(request: QuestionRequest | undefined): void
+  /** The user touched the on-screen ask (a keystroke or a click). */
+  touch(): void
+}
+
 /** One queued or active ask, with its running answers. */
 interface PendingQuestion {
   readonly request: QuestionRequest
@@ -228,6 +241,54 @@ export class QuestionStore implements QuestionStoreLike {
   private snapshotCache: QuestionSnapshot | null = null
   /** Per-ask observer (see {@link setOnAsk}); undefined = no observer. */
   private onAsk: ((request: QuestionRequest) => void) | undefined
+  /** Activity observer (see {@link setActivityObserver}). */
+  private activityObserver: QuestionActivityObserver | undefined
+  /** Last request published to it, so index moves inside one ask stay silent. */
+  private publishedActive: QuestionRequest | undefined
+
+  /**
+   * Watch the ask on screen — e.g. to hold a timed wait while the user works on
+   * the answer. Unset (the default) leaves the store's behaviour unchanged.
+   * @param observer - The observer, or `undefined` to stop reporting.
+   */
+  setActivityObserver(observer: QuestionActivityObserver | undefined): void {
+    this.activityObserver = observer
+    this.publishedActive = undefined
+    this.publishActive()
+  }
+
+  /**
+   * The user interacted with the on-screen question: a key reached the panel or
+   * an answer row was clicked. A whole batch has one on-screen ask, so this
+   * always names the active one.
+   */
+  noteActivity(): void {
+    const observer = this.activityObserver
+    if (this.active === undefined || observer === undefined) return
+    try {
+      observer.touch()
+    } catch {
+      // A throwing observer must never block the answer.
+    }
+  }
+
+  /**
+   * Report the ask on screen when its identity changed. Every transition of
+   * `active` goes through {@link rebuildSnapshot}, so this runs there; the
+   * identity guard keeps navigation inside one ask from publishing again.
+   */
+  private publishActive(): void {
+    const observer = this.activityObserver
+    if (observer === undefined) return
+    const request = this.active?.request
+    if (request === this.publishedActive) return
+    this.publishedActive = request
+    try {
+      observer.active(request)
+    } catch {
+      // A throwing observer must never wedge the question queue.
+    }
+  }
 
   /**
    * Subscribe to store changes (useSyncExternalStore contract).
@@ -292,6 +353,7 @@ export class QuestionStore implements QuestionStoreLike {
     const pending = this.active
     if (pending === undefined) {
       this.snapshotCache = null
+      this.publishActive()
       return
     }
     const question = pending.request.questions[pending.index]
@@ -311,6 +373,7 @@ export class QuestionStore implements QuestionStoreLike {
       canGoBack: pending.index > 0,
       canGoForward: pending.index + 1 < pending.request.questions.length,
     }
+    this.publishActive()
   }
 
   /**
