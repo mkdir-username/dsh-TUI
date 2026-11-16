@@ -241,12 +241,28 @@ test('session fork refuses a source without a closed turn', async () => {
   await assert.rejects(manage(ctx, { kind: 'session', action: 'fork', sessionId: 's-2' }), /no completed turn/u)
 })
 
+/**
+ * Point the data dir the CLI derives from the home directory at a sandbox.
+ * `os.homedir()` reads HOME on POSIX and USERPROFILE on Windows, so both
+ * spellings move; returns the undo.
+ */
+const useHome = home => {
+  const previous = { HOME: process.env.HOME, USERPROFILE: process.env.USERPROFILE }
+  process.env.HOME = home
+  process.env.USERPROFILE = home
+  return () => {
+    for (const [key, value] of Object.entries(previous)) {
+      if (value === undefined) delete process.env[key]
+      else process.env[key] = value
+    }
+  }
+}
+
 test('list marks root, fork and the live owner; titles only on request', async () => {
   const home = await mkdtemp(join(tmpdir(), 'dst-home-'))
   await mkdir(join(home, '.dsh-tui'), { recursive: true })
   await writeFile(join(home, '.dsh-tui/session-mounts.json'), JSON.stringify({ version: 1, owners: [{ pid: process.pid, startedAt: Date.now(), sessionIds: ['live-1'] }] }))
-  const previous = process.env.HOME
-  process.env.HOME = home
+  const restoreHome = useHome(home)
   try {
     const rows = [
       { header: { id: 'root-1', cwd: 'here', createdAt: 1 }, persisted: true, live: false },
@@ -265,8 +281,7 @@ test('list marks root, fork and the live owner; titles only on request', async (
     const titled = await manage(ctx, { kind: 'session', action: 'list', cwd: 'here', titles: true })
     assert.equal(titled[0].title, `t-${titled[0].sessionId}`)
   } finally {
-    if (previous === undefined) delete process.env.HOME
-    else process.env.HOME = previous
+    restoreHome()
     await rm(home, { recursive: true, force: true, maxRetries: 3 })
   }
 })
@@ -275,8 +290,7 @@ test('list filter selects by title before the page limit', async () => {
   const home = await mkdtemp(join(tmpdir(), 'dst-home-'))
   await mkdir(join(home, '.dsh-tui'), { recursive: true })
   await writeFile(join(home, '.dsh-tui/session-mounts.json'), JSON.stringify({ version: 1, owners: [] }))
-  const previous = process.env.HOME
-  process.env.HOME = home
+  const restoreHome = useHome(home)
   try {
     const rows = [
       { header: { id: 'root-1', cwd: 'here', createdAt: 3 }, persisted: true, live: false },
@@ -292,8 +306,7 @@ test('list filter selects by title before the page limit', async () => {
     assert.equal(hit[0].title, 'Аудит контрактов')
     assert.deepEqual(await manage(ctx, { kind: 'session', action: 'list', cwd: 'here', filter: 'нет-такого' }), [])
   } finally {
-    if (previous === undefined) delete process.env.HOME
-    else process.env.HOME = previous
+    restoreHome()
     await rm(home, { recursive: true, force: true, maxRetries: 3 })
   }
 })
