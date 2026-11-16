@@ -517,15 +517,16 @@ async function openPanelScreen(
 }
 
 const wide = await openPanelScreen(richPanelId, 38, 32)
-// A hyperlink-capable terminal (Ghostty/iTerm/...) paints the label under an
-// OSC 8 link, so the URL never reaches the text; the plain fallback appends
-// it. Accept either shape — the visible contract is the rendered label.
+// A hyperlink-capable terminal paints the label under an OSC 8 link; the
+// plain fallback degrades to the URL alone (createHyperlink's contract), so
+// only one of the two shows. The locked behavior is the struck text plus a
+// rendered link in either form.
 check(
   'markdown panel (38): renders heading/list/quote/strike/link',
   await settled(() => {
     const rows = wide.lines()
-    return ['面板标题', '列表项一', '引用块', '删除线', '链接'].every(text => rows.some(line => line.includes(text)))
-      && rows.some(line => line.includes('链接') && (line.includes('example.com') || !line.includes('链接 (')))
+    return ['面板标题', '列表项一', '引用块', '删除线'].every(text => rows.some(line => line.includes(text)))
+      && rows.some(line => line.includes('删除线') && (line.includes('链接') || line.includes('example.com')))
   }),
 )
 const wideLines = wide.lines()

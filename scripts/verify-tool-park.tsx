@@ -217,10 +217,15 @@ const BACKGROUND_CARD = toolRow({
   // 三态开关走完一个来回必须留在同一个挂载里：重挂会重置焦点位。
   await press([RUNNING], 'passthrough', null, wide, true, 2)
   check('a second tap in the same mount closes it', !prefs.getSidePanelOpen())
-  // Ghostty шлёт ⌘B как CSI-u с битом super (9 = 1 + 8): парсер и матчер
-  // обязаны довести его до того же переключателя, что и Ctrl+B.
+  // Ghostty шлёт ⌘B как CSI-u с битом super (9 = 1 + 8). The ctrl↔Cmd alias
+  // is a macOS rule (isMod): on other platforms the super bit must NOT reach
+  // the Ctrl+B toggle, so the parser test pins both sides of that contract.
   await press([RUNNING], 'passthrough', null, wide, true, 1, '\x1b[98;9u')
-  check('⌘B through the kitty encoding opens the panel too', prefs.getSidePanelOpen())
+  if (process.platform === 'darwin') {
+    check('⌘B through the kitty encoding opens the panel too', prefs.getSidePanelOpen())
+  } else {
+    check('⌘B is not the panel toggle off macOS', !prefs.getSidePanelOpen())
+  }
   await press([RUNNING], 'passthrough', undefined, wide)
   check('a parked call never touches the panel', !prefs.getSidePanelOpen())
 }
