@@ -556,7 +556,7 @@ export function attachDshExtensions(
   // binding: background dispatch and subagents may run without being attached.
   // Older hosts retain the final-assembly filters in the plugin instead.
   // Created after the agent view so construction rollback still owns its listeners.
-  const toolScope = createToolScope(ctx, dispose => owner.own(dispose), () => binding.agent)
+  const toolScope = createToolScope(ctx, dispose => owner.own(dispose), () => binding.agent, notify)
 
   const modelActions = createModelActions(ctx, state, {
     owner,

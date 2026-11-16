@@ -85,6 +85,148 @@ await check('synchronous restriction notifications converge and preset switches 
   }
 })
 
+await check('a failed restriction is logged and announced once per failure signature', async () => {
+  const root = await toolsRoot()
+  const lifetime = owner()
+  const errors: unknown[][] = []
+  const notices: Array<{ text: string; options: unknown }> = []
+  // The registry throws on the installation itself: the mask never exists, so
+  // the user must hear about it instead of meeting an over-privileged agent.
+  const fakeTools = {
+    definitions: () => [{ name: 'ask_user_question' }],
+    restrict: () => { throw new Error('agent scope is no longer live') },
+  }
+  const host = {
+    on: root.on.bind(root),
+    get: (key: string) => (key === 'tools' ? fakeTools : undefined),
+    logger: { error: (...args: unknown[]) => errors.push(args) },
+  } as unknown as Context
+  const agent = { ctx: host, session: { header: { agentPreset: 'minimal' }, events: [] } } as unknown as ScopedAgentLike
+  const scope = createToolScope(host, lifetime.own, () => undefined, (text, options) => { notices.push({ text, options }) })
+  try {
+    scope.apply(agent)
+    assert.equal(errors.length, 1, 'the failure is logged at error level')
+    assert.equal(notices.length, 1, 'the user sees one marker for the uninstalled mask')
+    assert.match(notices[0]!.text, /minimal/u, 'the marker names the preset')
+    assert.match(notices[0]!.text, /agent scope is no longer live/u, 'the marker carries the reason')
+    assert.deepEqual(notices[0]!.options, { color: 'error', timeoutMs: 12_000 })
+    scope.apply(agent)
+    assert.equal(notices.length, 1, 'a repeated failure does not repeat the marker')
+    assert.equal(errors.length, 1, 'the same wanted filter is not retried until it changes')
+  } finally {
+    lifetime.dispose()
+    await root.fiber.dispose()
+  }
+})
+
+type Restrictable = { restrict(filter: { readonly deny?: readonly string[] }): () => void }
+
+await check('a refused installation leaves the previous mask in force', async () => {
+  const root = await toolsRoot()
+  const lifetime = owner()
+  const notices: Array<{ text: string; options: unknown }> = []
+  root.tools.register(definition('ask_user_question'))
+  root.tools.register(definition('create_worktree'))
+  const agent = { session: { header: { agentPreset: 'minimal' }, events: [] as Array<{ type: string; data: { agentPreset: string } }> } } as unknown as ScopedAgentLike & { session: { header: { agentPreset: string }; events: Array<{ type: string; data: { agentPreset: string } }> } }
+  const scoped = createScope(root, agent)
+  Object.assign(agent, { ctx: scoped.ctx })
+  const service = scoped.ctx.get('tools') as unknown as Restrictable
+  const original = service.restrict.bind(service)
+  let failNext = false
+  service.restrict = filter => {
+    if (failNext) throw new Error('registry refused the filter')
+    return original(filter)
+  }
+  try {
+    const scope = createToolScope(root, lifetime.own, () => undefined, (text, options) => { notices.push({ text, options }) })
+    scope.apply(agent)
+    assert.deepEqual(names(root, agent), [], 'the minimal mask is installed')
+    failNext = true
+    agent.session.events.push({ type: 'agent-preset/selected', data: { agentPreset: 'liangshen' } })
+    assert.doesNotThrow(() => scope.apply(agent), 'a refused refresh never throws')
+    assert.deepEqual(names(root, agent), [], 'the mask in force still hides the same tools')
+    assert.equal(notices.length, 1, 'the refusal is announced once')
+    failNext = false
+    agent.session.events.push({ type: 'agent-preset/selected', data: { agentPreset: 'standard' } })
+    scope.apply(agent)
+    assert.deepEqual(names(root, agent), ['ask_user_question', 'create_worktree'], 'no leaked mask after the refused replacement')
+  } finally {
+    lifetime.dispose()
+    await scoped.dispose()
+    await root.fiber.dispose()
+  }
+})
+
+await check('a failing disposal rolls the replacement back instead of leaving two masks', async () => {
+  const root = await toolsRoot()
+  const lifetime = owner()
+  const notices: Array<{ text: string; options: unknown }> = []
+  root.tools.register(definition('ask_user_question'))
+  root.tools.register(definition('create_worktree'))
+  const agent = { session: { header: { agentPreset: 'minimal' }, events: [] as Array<{ type: string; data: { agentPreset: string } }> } } as unknown as ScopedAgentLike & { session: { header: { agentPreset: string }; events: Array<{ type: string; data: { agentPreset: string } }> } }
+  const scoped = createScope(root, agent)
+  Object.assign(agent, { ctx: scoped.ctx })
+  const service = scoped.ctx.get('tools') as unknown as Restrictable
+  const original = service.restrict.bind(service)
+  let failDisposeOnce = false
+  let live = 0
+  service.restrict = filter => {
+    const dispose = original(filter)
+    live += 1
+    return () => {
+      if (failDisposeOnce) {
+        failDisposeOnce = false
+        throw new Error('scope already released')
+      }
+      live -= 1
+      dispose()
+    }
+  }
+  try {
+    const scope = createToolScope(root, lifetime.own, () => undefined, (text, options) => { notices.push({ text, options }) })
+    scope.apply(agent)
+    assert.equal(live, 1, 'one mask before the switch')
+    failDisposeOnce = true
+    agent.session.events.push({ type: 'agent-preset/selected', data: { agentPreset: 'liangshen' } })
+    assert.doesNotThrow(() => scope.apply(agent), 'a failing disposal never throws out of the refresh')
+    assert.deepEqual(names(root, agent), [], 'the mask that was in force still hides the tools')
+    assert.equal(live, 1, 'the replacement was rolled back: exactly one mask remains')
+    assert.equal(notices.length, 1, 'the disposal failure is announced once')
+    agent.session.events.push({ type: 'agent-preset/selected', data: { agentPreset: 'standard' } })
+    scope.apply(agent)
+    assert.deepEqual(names(root, agent), ['ask_user_question', 'create_worktree'], 'the rolled-back replacement left nothing behind')
+    assert.equal(live, 0, 'no mask survives the empty preset')
+  } finally {
+    lifetime.dispose()
+    await scoped.dispose()
+    await root.fiber.dispose()
+  }
+})
+
+await check('publication refuses an agent whose mask cannot be installed', async () => {
+  const root = new Context()
+  const lifetime = owner()
+  try {
+    for (const plugin of [LlmRuntime, SessionStore, SessionProjectionRegistry, SystemPrompt, ToolsService, AgentRegistry]) await root.plugin(plugin)
+    await root.plugin(AgentLoop, { agents: [] })
+    root.tools.register(definition('create_worktree'))
+    root.tools.restrict = (() => { throw new Error('registry unavailable') }) as typeof root.tools.restrict
+    createToolScope(root, lifetime.own, () => undefined, () => undefined)
+    await assert.rejects(
+      () => root.agents.create({
+        sessionId: SessionId('scope-refused'),
+        meta: { agentPreset: 'liangshen' },
+        agentOptions: { provider: 'fixture', model: 'fixture' },
+      }),
+      /registry unavailable/u,
+      'an agent is not published without its mask',
+    )
+  } finally {
+    lifetime.dispose()
+    await root.fiber.dispose()
+  }
+})
+
 await check('team discovery uses the agent view and inherited masks remain stable across refresh', async () => {
   const root = await toolsRoot()
   const lifetime = owner()
@@ -187,4 +329,4 @@ await check('legacy assembly filtering preserves sections, tool safety and unrel
 })
 
 if (failures > 0) process.exitCode = 1
-console.log(`tool-scope: ${4 - failures}/4 scenarios passed`)
+console.log(`tool-scope: ${8 - failures}/8 scenarios passed`)
