@@ -1578,6 +1578,16 @@ const GROUPS = {
 // （选项列表与提示行不被挤出屏）、保密题掩码保留换行，以及 plain ↑/↓ 选行、
 // 行首 ← 换题、Ctrl+K 折叠等既有契约不回归。
     ["verify-question-editing", ['node', '--import', 'tsx/esm', 'scripts/verify-question-editing.tsx']],
+// timed-вопрос: пока пользователь работает над ответом (печать, стрелки, клик),
+// claim держит host-ожидание живым и перевзводит окно простоя, поэтому дедлайн
+// ask_user_question больше не убивает вопрос посреди набора; настоящий простой
+// по-прежнему отдаёт {pending:true}. Секции: шов активности store'а и реальный
+// dsh-user-questions askTimed против claim (печать переживает дедлайн, ответ
+// выигрывает, indefinite не трогаем, хост без attachWait деградирует).
+    ["verify-question-wait-claim", ['node', '--import', 'tsx/esm', 'scripts/verify-question-wait-claim.ts']],
+// 问卷活动信号: любая клавиша в панели (печать, ↑/↓, Tab, Space, бэктспейс, Enter)
+// и клик по строке ответа доходят до store.noteActivity() из живого Chat.
+    ["verify-question-activity", ['node', '--import', 'tsx/esm', 'scripts/verify-question-activity.tsx']],
 // 回答字段的共享契约（纯码点数学，无 xterm）：按词/按行跳转、±1 行卡雷特、
 // 粘贴压平与上限、多行窗口、卡雷特单元格切分——问卷与计划评审共用的
 // answerField 模块的唯一事实源。

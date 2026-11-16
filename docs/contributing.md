@@ -363,6 +363,7 @@ CI 回归都要跑。窄改动还要跑最近的聚焦脚本：
 | 回退列表布局（两行 checkpoint、隐藏计数、confirm 警告） | `node --import tsx/esm scripts/verify-rewind-layout.tsx` |
 | 问卷选项编号与数字快选 | `node --import tsx/esm scripts/verify-question-numbering.tsx` |
 | 活 Chat 里的 `/rewind` 与数字作答 | `node --import tsx/esm scripts/verify-question-rewind-chat.tsx` |
+| 问卷 timed 等待（谁在答、空转与活动） | `node --import tsx/esm scripts/verify-question-wait-claim.ts`、`node --import tsx/esm scripts/verify-question-activity.tsx` |
 | 提示队列行为 | `node scripts/verify-queue.mjs` |
 | Goal/todo 投影与渲染 | `node scripts/verify-channel-goal-todo.mjs` + `node scripts/verify-goal-todo.mjs` + `node --import tsx/esm scripts/verify-goal-display.mjs`（目标文本展示：悬停全文、裸 `/goal` 转录块） |
 | Compaction 与折叠 transcript 行 | `node scripts/verify-compact.mjs` |

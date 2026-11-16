@@ -482,6 +482,7 @@ change, also run the closest focused script:
 | Goal/todo projection and rendering | `node scripts/verify-channel-goal-todo.mjs`, `node scripts/verify-goal-todo.mjs`, and `node --import tsx/esm scripts/verify-goal-display.mjs` (goal text display: hover full text, bare `/goal` transcript block) |
 | Compaction and folded transcript rows | `node scripts/verify-compact.mjs` |
 | Command capability facts (compaction / plan / questionnaire / pruner routing and the Help + `/` unavailable marking) | `pnpm verify:agent-capabilities` |
+| Questionnaire timed wait (who is answering, idleness vs activity) | `node --import tsx/esm scripts/verify-question-wait-claim.ts`, `node --import tsx/esm scripts/verify-question-activity.tsx` |
 | Compaction × session-switch lifecycle (cancel before the fork snapshot, persistence-classified toast) | `node --import tsx/esm scripts/verify-compact-switch.tsx` |
 | Theme loading, persistence, and runtime plugin seam | `node --import tsx/esm scripts/verify-themes.mjs`, `node --import tsx/esm scripts/verify-runtime-themes.ts` |
 | Default-reasoning-effort and similar preference chains (effortPrefs / settings defaults) | `node --import tsx/esm scripts/verify-effort-default.ts` |

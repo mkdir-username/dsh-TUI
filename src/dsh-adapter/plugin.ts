@@ -106,6 +106,7 @@ import { isEnvTruthy } from '../utils/envUtils.js'
 import { QuestionStore, bindQuestionStore } from './questions.js'
 import type { QuestionItem, QuestionRequest } from '../channel/questions.js'
 import { prepareQuestionAnswerer } from './questions-answerer.js'
+import { createQuestionWaitClaim } from './questionWait.js'
 import { adapterRuntimeFor } from '../adapter/kernel/runtime-context.js'
 import { ApprovalStore, bindApprovalStore, reasonOf } from './approvals.js'
 import { PermissionStore } from '../channel/permissions.js'
@@ -1392,6 +1393,18 @@ export async function apply(ctx: Context, runtimeConfig: RuntimeConfig<Config>, 
     // API selection and registration live behind one adapter boundary. The UI
     // bootstrap only translates a legacy seat conflict into its visible notice.
     const registration = prepareQuestionAnswerer(dshCtx, userQuestions, questionStore)
+    // The questionnaire is the answer UI of a timed ask: hold the host's
+    // foreground wait while the ask is on screen and re-arm that claim on every
+    // touch, so typing or moving between options is work, not idleness. A host
+    // without `attachWait` keeps its plain deadline (the claim is skipped).
+    const waitClaim = createQuestionWaitClaim(userQuestions, { log: logForDebugging })
+    if (waitClaim !== undefined) {
+      questionStore.setActivityObserver(waitClaim)
+      dshCtx.effect(() => () => {
+        questionStore.setActivityObserver(undefined)
+        waitClaim.dispose()
+      }, 'dsh-tui.questions.wait-claim')
+    }
     const seatDecision = registration.kind === 'legacy' ? registration.yieldDecision : undefined
     let notice: string | undefined
     if (seatDecision?.action === 'alert-unverified') {
