@@ -61,3 +61,103 @@ assert.deepEqual(await guarded, { answers: [{ id: 'q3', selected: [], custom: 'x
   'the answer still settles after the observer threw')
 throwing.setActivityObserver(undefined)
 console.log('PASS store publishes the on-screen ask and every touch')
+
+// ── 2. Claim against the real host service ─────────────────────────────────
+const { Context } = await import('@deepseek-ai/cordis')
+const { default: UserQuestionService } = await import('@deepseek-ai/dsh-user-questions')
+const { prepareQuestionAnswerer } = await import('../src/dsh-adapter/questions-answerer.js')
+const { createQuestionWaitClaim } = await import('../src/dsh-adapter/questionWait.js')
+const { settled, settle } = await import('./lib/term-test.mjs')
+
+type Harness = {
+  /** The exact live agent the host registry hands back: `askTimed` checks identity. */
+  readonly agent: { id: string; session: { header: { origin: string } } }
+  readonly service: InstanceType<typeof UserQuestionService>
+  readonly store: QuestionStore
+  readonly claims: string[]
+  readonly claim: NonNullable<ReturnType<typeof createQuestionWaitClaim>>
+}
+
+/** The live host service, the TUI store as its answerer, and a claim spying on attachWait. */
+async function harness(): Promise<Harness> {
+  const ctx = new Context()
+  const agent = {
+    id: 'agent-1',
+    session: { header: { origin: 'root' } },
+    steer(): void {},
+    inbox: { nextTurn: [], nextStep: [] },
+  }
+  ctx.provide('agents')
+  ;(ctx as unknown as { agents: unknown }).agents = { get: (id: string) => (id === agent.id ? agent : undefined) }
+  const service = new UserQuestionService(ctx)
+  const store = new QuestionStore()
+  const registration = prepareQuestionAnswerer(ctx as never, service, store)
+  if (registration.kind !== 'waterfall') throw new Error('the regression needs the waterfall answerer')
+  registration.register({ agentId: agent.id })
+  const claims: string[] = []
+  const spy = {
+    attachWait: (agent: unknown, callId: string, signal: AbortSignal) => {
+      claims.push(callId)
+      return service.attachWait(agent as never, callId as never, signal)
+    },
+  }
+  const claim = createQuestionWaitClaim(spy, { log: () => {} })
+  if (claim === undefined) throw new Error('the host exposes attachWait, so a claim must exist')
+  store.setActivityObserver(claim)
+  return { agent, service: service as never, store, claims, claim } as Harness
+}
+
+const question = { id: 'q1', question: 'Which colour?', options: [{ label: 'Red' }] }
+
+// (main) Typing past the deadline keeps the ask; stopping settles it as pending.
+{
+  const h = await harness()
+  let outcome: unknown
+  const answer = h.service.askTimed({ questions: [question], agent: h.agent } as never, 'call-1', 120)
+  void answer.then(result => { outcome = result }, error => { outcome = error })
+  await settle(() => h.store.getSnapshot() !== null)
+  assert.deepEqual(h.claims, ['call-1'], 'exactly one claim per timed ask')
+
+  const until = Date.now() + 260
+  const typing = setInterval(() => h.store.noteActivity(), 40)
+  await settle(() => Date.now() >= until, { stepMs: 20 })
+  clearInterval(typing)
+  assert.equal(outcome, undefined, 'typing past the deadline keeps the question answerable')
+
+  assert.equal(await settled(() => outcome !== undefined), true, 'a real idle window still settles the ask')
+  assert.deepEqual(outcome, { pending: true, callId: 'call-1' }, 'idleness settles it as pending, not as an answer')
+  h.claim.dispose()
+  console.log('PASS typing outlived the host deadline; idleness still expired the ask')
+}
+
+// (a) An answer while claimed wins over the deadline.
+{
+  const h = await harness()
+  const answer = h.service.askTimed({ questions: [question], agent: h.agent } as never, 'call-2', 400)
+  await settle(() => h.store.getSnapshot() !== null)
+  h.store.answerCurrent({ selected: ['Red'] })
+  assert.deepEqual(await answer, { answers: [{ id: 'q1', selected: ['Red'] }] },
+    'the answer settles the ask while the claim is held')
+  h.claim.dispose()
+  console.log('PASS an answer while claimed still wins')
+}
+
+// (b) An indefinite ask never takes a claim and keeps its own lifetime.
+{
+  const h = await harness()
+  const ask = h.store.ask({ questions: [question] })
+  await settle(() => h.store.getSnapshot() !== null)
+  h.store.noteActivity()
+  assert.deepEqual(h.claims, [], 'an ask without a timed wait is not claimed')
+  h.store.answerCurrent({ selected: ['Red'] })
+  assert.deepEqual(await ask, { answers: [{ id: 'q1', selected: ['Red'] }] })
+  h.claim.dispose()
+  console.log('PASS an indefinite ask is left alone')
+}
+
+// (c) A host without attachWait degrades instead of failing.
+{
+  assert.equal(createQuestionWaitClaim({}, {}), undefined, 'a host without attachWait yields no claim')
+  assert.equal(createQuestionWaitClaim(undefined, {}), undefined, 'a missing service yields no claim')
+  console.log('PASS a host without attachWait degrades to its plain deadline')
+}
