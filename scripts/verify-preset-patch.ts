@@ -4,8 +4,8 @@
  *     to the upstream presets it registers — rows nested in groups included,
  *     other rows and the parsed input untouched — merges several rows for one
  *     preset, passes liangshen's as include patches, skips disabled rows and
- *     profile-declared presets, and warns on unknown rows, unknown presets or
- *     malformed rows;
+ *     profile-declared presets, warns on unknown rows or unknown presets, and
+ *     refuses a malformed row by naming it;
  *  2. without preset-patch rows every definition is registered unchanged;
  *  3. runAsSideBranch runs the side call under a seeded fork of the agent
  *     (stable id per parent surface, the branch id on `session.id` with the
@@ -48,7 +48,10 @@ async function register(entries: Entry[]): Promise<{ defs: Map<string, Definitio
   return { defs, warnings }
 }
 
-const marker = (config: unknown, disabled = false): Entry => ({ disabled, options: { name: PRESET_PATCH_MODULE, config } })
+const marker = (config: unknown, disabled = false, id?: string): Entry => ({
+  disabled,
+  options: { ...(id === undefined ? {} : { id }), name: PRESET_PATCH_MODULE, config },
+})
 const compaction = (definition: Definition | undefined): Row | undefined =>
   walk(definition?.plugins ?? []).find(row => row.name === '@deepseek-ai/dsh-compaction-basic')
 
@@ -68,7 +71,6 @@ const patched = await register([
   marker({ preset: 'cordis', config: { 'no-such-row': {} } }),
   marker({ preset: 'minimal', config: { 'compaction-basic': { auto: false } } }),
   marker({ preset: 'no-such-preset', config: { 'compaction-basic': { auto: false } } }),
-  marker({ preset: 'standard' }),
   { disabled: false, options: { name: '@deepseek-ai/dsh-agent-preset', config: { id: 'minimal' } } },
 ])
 const standard = patched.defs.get('standard')!
@@ -81,7 +83,6 @@ assert.equal(compaction(patched.defs.get('ptc'))?.config, undefined, 'disabled r
 assert.equal(patched.defs.has('minimal'), false, 'profile-declared preset is not registered here')
 assert.deepEqual((patched.defs.get('liangshen')!.plugins[0]!.config as { patches: unknown }).patches, [{ id: 'compaction-basic', config: { auto: false } }])
 assert.ok(patched.warnings.some(warning => warning.includes('"no-such-row"') && warning.includes('"cordis"')), 'unknown row warned')
-assert.ok(patched.warnings.some(warning => warning.includes('without `preset`')), 'malformed row warned')
 const unknownPreset = (preset: string): boolean =>
   patched.warnings.some(warning => warning.includes('does not register') && warning.includes(`"${preset}"`))
 assert.ok(unknownPreset('no-such-preset'), 'unknown preset warned')
@@ -89,6 +90,20 @@ assert.ok(unknownPreset('no-such-preset'), 'unknown preset warned')
 // patch is inert by contract, not a typo.
 for (const preset of ['standard', 'ptc', 'minimal', 'cordis', 'liangshen']) {
   assert.ok(!unknownPreset(preset), `no unknown-preset warning for ${preset}`)
+}
+
+// 1b. a patch row that cannot be applied stops the registration and names
+// the row: silently skipping it would leave the preset at package defaults.
+for (const [label, entry] of [
+  ['no config map', marker({ preset: 'standard' }, false, 'row-without-config')],
+  ['empty preset id', marker({ preset: '', config: { 'compaction-basic': { auto: false } } }, false, 'row-without-preset')],
+  ['array config', marker({ preset: 'standard', config: ['compaction-basic'] }, false, 'row-with-array-config')],
+] as const) {
+  await assert.rejects(
+    () => register([entry]),
+    new RegExp(`preset-patch row "${entry.options.id}"`, 'u'),
+    `${label} is refused with the row id`,
+  )
 }
 
 // 3. side branch
@@ -149,7 +164,11 @@ assert.equal(await runAsSideBranch(closing, agent, async () => 'ran'), 'ran', 'c
     mount: async () => ({ id: 'standard' }),
     recompose: async () => ({ id: 'standard' }),
   }
-  const ctxWithRoster = { get: (key: string) => (key === 'agentPresets' ? roster : undefined), logger: { warn: () => undefined } }
+  const rosterWarnings: string[] = []
+  const ctxWithRoster = {
+    get: (key: string) => (key === 'agentPresets' ? roster : undefined),
+    logger: { warn: (message: string) => rosterWarnings.push(message) },
+  }
   const composed = await composePreset(ctxWithRoster as never)
   assert.equal(composed.agentPreset, 'standard', 'the default preset is adopted')
   assert.equal(typeof composed.setup, 'function', 'the setup hook installs it')
@@ -158,6 +177,14 @@ assert.equal(await runAsSideBranch(closing, agent, async () => 'ran'), 'ran', 'c
     /unknown preset "nope"/u,
     'an unknown preset raises before an agent is published',
   )
+  // A session log is not this launch's request: a preset that the host no
+  // longer has must not make the transcript unresumable.
+  assert.deepEqual(
+    await composePreset(ctxWithRoster as never, 'gone', { recorded: true }),
+    {},
+    'a recorded preset the roster lost resumes on the host composition',
+  )
+  assert.match(rosterWarnings.at(-1)!, /gone/u, 'the degraded resume names the recorded preset')
 }
 
 console.log('verify:preset-patch OK')

@@ -146,9 +146,10 @@ assert.deepEqual(rcNewName.attempts, ['code'])
 assert.equal(rcFallback.agentPreset, 'code')
 
 const brokenExact = presetContext(new Set(['standard', 'code', 'ptc']), new Set(['code']))
-const brokenComposition = await composePreset(brokenExact.ctx, 'code')
+await assert.rejects(() => composePreset(brokenExact.ctx, 'code'), /broken code preset/u)
 assert.deepEqual(brokenExact.attempts, ['code'])
-assert.deepEqual(brokenComposition, {})
+const brokenRecorded = presetContext(new Set(['standard', 'code', 'ptc']), new Set(['code']))
+assert.deepEqual(await composePreset(brokenRecorded.ctx, 'code', { recorded: true }), {}, 'a recorded preset that broke resumes on the host composition')
 
 const persistedPreset = await resolvePersistedPreset({
   get(name) {

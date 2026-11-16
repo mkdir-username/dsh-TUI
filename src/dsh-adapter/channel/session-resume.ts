@@ -181,7 +181,7 @@ export function createSessionResumeActions(
         return { ok: false, reason: 'unavailable' }
       }
       ensureLegacySessionEventTypes()
-      const composed = await composePreset(ctx, await resolvePersistedPreset(ctx, SessionId(sessionId)))
+      const composed = await composePreset(ctx, await resolvePersistedPreset(ctx, SessionId(sessionId)), { recorded: true })
       const explicitRoute = explicitModelRoute({ provider: options.configuredProvider, model: options.configuredModel })
       const persistedRoute = await resolvePersistedRoute(ctx, SessionId(sessionId))
       let candidate: AgentSession

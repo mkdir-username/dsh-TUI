@@ -90,7 +90,7 @@ export function createRewindToAction(
     // A policy-only cut starts fresh; seeded creation would publish it immediately.
     const cutHoldsNoConversation = seed.length === 0
     const policyFacts = cutHoldsNoConversation ? latestPolicyFacts(cut) : []
-    const composed = await composePreset(ctx, runningPresetOf(source))
+    const composed = await composePreset(ctx, runningPresetOf(source), { recorded: true })
     // Announce the id before the factory: the rewind creates the child's log
     // here, and the publisher only learns the id from the registry on its next
     // beat.

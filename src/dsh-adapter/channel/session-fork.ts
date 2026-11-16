@@ -57,7 +57,7 @@ export function createForkSessionAction(
     const cutHoldsNoConversation = seed.length === 0
     const policyFacts = cutHoldsNoConversation ? latestPolicyFacts(cut) : []
     const childId = SessionId(randomUUID())
-    const forkComposed = await composePreset(ctx, runningPresetOf(source))
+    const forkComposed = await composePreset(ctx, runningPresetOf(source), { recorded: true })
     // Reserve BEFORE the factory, and hold it past `detached.release()`.
     //
     // A forked child is driven by this process for the whole creation and then

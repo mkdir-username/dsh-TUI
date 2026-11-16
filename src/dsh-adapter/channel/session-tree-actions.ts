@@ -92,7 +92,7 @@ export function createTreeRewindAction(
     const sourcePreset = forkFromLive
       ? runningPresetOf(entrySession)
       : ((await resolvePersistedPreset(ctx, SessionId(sessionId))) ?? runningPresetOf(entrySession))
-    const composed = await composePreset(ctx, sourcePreset)
+    const composed = await composePreset(ctx, sourcePreset, { recorded: true })
     if (!deps.owner.current() || deps.binding.agent.session !== entrySession) {
       deps.notify(t('rewind-session-changed'), { color: 'error' })
       return null

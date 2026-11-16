@@ -90,13 +90,23 @@ export interface PresetComposition {
  * path keeps the host composition. A host WITH a roster must compose what the
  * caller asked for: an unknown, broken or empty roster raises before an agent
  * is published, instead of quietly swapping in the host's different prompt
- * and tool catalog. That includes restoring a preset recorded in a session log.
+ * and tool catalog.
+ *
+ * A preset recorded by an existing session log is not this launch's request:
+ * the host may have lost or renamed it (downgrade, another machine), and the
+ * transcript must stay resumable. That path logs the preset and the roster's
+ * own error, then falls back to the host composition.
  *
  * @param ctx - The plugin context (roster lookup + logging).
  * @param requested - The preset id the caller wants, or undefined for the default.
+ * @param options - `recorded` marks `requested` as read from a session log.
  * @returns The header value + setup hook, or an empty composition.
  */
-export async function composePreset(ctx: Context, requested?: string): Promise<PresetComposition> {
+export async function composePreset(
+  ctx: Context,
+  requested?: string,
+  options?: { readonly recorded?: boolean },
+): Promise<PresetComposition> {
   const presets = rosterOf(ctx)
   if (presets === undefined) {
     if (requested !== undefined) {
@@ -107,12 +117,28 @@ export async function composePreset(ctx: Context, requested?: string): Promise<P
     }
     return {}
   }
-  const resolvedId = (await resolveCompatiblePreset(presets, requested)).id
-  return {
-    agentPreset: resolvedId,
-    setup: async (agentCtx: Context) => {
-      await presets.mount(agentCtx, resolvedId)
-    },
+  const roster = presets
+  if (options?.recorded === true && requested !== undefined) {
+    try {
+      return await settled(requested)
+    } catch (error) {
+      ctx.logger.warn(
+        `dsh-tui: agent preset "${requested}" recorded by the session cannot be composed ` +
+          `(${error instanceof Error ? error.message : String(error)}) — the session runs on the host composition`,
+      )
+      return {}
+    }
+  }
+  return settled(requested)
+
+  async function settled(id: string | undefined): Promise<PresetComposition> {
+    const resolvedId = (await resolveCompatiblePreset(roster, id)).id
+    return {
+      agentPreset: resolvedId,
+      setup: async (agentCtx: Context) => {
+        await roster.mount(agentCtx, resolvedId)
+      },
+    }
   }
 }
 

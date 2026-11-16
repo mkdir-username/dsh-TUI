@@ -16,7 +16,7 @@ interface DeclarativePresets {
 }
 
 interface PresetLoader {
-  entries(): Iterable<{ disabled: boolean; options: { name?: string; config?: unknown } }>
+  entries(): Iterable<{ disabled: boolean; options: { id?: string; name?: string; config?: unknown } }>
 }
 
 function declarativePresets(ctx: Context): DeclarativePresets | undefined {
@@ -51,9 +51,12 @@ function presetPatches(ctx: Context, loader: PresetLoader | undefined): Map<stri
     if (entry.disabled || entry.options.name !== PRESET_PATCH_MODULE) continue
     const config = entry.options.config as { preset?: unknown; config?: unknown } | undefined
     const rows = config?.config
-    if (typeof config?.preset !== 'string' || rows === null || typeof rows !== 'object' || Array.isArray(rows)) {
-      ctx.logger.warn('dsh-tui: ignoring a preset-patch row without `preset` and a `config` map')
-      continue
+    // A row that names no preset cannot be applied anywhere: skipping it
+    // would silently leave the preset at package defaults while the profile
+    // believes its patch is active.
+    if (typeof config?.preset !== 'string' || config.preset.trim() === ''
+      || rows === null || typeof rows !== 'object' || Array.isArray(rows)) {
+      throw new Error(`dsh-tui: preset-patch row "${entry.options.id ?? '(unnamed)'}" needs a non-empty \`preset\` and a \`config\` map`)
     }
     const target = patches.get(config.preset) ?? new Map<string, unknown>()
     for (const [id, value] of Object.entries(rows)) target.set(id, value)
