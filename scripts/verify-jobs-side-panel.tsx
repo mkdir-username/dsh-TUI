@@ -31,7 +31,7 @@ const [{ PassThrough, Writable }, React, { Terminal: XTerm }, ui, { SidePanelCol
   import('./lib/term-test.mjs'),
 ])
 const { render, ThemeProvider, AlternateScreen, Box, Text, useInput } = ui
-const { applySidePanelOpen, applySidePanelRatio } = prefs
+const { applySidePanelOpen, applySidePanelPanels, applySidePanelRatio } = prefs
 const { settled, sleep } = termTest
 
 const COLS = 120
@@ -126,6 +126,9 @@ class FakeStdin extends PassThrough { isTTY = true; setRawMode() { return this }
 // starts split (mirrors Chat at 120 columns with the sidebar enabled).
 applySidePanelOpen(true)
 applySidePanelRatio(0.68)
+// The fork has no Todo panel; info leads so the jobs tab starts inactive and
+// the badge-while-inactive scenario below still has its precondition.
+applySidePanelPanels('info,jobs,agents,trajectory,workspace,btw,companion')
 const term = new XTerm({ cols: COLS, rows: ROWS, scrollback: 0, allowProposedApi: true })
 const stdout = new FakeStdout(term)
 const stdin = new FakeStdin()
@@ -166,7 +169,7 @@ const focusedLabelLine = (): string => {
 
 try {
   await settled(() => state().includes('split=1'))
-  check('mount: split renders with jobs tab enabled', state().includes('split=1 focus=chat active=todo'), state())
+  check('mount: split renders with the jobs tab enabled', state().includes('split=1 focus=chat active=info'), state())
 
   // --- 1. badge: running → info while the jobs panel is inactive -----------
   setJobs([J1, J2, J3])

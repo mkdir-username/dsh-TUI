@@ -6,7 +6,7 @@
  * Locked behavior:
  *  r. 纯解析器：`*` = 全部已注册面板（内置按默认顺序、其余按注册表顺序）；
  *     显式列表原样返回（含未注册占位 id）；空/非法归一为 `*`；`*` 是整值
- *     形式（`*,todo` 非法）。
+ *     形式（`*,jobs` 非法）。
  *  p. 勾选↔值映射：行序固定为默认顺序（内置默认顺序 + 插件注册顺序），不随存储
  *     列表顺序或勾选移动；勾选态由同一解析器派生；Enter 与真 SGR 鼠标点击都走
  *     同一 toggle（点击即勾选/取消）。
@@ -225,10 +225,10 @@ function rowOf(screen: { view(): string }, needle: string): number {
 }
 
 // Rows always render in the documented default order (the order the value
-// ships with), independent of the stored list order: todo, jobs, agents,
-// info, trajectory, workspace, btw, companion — plugin panels appended in
-// registry order. Toggling or registering must never reshuffle this list.
-const ROW_JOBS = 1, ROW_COMPANION = 7
+// ships with), independent of the stored list order: jobs, agents, info,
+// trajectory, workspace, btw, companion — plugin panels appended in registry
+// order. Toggling or registering must never reshuffle this list.
+const ROW_JOBS = 0, ROW_AGENTS = 1, ROW_COMPANION = 6
 
 // ── r. the pure resolver: the one source both the picker and PanelBar read ──
 {
@@ -236,32 +236,32 @@ const ROW_JOBS = 1, ROW_COMPANION = 7
   // order, not registry order), then appends everything else in registry
   // order — exactly the tail the old registration-time append produced.
   check('r *: built-ins keep the documented default order',
-    resolveSidePanelIds(ALL_SIDE_PANELS, ['todo', 'info', 'jobs']).join(',') === 'todo,jobs,info')
+    resolveSidePanelIds(ALL_SIDE_PANELS, ['info', 'agents', 'jobs']).join(',') === 'jobs,agents,info')
   check('r *: plugin panels append after the built-ins',
-    resolveSidePanelIds(ALL_SIDE_PANELS, ['demo:md', 'todo']).join(',') === 'todo,demo:md')
+    resolveSidePanelIds(ALL_SIDE_PANELS, ['demo:md', 'jobs']).join(',') === 'jobs,demo:md')
   check('r *: unregistered built-ins are dropped',
-    !resolveSidePanelIds(ALL_SIDE_PANELS, ['todo']).includes('jobs'))
+    resolveSidePanelIds(ALL_SIDE_PANELS, ['jobs']).join(',') === 'jobs')
   check('r explicit: ids survive verbatim, unknown placeholders included',
-    resolveSidePanelIds('todo,demo:future', ['todo']).join(',') === 'todo,demo:future')
+    resolveSidePanelIds('jobs,demo:future', ['jobs']).join(',') === 'jobs,demo:future')
   check('r empty/undefined normalizes to the * default',
     normalizeSidePanelPanels(undefined) === ALL_SIDE_PANELS
     && normalizeSidePanelPanels('') === ALL_SIDE_PANELS
     && normalizeSidePanelPanels('BAD!') === ALL_SIDE_PANELS)
   check('r malformed tokens are dropped, usable ones kept',
-    normalizeSidePanelPanels(' todo, BAD!, , jobs ') === 'todo,jobs')
+    normalizeSidePanelPanels(' jobs, BAD!, , agents ') === 'jobs,agents')
   check('r strict parse: the sentinel is a whole-value form',
-    parseSidePanelPanels('*,todo').mode === 'invalid'
+    parseSidePanelPanels('*,jobs').mode === 'invalid'
     && parseSidePanelPanels('*').mode === 'all'
     && parseSidePanelPanels('').mode === 'empty'
     && parseSidePanelPanels(',').mode === 'invalid'
-    && parseSidePanelPanels('todo,,jobs').mode === 'list')
+    && parseSidePanelPanels('jobs,,agents').mode === 'list')
 }
 
 // ── p. checkbox rows + mapping + o. toggle semantics (append/remove) ────────
 {
-  const screen = await openPicker('todo,jobs,agents')
+  const screen = await openPicker('jobs,agents,info')
   if (screen === null) { check('p opens the picker subpage', false); process.exit(1) }
-  check('p builtin rows enumerated with icons', screen.has('[✓ ] ≡') && screen.has('[✓ ] ▸') && screen.has('[✓ ] ◆'))
+  check('p builtin rows enumerated with icons', screen.has('[✓ ] ▸') && screen.has('[✓ ] ◆') && screen.has('[✓ ] ⓘ'))
   check('p unchecked rows render empty boxes', screen.has('[  ] ♥') && screen.has('[  ] ∿') && screen.has('[  ] ⌗') && screen.has('[  ] ?'))
   check('p descriptions render beside the titles', screen.has(t('panel-desc-companion')))
 
@@ -269,14 +269,14 @@ const ROW_JOBS = 1, ROW_COMPANION = 7
   screen.stdin.write('\r')
   check('o Enter checks Companion -> inserted at its default position (the tail)',
     await settled(() => screen.has('[✓ ] ♥'), { timeoutMs: 4000 })
-    && await settled(() => panelSetWrites().includes('todo,jobs,agents,companion'), { timeoutMs: 4000 }),
+    && await settled(() => panelSetWrites().includes('jobs,agents,info,companion'), { timeoutMs: 4000 }),
     panelSetWrites().join(' | '))
 
   cursor = await arrow(screen.stdin, 'up', ROW_COMPANION - ROW_JOBS, cursor)
   screen.stdin.write('\r')
   check('o Enter unchecks Jobs -> removed, others keep order',
     await settled(() => screen.has('[  ] ▸'), { timeoutMs: 4000 })
-    && await settled(() => panelSetWrites().includes('todo,agents,companion'), { timeoutMs: 4000 }),
+    && await settled(() => panelSetWrites().includes('agents,info,companion'), { timeoutMs: 4000 }),
     panelSetWrites().join(' | '))
 
   // 点击即勾选/取消：真 SGR 鼠标点在 Companion 行上（当前已勾选 → 取消）。
@@ -288,7 +288,7 @@ const ROW_JOBS = 1, ROW_COMPANION = 7
     screen.click(cell.col + 1, cell.row)
     check('o SGR click unchecks Companion',
       await settled(() => screen.has('[  ] ♥'), { timeoutMs: 4000 })
-      && await settled(() => panelSetWrites().includes('todo,agents'), { timeoutMs: 4000 }),
+      && await settled(() => panelSetWrites().includes('agents,info'), { timeoutMs: 4000 }),
       panelSetWrites().join(' | '))
   }
   await screen.close()
@@ -296,53 +296,53 @@ const ROW_JOBS = 1, ROW_COMPANION = 7
 
 // ── o. existing order is user data: a custom order survives a new tick ─────
 {
-  const screen = await openPicker('agents,todo')
+  const screen = await openPicker('jobs,companion')
   if (screen === null) { check('o custom order scenario opened', false); process.exit(1) }
-  // The stored order is `agents,todo`, but the list keeps the default order
-  // (todo 0, jobs 1, ...). Ticking Jobs inserts it after its displayed
-  // predecessor (Todo), which happens to be the tail here; the rows never move.
-  cursor = await arrow(screen.stdin, 'down', ROW_JOBS, cursor)
+  // The stored order is `jobs,companion`, but the list keeps the default order
+  // (jobs 0, agents 1, ...). Ticking Agents inserts it after its displayed
+  // predecessor (Jobs), not at the tail; the rows never move.
+  cursor = await arrow(screen.stdin, 'down', ROW_AGENTS, cursor)
   screen.stdin.write('\r')
   check('o custom order kept, tick inserted after its displayed predecessor',
-    await settled(() => panelSetWrites().includes('agents,todo,jobs'), { timeoutMs: 4000 }),
+    await settled(() => panelSetWrites().includes('jobs,agents,companion'), { timeoutMs: 4000 }),
     panelSetWrites().join(' | '))
   await screen.close()
 }
 
 // ── o. a new tick goes back to its displayed position, not the tail ────────
 {
-  const screen = await openPicker('todo,companion')
+  const screen = await openPicker('companion')
   if (screen === null) { check('o insert-at-position scenario opened', false); process.exit(1) }
-  // Rows are in the fixed default order, so Jobs sits at row 1: ticking it must
-  // write the id after Todo (its display predecessor), not after Companion.
+  // Rows are in the fixed default order, so Jobs sits at row 0: ticking it must
+  // write the id before Companion (its displayed successor), not after it.
   cursor = await arrow(screen.stdin, 'down', ROW_JOBS, cursor)
   screen.stdin.write('\r')
   check('o a new tick is inserted at its display position, not appended',
-    await settled(() => panelSetWrites().includes('todo,jobs,companion'), { timeoutMs: 4000 }),
+    await settled(() => panelSetWrites().includes('jobs,companion'), { timeoutMs: 4000 }),
     panelSetWrites().join(' | '))
   await screen.close()
 }
 
 // ── u. well-formed but unclaimed ids stay as checked placeholder rows ───────
 {
-  const screen = await openPicker('todo,demo:future')
+  const screen = await openPicker('jobs,demo:future')
   if (screen === null) { check('u unclaimed scenario opened', false); process.exit(1) }
   check('u unclaimed id renders as a checked tail row', /[✓][^\n]*· demo:future/.test(screen.view()))
   check('u unclaimed row carries the waiting hint', screen.has(t('settings-panels-unclaimed')))
-  // Row 8 = the unclaimed row: registered panels keep the default order and
+  // Row 7 = the unclaimed row: registered panels keep the default order and
   // unclaimed placeholders sit at the tail.
-  cursor = await arrow(screen.stdin, 'down', 8, cursor)
+  cursor = await arrow(screen.stdin, 'down', 7, cursor)
   screen.stdin.write('\r')
   check('u unchecking the placeholder removes only it',
     await settled(() => !/[✓][^\n]*demo:future/.test(screen.view()), { timeoutMs: 4000 })
-    && await settled(() => panelSetWrites().includes('todo'), { timeoutMs: 4000 }),
+    && await settled(() => panelSetWrites().includes('jobs'), { timeoutMs: 4000 }),
     panelSetWrites().join(' | '))
   await screen.close()
 }
 
 // ── l. live registry: plugin panels appear/disappear while the screen is open ─
 {
-  const screen = await openPicker('todo,jobs,agents')
+  const screen = await openPicker('jobs,agents,info')
   if (screen === null) { check('l live registry scenario opened', false); process.exit(1) }
   const dispose = panelStore.register({
     id: 'demo:notes',
@@ -353,10 +353,10 @@ const ROW_JOBS = 1, ROW_COMPANION = 7
     component: () => null,
   }, { pluginId: 'demo' })
   check('l plugin panel row appears without reopening', await settled(() => screen.has('Notes'), { timeoutMs: 4000 }))
-  cursor = await arrow(screen.stdin, 'down', 8, cursor)
+  cursor = await arrow(screen.stdin, 'down', 7, cursor)
   screen.stdin.write('\r')
   check('l plugin panel id written on tick',
-    await settled(() => panelSetWrites().includes('todo,jobs,agents,demo:notes'), { timeoutMs: 4000 }),
+    await settled(() => panelSetWrites().includes('jobs,agents,info,demo:notes'), { timeoutMs: 4000 }),
     panelSetWrites().join(' | '))
   dispose()
   check('l unloaded plugin row leaves, its id degrades to a placeholder',
@@ -377,7 +377,7 @@ const ROW_JOBS = 1, ROW_COMPANION = 7
     source: 'plugin',
     component: () => null,
   }, { pluginId: 'demo' })
-  const ROW_ADVANCED = 9 // 8 builtins in default order, then the plugin row
+  const ROW_ADVANCED = 8 // 7 builtins in default order, then the plugin row
 
   // s1. checked state under `*`: every registered panel, plugin included.
   {
@@ -399,13 +399,13 @@ const ROW_JOBS = 1, ROW_COMPANION = 7
     await moveTo(rowOf(screen, 'Companion'))
     screen.stdin.write('\r')
     check('s unticking a builtin keeps plugin ids',
-      await settled(() => panelSetWrites().includes('todo,jobs,agents,info,trajectory,workspace,btw,demo:md'), { timeoutMs: 4000 }),
+      await settled(() => panelSetWrites().includes('jobs,agents,info,trajectory,workspace,btw,demo:md'), { timeoutMs: 4000 }),
       panelSetWrites().join(' | '))
 
     await moveTo(rowOf(screen, 'Markdown demo'))
     screen.stdin.write('\r')
     check('s unticking the plugin row removes it from the explicit list',
-      await settled(() => panelSetWrites().includes('todo,jobs,agents,info,trajectory,workspace,btw'), { timeoutMs: 4000 }),
+      await settled(() => panelSetWrites().includes('jobs,agents,info,trajectory,workspace,btw'), { timeoutMs: 4000 }),
       panelSetWrites().join(' | '))
     await screen.close()
   }
@@ -413,7 +413,7 @@ const ROW_JOBS = 1, ROW_COMPANION = 7
   // s3. an explicit list that predates the plugin leaves it unchecked but
   // visible (the extension story; one tick brings it back).
   {
-    const screen = await openPicker('todo,jobs,agents,info,trajectory,workspace,btw')
+    const screen = await openPicker('jobs,agents,info,trajectory,workspace,btw')
     if (screen === null) { check('s explicit-list scenario opens', false); process.exit(1) }
     check('s plugin panel renders unchecked under an explicit list',
       /\[  \][^\n]*Markdown demo/.test(screen.view()))
@@ -484,14 +484,14 @@ const ROW_JOBS = 1, ROW_COMPANION = 7
   const dispose = panelStore.register({ id, title: 'Scratch notes', icon: '◉', source: 'plugin', component: () => null }, { pluginId: 'session:act900' })
   const otherId = 'session:act901:notes'
   const disposeOther = panelStore.register({ id: otherId, title: 'Scratch notes', icon: '◉', source: 'plugin', component: () => null }, { pluginId: 'session:act901' })
-  const screen = await openPicker('todo,act900:notes')
+  const screen = await openPicker('jobs,act900:notes')
   if (screen === null) { check('temporary picker opens', false); process.exit(1) }
   check('temporary row is readable and explicitly not saved', screen.has('Scratch notes') && screen.has('this run only'))
   console.log('SCREEN temporary panels\n' + screen.view().split('\n').filter(line => line.trim()).join('\n'))
   check('legacy anonymous placeholder asks for reselection', screen.has('Old anonymous address'))
   const numbers = [...screen.view().matchAll(/Temporary panel #(\d+)/g)].map(match => match[1])
   check('duplicate readable titles have distinct run-local numbers', numbers.length === 2 && new Set(numbers).size === 2)
-  cursor = await arrow(screen.stdin, 'down', 8, cursor)
+  cursor = await arrow(screen.stdin, 'down', 7, cursor)
   screen.stdin.write('\r')
   check('temporary Enter hides it for this run only',
     await settled(() => getHiddenTemporarySidePanels().includes(id)) && panelSetWrites().length === 0)
@@ -503,7 +503,7 @@ const ROW_JOBS = 1, ROW_COMPANION = 7
   if (cell !== null) screen.click(cell.col, cell.row)
   check('temporary mouse toggle also avoids persistence',
     await settled(() => getHiddenTemporarySidePanels().includes(id)) && panelSetWrites().length === 0)
-  cursor = await arrow(screen.stdin, 'up', 6, 8)
+  cursor = await arrow(screen.stdin, 'up', 6, 7)
   screen.stdin.write('\r')
   check('durable edit never serializes temporary id', await settled(() => panelSetWrites().length > 0) && panelSetWrites().every(csv => !csv.includes('session:')))
   await screen.close()
@@ -516,7 +516,7 @@ const ROW_JOBS = 1, ROW_COMPANION = 7
 // distinguish an explicit current selection from an ambiguous legacy entry.
 {
   const dispose = panelStore.register({ id: 'act1:notes', title: 'Verified notes', icon: '◉', source: 'plugin', component: () => null }, { pluginId: 'act1' })
-  const screen = await openPicker('todo,act1:notes')
+  const screen = await openPicker('jobs,act1:notes')
   if (screen === null) { check('reserved Component picker opens', false); process.exit(1) }
   check('legacy entry remains a separate unclaimed row', screen.has('Verified notes') && screen.has('Old anonymous address'))
   const cell = screen.find('Verified notes')
@@ -525,7 +525,7 @@ const ROW_JOBS = 1, ROW_COMPANION = 7
   // bare actN entry survives untouched as its own placeholder, and the new
   // id lands at its default-order position rather than at the tail.
   check('explicit Component choice writes encoded preference',
-    await settled(() => panelSetWrites().includes('todo,component:act1:notes,act1:notes')))
+    await settled(() => panelSetWrites().includes('jobs,component:act1:notes,act1:notes')))
   check('public registry address is unchanged',
     panelStore.get('act1:notes') !== undefined && panelStore.get('component:act1:notes') === undefined)
   await screen.close()
@@ -534,9 +534,9 @@ const ROW_JOBS = 1, ROW_COMPANION = 7
 
 // ── g. the last checked panel cannot be removed (empty is not storable) ─────
 {
-  const screen = await openPicker('todo')
+  const screen = await openPicker('jobs')
   if (screen === null) { check('g min-one scenario opened', false); process.exit(1) }
-  screen.stdin.write('\r') // cursor 0 = the only checked row (Todo)
+  screen.stdin.write('\r') // cursor 0 = the only checked row (Jobs)
   check('g removing the last panel is refused with a notice', await settled(() => screen.has(t('settings-panels-min-one')), { timeoutMs: 4000 }))
   check('g refusal writes nothing', panelSetWrites().length === 0, panelSetWrites().join(' | '))
   await screen.close()
@@ -544,19 +544,19 @@ const ROW_JOBS = 1, ROW_COMPANION = 7
 
 // ── a. advanced raw editor: reorder / future ids by hand; invalid refused ───
 {
-  const screen = await openPicker('todo,jobs')
+  const screen = await openPicker('jobs,agents')
   if (screen === null) { check('a advanced scenario opened', false); process.exit(1) }
-  cursor = await arrow(screen.stdin, 'down', 8, cursor) // advanced row after the 8 builtin rows
+  cursor = await arrow(screen.stdin, 'down', 7, cursor) // advanced row after the 7 builtin rows
   screen.stdin.write('\r')
-  check('a Enter opens the raw draft editor', await settled(() => screen.has('todo,jobs▌'), { timeoutMs: 4000 }))
+  check('a Enter opens the raw draft editor', await settled(() => screen.has('jobs,agents▌'), { timeoutMs: 4000 }))
   screen.stdin.write(',btw')
   await sleep(150) // 固定窗:pacing 打字与确认须分两个 stdin chunk——ink 单事件批处理会把确认键并进文本
   screen.stdin.write('\r')
   check('a confirmed raw draft saves as the comma string',
-    await settled(() => panelSetWrites().includes('todo,jobs,btw'), { timeoutMs: 4000 }),
+    await settled(() => panelSetWrites().includes('jobs,agents,btw'), { timeoutMs: 4000 }),
     panelSetWrites().join(' | '))
 
-  cursor = 8
+  cursor = 7
   screen.stdin.write('\r')
   await settled(() => screen.has('▌'), { timeoutMs: 4000 })
   screen.stdin.write(',BAD!')
@@ -569,13 +569,13 @@ const ROW_JOBS = 1, ROW_COMPANION = 7
   await settled(() => !screen.has('▌'), { timeoutMs: 4000 })
   check('a Esc on the editor writes nothing', panelSetWrites().length === before)
   check('a rejected draft leaves the previous checkbox selection intact',
-    screen.has('[✓ ] ≡') && screen.has('[✓ ] ▸') && screen.has('[✓ ] ?')
-    && screen.has('[  ] ◆') && screen.has('[  ] ♥'))
-  cursor = await arrow(screen.stdin, 'up', 8 - ROW_JOBS, cursor)
+    screen.has('[✓ ] ▸') && screen.has('[✓ ] ◆') && screen.has('[✓ ] ?')
+    && screen.has('[  ] ⓘ') && screen.has('[  ] ♥'))
+  cursor = await arrow(screen.stdin, 'up', 7 - ROW_JOBS, cursor)
   screen.stdin.write('\r')
   check('a toggle after cancelling an invalid draft only changes the selected panel',
     await settled(() => panelSetWrites().length > before, { timeoutMs: 4000 })
-    && panelSetWrites().at(-1) === 'todo,btw',
+    && panelSetWrites().at(-1) === 'agents,btw',
     panelSetWrites().join(' | '))
   await screen.close()
 }
@@ -586,7 +586,7 @@ const ROW_JOBS = 1, ROW_COMPANION = 7
   check('h teaching copy is gone', !DEFINITION.hint.includes('Comma-separated panel ids'))
   check('h hint mentions plugin panels appearing automatically', DEFINITION.hint.includes('plugin'))
   check('h zh hint mentions plugin panels', (DEFINITION.hintDescriptions?.zh ?? '').includes('插件'))
-  const screen = await openPicker('todo,jobs,agents')
+  const screen = await openPicker('jobs,agents,info')
   if (screen === null) { check('h hint scenario opened', false); process.exit(1) }
   check('h hint bar shows the short hint on a checkbox row', screen.has(DEFINITION.hint.slice(0, 16)))
   await screen.close()

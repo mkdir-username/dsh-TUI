@@ -9,10 +9,11 @@
  * Locked behavior:
  *  r. every builtin panel is registered with a single-cell icon, and the
  *     fullscreen capability is set exactly where a fullscreen form exists;
- *  c. mounting the column with 'todo,info,trajectory' renders those three
- *     tabs, clicking the ⓘ tab swaps the column to the info readout,
- *     clicking ∿ swaps it to the trajectory panel (empty state without a
- *     build), and ⤢ shows up only while a fullscreen-capable panel is active.
+ *  c. mounting the column with 'todo,info,trajectory' keeps the explicit
+ *     stale 'todo' id as a fallback-titled tab, then clicking the ▶ arrow
+ *     swaps to the info readout, clicking ∿ swaps it to the trajectory panel
+ *     (empty state without a build), and ⤢ shows up only while a
+ *     fullscreen-capable panel is active.
  *
  * Run: node --import tsx/esm scripts/verify-side-panel-registry.tsx
  */
@@ -54,7 +55,6 @@ function check(name: string, ok: boolean, extra = ''): void {
 
 // ── r. registry contract ────────────────────────────────────────────────────
 const EXPECTED: readonly { id: string; icon: string; fullscreen: boolean }[] = [
-  { id: 'todo', icon: '≡', fullscreen: false },
   { id: 'info', icon: 'ⓘ', fullscreen: false },
   { id: 'trajectory', icon: '∿', fullscreen: true },
   { id: 'jobs', icon: '▸', fullscreen: true },
@@ -80,6 +80,8 @@ for (const expected of EXPECTED) {
   check('r registry: ' + expected.id + ' fullscreen=' + expected.fullscreen, fullscreen === expected.fullscreen)
   check('r registry: ' + expected.id + ' is marked enabled by default', entry.definition.defaultEnabled === true)
 }
+check('r registry: todo stays unregistered (fork: no Todo panel)',
+  registry.every(entry => entry.definition.id !== 'todo'))
 
 // ── c. mount through the real host ──────────────────────────────────────────
 // Field set mirrors verify-info-panel's stub: the info readout derives every

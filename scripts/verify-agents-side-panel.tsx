@@ -121,7 +121,7 @@ let exposedActive = ''
 let exposedSplit = false
 let exposedChatColumns = 0
 let openAgents: (() => void) | undefined
-let openTodo: (() => void) | undefined
+let openJobs: (() => void) | undefined
 
 function Harness(): React.ReactNode {
   const sp = useSidePanel({ columns: COLS, fullscreen: true, editorOpen: false })
@@ -131,7 +131,7 @@ function Harness(): React.ReactNode {
   exposedSplit = sp.split
   exposedChatColumns = sp.chatColumns
   openAgents = () => sp.openPanel('agents', { focus: true })
-  openTodo = () => sp.openPanel('todo', { focus: true })
+  openJobs = () => sp.openPanel('jobs', { focus: true })
   React.useEffect(() => channel.subscribe(() => bump(previous => previous + 1)), [])
   useInput((input: string, key: Record<string, boolean | undefined>) => {
     sp.handleKey(input, key as never)
@@ -216,8 +216,8 @@ function dumpScreen(): void {
 
 try {
   await settled(() => state().includes('split=1'))
-  check('mount: split renders with the agents tab enabled', state().includes('split=1 focus=chat active=todo'), state())
-  check('mount: the active Todo title is on the PanelBar', has('Todo'))
+  check('mount: split renders with the agents tab enabled', state().includes('split=1 focus=chat active=jobs'), state())
+  check('mount: the default jobs title is on the PanelBar', has('Jobs'))
   check('badge: empty roster and no failure leaves the badge null', panelStore.get('agents')?.badge === null,
     JSON.stringify(panelStore.get('agents')?.badge ?? null))
 
@@ -364,8 +364,8 @@ try {
   await settled(() => has('1/3'))
   await writeKey('\x1b[C')
   await settled(() => has('2/3'))
-  openTodo?.()
-  await settled(() => state().includes('active=todo'))
+  openJobs?.()
+  await settled(() => state().includes('active=jobs'))
   check('route: switching to another panel hides the agents panel', !has('2/3'))
   openAgents?.()
   await settled(() => state().includes('active=agents') && has('2/3'))

@@ -269,7 +269,6 @@ function insertAtDefaultPosition(
 /** One-line descriptions for the builtin picker rows (plugin rows show their
  * plugin id; unclaimed rows show the waiting hint). */
 const PANEL_DESCRIPTION_KEYS: Readonly<Record<string, I18nKey>> = {
-  todo: 'panel-desc-todo',
   info: 'panel-desc-info',
   trajectory: 'panel-desc-trajectory',
   jobs: 'panel-desc-jobs',

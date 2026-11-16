@@ -2433,7 +2433,6 @@ const dict = {
   'panel-title-info': { zh: '信息', en: 'Info' },
   'panel-title-workspace': { zh: '工作区', en: 'Workspace' },
   // 面板一句话描述：/settings 的 sidePanel.panels 勾选行用（panel-desc-<id>）。
-  'panel-desc-todo': { zh: '目标与待办清单，Enter 勾选完成', en: 'Goal and todo checklist; Enter ticks items done' },
   'panel-desc-info': { zh: '模型、上下文与消耗的信息栏', en: 'Model, context and cost readout' },
   'panel-desc-trajectory': { zh: '回合轨迹：耗时、工具与重试', en: 'Per-turn trace: timing, tools, retries' },
   'panel-desc-jobs': { zh: '后台任务名册与实时输出', en: 'Background jobs roster and live output' },
