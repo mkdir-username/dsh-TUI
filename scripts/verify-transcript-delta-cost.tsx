@@ -5,13 +5,20 @@
  * идентичность (так работает проекция чтения канала). Дорогая дельта — это
  * фриз: кадр не влезает в 16 мс драйвера, очередь ввода не успевает.
  *
+ * Бюджет относительный: тот же кадр без проекции чтения канала (пол) снимается
+ * в этом же процессе, и gate судит отношение цена/пол. Абсолютные миллисекунды
+ * на общем раннере не переносимы — одна и та же сборка мерила 10.4 мс и 20.1 мс
+ * (CI, 095f78e3 и 7395c748), 11.6 и 15.7 мс локально, знаменатель разный.
+ * Регресс дельты поднимает оба окна, поэтому отношение его видит: было 1.51
+ * (11.6/7.7), перед фиксом зависимостей эффекта 2.34 (18.0/7.7).
+ *
  * Кейсы 1–3 проверяют, что быстрый путь не ломает видимое окно; группировка
  * job-строк и превью rail — в scripts/verify-jobs-transcript-group.tsx и
  * scripts/verify-timeline-rail.tsx.
  *
  * Run: node --import tsx/esm scripts/verify-transcript-delta-cost.tsx
- * Env: N (ходов, 750 = 3000 строк), WINDOW_MS (окно замера), BUDGET_MS, FRAME_MS,
- *      NOPROJ=1 — контроль без проекции чтения канала (пол 7.7 мс).
+ * Env: N (ходов, 750 = 3000 строк), WINDOW_MS (окно замера), SAMPLES, RATIO_MAX, FRAME_MS,
+ *      NOPROJ=1 — вне замера проекции чтения канала (пол).
  */
 process.env.FORCE_COLOR = '3'
 process.env.DSH_TUI_THEME = 'dark'
@@ -43,10 +50,8 @@ const COLS = 120, ROWS = 40
 const TURNS = Number(process.env.N ?? 750)
 const FRAME_MS = Number(process.env.FRAME_MS ?? 16)
 const WINDOW_MS = Number(process.env.WINDOW_MS ?? 2000)
-// 12 ms = измеренный пол верного пути (11.6: рост текста требует ре-рендера
-// строки и пере-замера высоты) плюс запас. До фикса зависимостей эффекта было
-// 18.0 — гейт стережёт именно этот класс регресса.
-const BUDGET = Number(process.env.BUDGET_MS ?? 12)
+const SAMPLES = Number(process.env.SAMPLES ?? 3)
+const RATIO_MAX = Number(process.env.RATIO_MAX ?? 1.8)
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
 const term = new XTerm({ cols: COLS, rows: ROWS, scrollback: 0, allowProposedApi: true })
 class FakeStdout extends Writable {
@@ -89,11 +94,12 @@ const raw: any = {
   setResumeTarget: () => {}, loadOlder: () => {}, mcpStatus: () => [], pushLocal: () => {},
   commandCompletions: (input: string) => completeCommands(input),
 }
+let controlMode = false
 const channel = process.env.NOPROJ === '1' ? raw : new Proxy(raw, {
   get(target, key, receiver) {
     const value = Reflect.get(target, key, receiver)
     if (typeof value === 'function') return value.bind(target)
-    return read(value, channelVersion)
+    return controlMode ? value : read(value, channelVersion)
   },
 })
 
@@ -145,26 +151,45 @@ check('case3: замена строки другим kind/id видна в ок�
 const budgetRow: any = { id: ++id, kind: 'assistant', text: '流 BUDGET-START', streaming: true }
 rows.push(budgetRow)
 await delta(() => { markChannelReadDirty(budgetRow) })
-const before = process.cpuUsage()
-const startedAt = performance.now()
-frames = 0
-let appended = ''
-while (performance.now() - startedAt < WINDOW_MS) {
-  appended += 'x'
-  budgetRow.text = `流 BUDGET-START ${appended}`
-  markChannelReadDirty(budgetRow)
-  markChannelReadDirty(rows)
-  channelVersion += 1
-  raw.version = channelVersion
-  for (const cb of listeners) cb()
-  await sleep(FRAME_MS) // 固定窗:墙钟 каденция драйвера — предмет замера
+// Пол и цену снимаем по очереди в одном процессе: разгонное окно греет оба
+// пути, дальше SAMPLES пар окон (пол → цена) и минимум из отношений — пара
+// делит одну нагрузку раннера, а регресс поднимает отношение в каждой паре.
+const sampleWindow = async (): Promise<number> => {
+  budgetRow.text = '流 BUDGET-START'
+  frames = 0
+  const before = process.cpuUsage()
+  const startedAt = performance.now()
+  let appended = ''
+  while (performance.now() - startedAt < WINDOW_MS) {
+    appended += 'x'
+    budgetRow.text = `流 BUDGET-START ${appended}`
+    markChannelReadDirty(budgetRow)
+    markChannelReadDirty(rows)
+    channelVersion += 1
+    raw.version = channelVersion
+    for (const cb of listeners) cb()
+    await sleep(FRAME_MS) // 固定窗:墙钟 каденция драйвера — предмет замера
+  }
+  await sleep(200) // 固定窗:墙钟 профиль закрывается после последнего кадра
+  const used = process.cpuUsage(before)
+  return (used.user + used.system) / 1e3 / Math.max(1, frames)
 }
-await sleep(200) // 固定窗:墙钟 профиль закрывается после последнего кадра
-const used = process.cpuUsage(before)
-const cpuMs = (used.user + used.system) / 1e3
-const perFrame = cpuMs / Math.max(1, frames)
-const withinBudget = perFrame <= BUDGET
-console.log(`rows=${rows.length} frames=${frames} cpu=${cpuMs.toFixed(0)}ms`)
-console.log(`cpu/frame=${perFrame.toFixed(1)}ms budget=${BUDGET}ms → ${withinBudget ? 'PASS' : 'FAIL'}`)
+await sampleWindow() // разгон: JIT и высота строк уже посчитаны
+let ratio = Number.POSITIVE_INFINITY
+let floorMs = Number.POSITIVE_INFINITY
+let deltaMs = Number.POSITIVE_INFINITY
+for (let i = 0; i < SAMPLES; i++) {
+  controlMode = true
+  const floor = await sampleWindow()
+  controlMode = false
+  const delta = await sampleWindow()
+  ratio = Math.min(ratio, delta / Math.max(0.1, floor))
+  floorMs = Math.min(floorMs, floor)
+  deltaMs = Math.min(deltaMs, delta)
+  console.log(`window ${i + 1}: floor=${floor.toFixed(1)}ms delta=${delta.toFixed(1)}ms`)
+}
+const withinBudget = ratio <= RATIO_MAX
+console.log(`rows=${rows.length} floor=${floorMs.toFixed(1)}ms delta=${deltaMs.toFixed(1)}ms`)
+console.log(`delta/floor=${ratio.toFixed(2)} max=${RATIO_MAX} → ${withinBudget ? 'PASS' : 'FAIL'}`)
 await inst.unmount()
 process.exit(failures.length === 0 && withinBudget ? 0 : 1)

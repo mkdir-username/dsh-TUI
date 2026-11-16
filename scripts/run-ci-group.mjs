@@ -702,7 +702,7 @@ const GROUPS = {
 // sticky 头的重复调用走 memo、18k 单行不再 O(n²)——活体冻结会话的 profile 里
 // stringWidth 占 13.6% self-time。
     ["verify-clean-render-text", ['node', '--import', 'tsx/esm', 'scripts/verify-clean-render-text.tsx']],
-    // 流式片段的帧预算：3000 行规模下 cpu/frame 门槛 12ms（修复前 18ms）
+    // 流式片段的帧预算：3000 行规模下 delta/floor ≤ 1.8（绝对值随 runner 漂 2×，见脚本头）
     ["verify-transcript-delta-cost", ['node', '--import', 'tsx/esm', 'scripts/verify-transcript-delta-cost.tsx']],
     // rail 之后的空闲：burst 结束必须 0 帧、CPU ≤5%（冻结会话的症状）
     ["verify-idle-quiescence", ['node', '--import', 'tsx/esm', 'scripts/verify-idle-quiescence.tsx']],

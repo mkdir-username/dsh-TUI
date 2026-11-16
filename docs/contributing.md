@@ -345,7 +345,7 @@ CI 回归都要跑。窄改动还要跑最近的聚焦脚本：
 | 改动区域 | 聚焦验证 |
 | --- | --- |
 | 通用无头屏幕组装 | `pnpm smoke` |
-| 转录帧预算与 rail 之后的空闲（行数组换身份、流式增量、效果依赖） | `node --import tsx/esm scripts/verify-transcript-delta-cost.tsx`（3000 行、60 帧、cpu/frame ≤ 12ms）、`node --import tsx/esm scripts/verify-idle-quiescence.tsx`（burst 后 1s 内 0 帧、CPU ≤5%） |
+| 转录帧预算与 rail 之后的空闲（行数组换身份、流式增量、效果依赖） | `node --import tsx/esm scripts/verify-transcript-delta-cost.tsx`（3000 行、3 对 2 秒窗口、delta/floor ≤ 1.8）、`node --import tsx/esm scripts/verify-idle-quiescence.tsx`（burst 后 1s 内 0 帧、CPU ≤5%） |
 | 底栏字段 / 状态接缝（`tuiStatus.setField`、StatusLine 三槽与 hover/click） | `node --import tsx/esm scripts/verify-status-fields.tsx` |
 | 插件 `@` 提及提供方（`tuiMentions`、`@` 浮窗合并与插入） | `node --import tsx/esm scripts/verify-mention-providers.tsx`，并跑 `node scripts/verify-file-completion.mjs`（先构建） |
 | 账号通知覆盖真实 Chat（inline/fullscreen、80/36 列、stream→idle、重投递与 resize） | `node --import tsx/esm scripts/verify-account-notification-chat-geometry.tsx`（12 场景，假账号/真实 xterm；纳入 `verify:oauth`） |
