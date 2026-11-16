@@ -181,6 +181,13 @@ export type AskUserQuestionPanelProps = {
    *  multi-select submit row) render only then — inline hosts have no
    *  pointer, so an unclickable row would just eat a line. */
   readonly fullscreen?: boolean
+  /**
+   * The user is working on this question: a key reached the panel, or an answer
+   * row was clicked. The host binding re-arms a timed ask's wait from it, so
+   * typing or moving between options never loses the question to the asker's
+   * clock.
+   */
+  readonly onActivity?: () => void
 }
 
 export function AskUserQuestionPanel({
@@ -199,6 +206,7 @@ export function AskUserQuestionPanel({
   onExpand,
   onToggleFold,
   fullscreen = false,
+  onActivity,
 }: AskUserQuestionPanelProps): React.ReactNode {
   // Plan-mode's exit_plan_mode ask carries a presentation intent: render
   // the plan decision card instead of the generic questionnaire. The
@@ -501,6 +509,9 @@ export function AskUserQuestionPanel({
   }
 
   useInput((input, key, event) => {
+    // Whatever the key does, it proves the user is at this question: the host
+    // binding re-arms a timed ask's wait from exactly this signal.
+    onActivity?.()
     if (editingRef.current) {
       event.stopImmediatePropagation()
       return
@@ -664,6 +675,7 @@ export function AskUserQuestionPanel({
   /** Mouse: click the input row to focus it (same as Tab). */
   const focusInputRow = (): void => {
     if (hideCustomInput) return
+    onActivity?.()
     placeFocus(options.length)
     setError(null)
   }
@@ -696,6 +708,7 @@ export function AskUserQuestionPanel({
    * one answer, matching ApprovalPanel's click semantics.
    */
   const clickOption = (index: number): void => {
+    onActivity?.()
     if (multiSelect) {
       toggleCheckedAt(index)
       return

@@ -6039,6 +6039,7 @@ export function Chat({
       onExpand={() => setMinimizedQuestionKey(null)}
       onToggleFold={() => setMinimizedQuestionKey(previous =>
         previous === questionSnapshot.key ? null : questionSnapshot.key)}
+      onActivity={() => questionStore.noteActivity()}
       fullscreen={fullscreen}
     />
   ) : null
