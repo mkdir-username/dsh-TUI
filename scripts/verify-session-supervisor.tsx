@@ -62,6 +62,7 @@ process.env.FORCE_COLOR = '3'
 process.env.DSH_TUI_THEME = 'dark'
 process.env.DSH_TUI_LANG = 'en'
 
+import { spawn } from 'node:child_process'
 import { existsSync, mkdtempSync, mkdirSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -212,11 +213,16 @@ const sessions = [
 ]
 
 /**
- * A pid that is certainly alive so the ledger's liveness witness passes; the
- * screen must only report it. `process.ppid` is a running process on every
- * platform (pid 1 is not guaranteed to exist on Windows).
+ * A peer process that is alive AND started just now. The ledger stores
+ * `startedAt: Date.now()` and the reader rejects an owner whose real process
+ * start time is more than two minutes off (pid reuse). `process.ppid` used to
+ * stand in, but in the CI group runner the parent is the long-lived runner, so
+ * the witness was rejected and every occupancy assertion failed there while
+ * the same test passed under a fresh shell.
  */
-const FOREIGN_PID = process.ppid
+const foreignPeer = spawn(process.execPath, ['-e', 'setTimeout(() => {}, 300000)'], { stdio: 'ignore' })
+process.once('exit', () => { try { foreignPeer.kill('SIGKILL') } catch { /* already gone */ } })
+const FOREIGN_PID = foreignPeer.pid ?? process.ppid
 /** The session another terminal has mounted, seeded into the REAL ledger. */
 const HELD_SESSION_ID = 'held-one'
 
