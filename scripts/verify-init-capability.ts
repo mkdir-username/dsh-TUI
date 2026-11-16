@@ -60,7 +60,12 @@ try {
     check('local /init wins every case variant of a backend command name collision', initCommands.length === 1 && initCommands[0]?.name === 'init' && initCommands[0].origin !== 'backend')
     check('a non-colliding backend skill remains available', native.commandList.some(command => command.name === 'deploy' && command.origin === 'backend' && command.skill))
     const completions = completeCommands('/ini', native.commandList)
-    check('init completion has one entry that parses as the local command', completions.length === 1 && parseCommandName(completions[0]!.commandLine)?.name === 'init')
+    // Local: fuzzy completion (0696198c) legitimately drags other commands in
+    // (`/ini` is a subsequence of `/thinking`), so the locked contract is the
+    // single LOCAL init entry — not the total length.
+    const initLike = completions.filter(completion => parseCommandName(completion.commandLine)?.name.toLowerCase() === 'init')
+    check('init completion has one entry that parses as the local command',
+      initLike.length === 1 && parseCommandName(initLike[0]!.commandLine)?.name === 'init' && initLike[0]!.commandLine === '/init')
     check('backendInit delegates to the production capability', await init.run() && calls === 1)
   } finally { native.releaseContributions() }
   check('a released init host cannot act on the old session', await init.run() === false && calls === 1)

@@ -207,8 +207,9 @@ try {
   const body = findText('chat-body')
   check('e focus: chat body located', body !== null, JSON.stringify(body))
   if (body !== null) click(body.col, body.row)
-  // 侧栏热键默认不绑（Ctrl+B 归后台键）：未聚焦那格提示点击标签。
-  check('e focus: hint swaps back to the unfocused copy', await settled(() => has('click a tab to focus panel'), { timeoutMs: 4000 }))
+  // Local: Ctrl+B stays bound to the side panel (toolPark only consumes it
+  // while a call is waiting), so the unfocused cell names the key.
+  check('e focus: hint swaps back to the unfocused copy', await settled(() => has('Ctrl+B focus panel'), { timeoutMs: 4000 }))
 } finally {
   await app.unmount()
 }

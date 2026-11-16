@@ -517,11 +517,15 @@ async function openPanelScreen(
 }
 
 const wide = await openPanelScreen(richPanelId, 38, 32)
+// A hyperlink-capable terminal (Ghostty/iTerm/...) paints the label under an
+// OSC 8 link, so the URL never reaches the text; the plain fallback appends
+// it. Accept either shape — the visible contract is the rendered label.
 check(
   'markdown panel (38): renders heading/list/quote/strike/link',
   await settled(() => {
     const rows = wide.lines()
-    return ['面板标题', '列表项一', '引用块', '删除线', 'example.com'].every(text => rows.some(line => line.includes(text)))
+    return ['面板标题', '列表项一', '引用块', '删除线', '链接'].every(text => rows.some(line => line.includes(text)))
+      && rows.some(line => line.includes('链接') && (line.includes('example.com') || !line.includes('链接 (')))
   }),
 )
 const wideLines = wide.lines()

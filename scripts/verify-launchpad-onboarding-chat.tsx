@@ -532,15 +532,17 @@ const heroIdentical = (before: readonly string[], after: readonly string[]): boo
   await chat.type('/help')
   await chat.send('\r')
   // /help 的帮助浮层盖在启动页之上，不切换到对话页，也不触发 submit。
+  // (The old `!includes('⌘')` proxy for "the chat composer is not on screen"
+  // died with the macOS alias: comboDisplay now spells Ctrl as ⌘, so the help
+  // overlay legitimately shows it. The launchpad mark + no submit carry it.)
   check('B6 命令行走命令表：不触发 channel.submit（本地命令不发模型）',
-    await settled(() => chat.screen().includes(HELP_MARK) && chat.screen().includes(LAUNCHPAD_MARK)
-      && !chat.screen().includes('⌘'))
+    await settled(() => chat.screen().includes(HELP_MARK) && chat.screen().includes(LAUNCHPAD_MARK))
       && !chat.calls.some(c => c.startsWith('submit:')),
     chat.screen().slice(0, 240))
   await chat.send('\x1b')
   check('B6b /help 盖屏 Esc → 回到启动页（输入框为空、聊天页不上屏）',
     await settled(() => !chat.screen().includes(HELP_MARK)
-      && chat.screen().includes(LAUNCHPAD_MARK) && !chat.screen().includes('⌘')),
+      && chat.screen().includes(LAUNCHPAD_MARK)),
     chat.screen().slice(0, 240))
   await chat.unmount()
 }

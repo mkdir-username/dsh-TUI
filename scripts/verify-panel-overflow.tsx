@@ -47,7 +47,7 @@ const [
   { QuestionBridge },
   { setKeymapOverrides, resetKeymapOverrides },
   { default: instances },
-  { settle, settled, viewportLines },
+  { sleep, settle, settled, viewportLines },
 ] = await Promise.all([
   import('node:stream'),
   import('react'),
@@ -371,8 +371,14 @@ for (const typed of [false, true]) {
   }] })
   await settle(() => visible('Multi Alpha'))
   stdin.write(typed ? '\tDRAFT_ANSWER' : ' ')
+  // A typed answer swaps the submit row and adds the attach hint
+  // (question-hint-enter / question-hint-attach); a checked choice keeps the
+  // selection copy (question-submit-selection + ↑/↓ 选择).
   check(`multi-select ${typed ? 'typed' : 'checked'}: submit, hints and full footer remain visible`,
-    await settled(() => visible('提交选择') && visible(typed ? '输入回答' : '↑/↓ 选择') && fullFooterVisible()), screenText())
+    await settled(() => typed
+      ? visible('Enter 提交') && visible('输入文字附带回答') && fullFooterVisible()
+      : visible('提交选择') && visible('↑/↓ 选择') && fullFooterVisible()), screenText())
+  await sleep(200) // 固定窗:pacing 输入态重绘未落定时 Enter 会被吞，先让面板稳定
   stdin.write('\r')
   const answer = await asked
   check(`multi-select ${typed ? 'typed' : 'checked'}: answer is unchanged`,
