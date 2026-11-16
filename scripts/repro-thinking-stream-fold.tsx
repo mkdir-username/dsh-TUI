@@ -179,11 +179,14 @@ ls = lines()
 check('步骤落定后标题改为静态标记', headerRow(ls) === -1)
 check('步骤落定后 full 正文仍保持展开', bodyLines(ls) >= 10, `body=${bodyLines(ls)}`)
 
+// Local: a settled turn does NOT fold the thinking body — the row keeps its
+// text until the user collapses it (click / Ctrl+O). See MessageList's
+// reasoning case (`verbose`).
 reasoningRow.thinkingOpen = false
 channel.version += 1
 for (const listener of listeners) listener()
-await waitFor(() => bodyLines(lines()) === 0)
-check('turn 结束后 full 正文折叠', bodyLines(lines()) === 0, `body=${bodyLines(lines())}`)
+await sleep(300) // 固定窗:pacing 翻档后没有可轮询的变化点（正文应保持不变）
+check('turn 结束后正文保持展开（本地：settle 不折叠）', bodyLines(lines()) >= 10, `body=${bodyLines(lines())}`)
 
 await inst.unmount()
 console.log(failed === 0 ? '\nALL PASS' : `\n${failed} 项失败`)

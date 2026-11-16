@@ -32,9 +32,8 @@
  *      send is reported and the text stays editable (Ink's stdin pump only
  *      logs the throw to stderr) [F1, F2, F3]; the dock rows survive a
  *      throwing deliverDocked with no false "sent" claim [F4, F5]
- *   G. two Ctrl+Enter presses inside one cancelPending window deliver each
- *      text exactly once (a repeated interrupt must not re-list the copies the
- *      first press re-queued) [G1, G2]
+ *   G. two Ctrl+Enter presses while a turn runs steer each text exactly once
+ *      (the repeated press must not re-deliver the first draft) [G1, G2]
  *
  * Every check is required: any failure exits non-zero.
  *
@@ -74,7 +73,7 @@ const { Terminal: XTerm } = xtermMod.default
 const { Chat } = chatMod
 const { setLang } = i18n
 const { render } = ui
-const { settle, settled, viewportLines, screenHas } = termTest
+const { sleep, settle, settled, viewportLines, screenHas } = termTest
 
 // ── parameters ──────────────────────────────────────────────────────────────
 const COLS = 110
@@ -463,23 +462,23 @@ async function scenarioC() {
     `onRestartCalls=${calls.onRestartCalls} gateNotice=${JSON.stringify(channel.notifications.at(-1)?.text ?? null)}`,
   )
 
-  // Idle control: the same key path must reach onRestart with no turn running
-  // (proves the harness can observe the hook at all). Relative to the count
-  // after the working-state attempt so this passes both today and post-fix.
-  channel.working = false
-  channel.emit()
-  await settle(() => !screen(term).includes('esc to interrupt'), { timeoutMs: 4000 })
-  const idleRestartFrom = calls.onRestartCalls
-  await typeAndEnter(term, stdin, '/restart')
-  const idleRestart = await settled(() => calls.onRestartCalls === idleRestartFrom + 1, { timeoutMs: 4000 })
+  // A restart drops Chat back to the launchpad (the session is being
+  // replaced), so the idle control needs its own mount instead of the
+  // restarted instance.
+  await instance.unmount()
+  const idle = makeChannel({ working: false })
+  const idleMounted = await mount(idle.channel, () => { idle.probe.onRestartCalls += 1 })
+  const idleRestartFrom = idle.probe.onRestartCalls
+  await typeAndEnter(idleMounted.term, idleMounted.stdin, '/restart')
+  const idleRestart = await settled(() => idle.probe.onRestartCalls === idleRestartFrom + 1, { timeoutMs: 4000 })
   check(
     'C3',
     'idle /restart reaches onRestart (baseline control)',
     idleRestart,
-    `onRestartCalls=${calls.onRestartCalls} (from ${idleRestartFrom})`,
+    `onRestartCalls=${idle.probe.onRestartCalls} (from ${idleRestartFrom})`,
   )
 
-  await instance.unmount()
+  await idleMounted.instance.unmount()
 }
 
 // ── scenario E: docked-queue baseline (must stay green) ─────────────────────
@@ -583,29 +582,33 @@ async function scenarioG() {
   const { term, stdin, instance } = await mount(channel)
 
   await typeAndCtrlEnter(term, stdin, 'AAAA')
-  const first = await settled(() => calls.submitCalls.length === 1 && channel.pending.length === 1, { timeoutMs: 4000 })
+  const first = await settled(() => calls.steerCalls.length === 1, { timeoutMs: 4000 })
   check(
     'G0',
-    'first Ctrl+Enter with an empty queue re-queues its draft once',
-    first && calls.submitCalls[0] === 'AAAA',
-    JSON.stringify({ submits: calls.submitCalls, pending: channel.pending.map(item => item.text), cancelPending: channel.cancelPending }),
+    'first Ctrl+Enter with a running turn steers its draft once',
+    first && calls.steerCalls[0] === 'AAAA',
+    JSON.stringify({ steers: calls.steerCalls, submits: calls.submitCalls }),
   )
 
+  // The composer debounces Enter arrivals within 80ms (one keypress can
+  // arrive as return + raw newline): wait past that window before the second
+  // Ctrl+Enter, or the deliberate second press is dropped as a duplicate.
+  await sleep(120) // 固定窗:pacing Ctrl+Enter дебаунс 80 мс в composer
   await typeAndCtrlEnter(term, stdin, 'BBBB')
-  await settled(() => calls.submitCalls.length >= 2, { timeoutMs: 4000 })
-  const aaaa = calls.submitCalls.filter(text => text === 'AAAA').length
-  const bbbb = calls.submitCalls.filter(text => text === 'BBBB').length
+  await settled(() => calls.steerCalls.length >= 2, { timeoutMs: 4000 })
+  const aaaa = calls.steerCalls.filter(text => text === 'AAAA').length
+  const bbbb = calls.steerCalls.filter(text => text === 'BBBB').length
   check(
     'G1',
     'the first draft is not re-delivered by the second Ctrl+Enter',
     aaaa === 1,
-    JSON.stringify({ submits: calls.submitCalls, interruptCalls: calls.interruptCalls }),
+    JSON.stringify({ steers: calls.steerCalls, interruptCalls: calls.interruptCalls }),
   )
   check(
     'G2',
     'the second draft is delivered exactly once',
-    bbbb === 1 && calls.submitCalls.length === 2,
-    JSON.stringify({ submits: calls.submitCalls, interruptCalls: calls.interruptCalls }),
+    bbbb === 1 && calls.steerCalls.length === 2,
+    JSON.stringify({ steers: calls.steerCalls, interruptCalls: calls.interruptCalls }),
   )
 
   await instance.unmount()

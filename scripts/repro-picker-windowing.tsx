@@ -135,28 +135,30 @@ function dump(tag: string, t: Term = term, rows = ROWS) {
   linesOf(t, rows).forEach((l, i) => console.log(String(i).padStart(2), l.replace(/\s+$/u, '').slice(0, 90)))
 }
 
-/** dark 主题 suggestion 色（焦点行 ❯/正文的 fg）。 */
+/** dark 主题 suggestion 色（建议列表焦点行 ❯/正文的 fg）。 */
 const SUGGESTION_RGB = 0xABC2EC
+/** dark 主题的 accent 色：rewind 选择器用 `focusColor="accent"`。 */
+const ACCENT_RGB = 0x7DA1DE
 /** 视口第 row 行是否有 suggestion 前景单元格（焦点行判定）。 */
-function lineHasSuggestion(t: Term, row: number): boolean {
+function lineHasSuggestion(t: Term, row: number, rgb = SUGGESTION_RGB): boolean {
   const line = t.buffer.active.getLine(t.buffer.active.baseY + row)
   if (!line) return false
   for (let x = 0; x < COLS; x++) {
     const cell = line.getCell(x)
-    if (cell && cell.getChars() && (cell.getFgColor() & 0xffffff) === SUGGESTION_RGB) return true
+    if (cell && cell.getChars() && (cell.getFgColor() & 0xffffff) === rgb) return true
   }
   return false
 }
 /** 快照 lines 里首个「文本匹配 + suggestion 前景」的行号（-1 = 焦点行不在屏）。 */
-function focusRowIndex(lines: readonly string[], t: Term, match: (line: string) => boolean): number {
-  return lines.findIndex((line, row) => match(line) && lineHasSuggestion(t, row))
+function focusRowIndex(lines: readonly string[], t: Term, match: (line: string) => boolean, rgb = SUGGESTION_RGB): number {
+  return lines.findIndex((line, row) => match(line) && lineHasSuggestion(t, row, rgb))
 }
 /**
  * 焦点行是否在屏：含 `text` 且至少一个单元格前景为 suggestion 色。转录里
  * 同文本的用户消息回显行不是这个颜色，不会被误判（rewind 断言依赖这点）。
  */
-function focusLineVisible(text: string): boolean {
-  return focusRowIndex(screenLines(), term, line => line.includes(text)) !== -1
+function focusLineVisible(text: string, rgb = SUGGESTION_RGB): boolean {
+  return focusRowIndex(screenLines(), term, line => line.includes(text), rgb) !== -1
 }
 
 // ---------------------------------------------------------------- listWindow
@@ -450,18 +452,18 @@ const typeKeys = async (s: string, stepMs = 40) => {
   await sleep(100) // 固定窗:墙钟 双击 Esc 判定窗内的第二次按键间隔
   stdin.write('\x1b')
   // 焦点 0 = 最新用户消息；首项带 'last message' 描述（2 行）。
-  check('rewind 焦点 0 在屏（首项 2 行）', await settled(() => focusLineVisible('rewind 消息 29')))
+  check('rewind 焦点 0 在屏（首项 2 行）', await settled(() => focusLineVisible('rewind 消息 29', ACCENT_RGB)))
   check('rewind 首项描述行在屏', await settled(() => screenLines().some(l => l.includes('最近一条消息'))))
   check('rewind 打开缓冲区零增长', term.buffer.active.length === bufBefore,
     `${bufBefore} → ${term.buffer.active.length}`)
   dump('rewind focus 0')
   stdin.write('\x1b[A') // ↑ 回绕到末项 = 最老一条
-  check('rewind ↑ 回绕末项焦点在屏', await settled(() => focusLineVisible('rewind 消息 00')))
+  check('rewind ↑ 回绕末项焦点在屏', await settled(() => focusLineVisible('rewind 消息 00', ACCENT_RGB)))
   stdin.write('\x1b[B') // ↓ 回绕回 0
   await sleep(200) // 固定窗:pacing 回绕后按键步间
   for (let i = 0; i < 15; i++) { stdin.write('\x1b[B'); await sleep(25) } // 固定窗:pacing 逐键步进
   // 索引 15 = rewind 消息 14（索引 0 是最新的 29）。
-  check('rewind ↓×15 焦点 15 在屏', await settled(() => focusLineVisible('rewind 消息 14')))
+  check('rewind ↓×15 焦点 15 在屏', await settled(() => focusLineVisible('rewind 消息 14', ACCENT_RGB)))
   dump('rewind focus 15')
   stdin.write('\x1b')
   await sleep(400) // 固定窗:pacing 浮层关闭过渡，无文本可观测
