@@ -24,6 +24,18 @@
 // 避免机器上的 ~/.dsh-tui/lang.json 把探针输出切成英文。
 process.env.DSH_TUI_LANG = 'zh'
 
+// The footer quotes USD, so the chip and its hover need an fx rate. Isolate
+// HOME and seed one before the dynamic imports resolve FX_PATH.
+{
+  const { mkdtempSync, mkdirSync, writeFileSync } = await import('node:fs')
+  const { tmpdir } = await import('node:os')
+  const { join } = await import('node:path')
+  process.env.HOME = mkdtempSync(join(tmpdir(), 'dsh-tui-session-cost-'))
+  process.env.USERPROFILE = process.env.HOME
+  mkdirSync(join(process.env.HOME, '.dsh-tui'), { recursive: true })
+  writeFileSync(join(process.env.HOME, '.dsh-tui', 'fx.json'), JSON.stringify({ cnyPerUsd: 7.2, asOf: '2026-11-16' }))
+}
+
 const [
   { strict: assert },
   {
@@ -570,7 +582,7 @@ function makeProjector(state: Record<string, unknown>): { renderEvent: (event: u
   const at = findText(term, '未计价')
   if (at !== null) stdin.write(`\x1b[<35;${at.col + 1};${at.row + 1}M`)
   check('AC-A7 仅未计价：hover 明细同口径显示未计价',
-    await settled(() => screenHas(term, 'peak ') && screenHas(term, '未计价')), screenText())
+    await settled(() => screenHas(term, 'main ') && screenHas(term, '未计价')), screenText())
 
   await instance.unmount()
   term.dispose()

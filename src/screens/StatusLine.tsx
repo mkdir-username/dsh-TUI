@@ -588,6 +588,16 @@ const selectionBadge = formatSelectionBadge(channel.selection)
           fallbackModel: channel.model,
         })
         const chip = formatCostChip(estimate, loadFxRate())
+        // An all-unpriced session prices to zero, but its tokens still need the
+        // 未计价 marker (the hover breakdown keeps the same contract below).
+        const unpriced = estimate?.unpricedTokens ?? 0
+        if (chip === null && unpriced > 0) {
+          return [{
+            key: 'cost',
+            id: 'cost' as const,
+            node: <Text color="inactiveShimmer">{t('cost-unpriced', { tokens: formatTokens(unpriced) })}</Text>,
+          }]
+        }
         return chip === null
           ? []
           : [{
