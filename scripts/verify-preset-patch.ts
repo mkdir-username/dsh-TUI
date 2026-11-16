@@ -17,6 +17,7 @@
 import assert from 'node:assert/strict'
 import { AsyncLocalStorage } from 'node:async_hooks'
 import { registerBundledPresets } from '../src/dsh-adapter/bundled-presets.js'
+import { composePreset } from '../src/dsh-adapter/presets.js'
 import { runAsSideBranch } from '../src/dsh-adapter/sideQuestion.js'
 import { PRESET_PATCH_MODULE } from '../src/preset-patch.js'
 
@@ -121,5 +122,42 @@ assert.equal(session.id, 'parent')
 assert.equal(await runAsSideBranch(undefined, agent, async () => store.getStore()), undefined, 'no agents service → plain call')
 const closing = { withInitiator: () => { throw new Error('initiator scope disposed') } }
 assert.equal(await runAsSideBranch(closing, agent, async () => 'ran'), 'ran', 'closing scope → plain call')
+
+
+// Preset composition: a rosterless host keeps the documented legacy path, a
+// host WITH a roster refuses a preset it cannot compose instead of swapping in
+// the host composition.
+{
+  const warnings: string[] = []
+  const ctxWithoutRoster = {
+    get: (key: string) => (key === 'agentPresets' ? undefined : undefined),
+    logger: { warn: (message: string) => warnings.push(message) },
+  }
+  assert.deepEqual(await composePreset(ctxWithoutRoster as never), {}, 'rosterless host composes nothing')
+  assert.deepEqual(warnings, [], 'no warning when nothing was asked')
+  assert.deepEqual(await composePreset(ctxWithoutRoster as never, 'liangshen'), {}, 'rosterless host keeps the legacy path')
+  assert.equal(warnings.length, 1, 'a recorded preset on a rosterless host is announced')
+  assert.match(warnings[0]!, /liangshen/u, 'the warning names the preset')
+
+  const roster = {
+    defaultId: 'standard',
+    list: async () => [{ id: 'standard' }],
+    resolve: async (id?: string) => {
+      if (id === undefined || id === 'standard') return { id: 'standard' }
+      throw new Error(`unknown preset "${id}"`)
+    },
+    mount: async () => ({ id: 'standard' }),
+    recompose: async () => ({ id: 'standard' }),
+  }
+  const ctxWithRoster = { get: (key: string) => (key === 'agentPresets' ? roster : undefined), logger: { warn: () => undefined } }
+  const composed = await composePreset(ctxWithRoster as never)
+  assert.equal(composed.agentPreset, 'standard', 'the default preset is adopted')
+  assert.equal(typeof composed.setup, 'function', 'the setup hook installs it')
+  await assert.rejects(
+    () => composePreset(ctxWithRoster as never, 'nope'),
+    /unknown preset "nope"/u,
+    'an unknown preset raises before an agent is published',
+  )
+}
 
 console.log('verify:preset-patch OK')

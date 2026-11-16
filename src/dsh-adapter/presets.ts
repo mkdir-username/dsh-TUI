@@ -86,10 +86,11 @@ export interface PresetComposition {
  * Resolve the preset one new/resumed session will run under and the setup
  * that installs it. `requested` undefined adopts the roster default.
  *
- * Resolution failures (unknown/broken preset id, an empty roster that cannot
- * supply even the default) degrade to the rosterless composition with a loud
- * log line: a session that cannot start at all is worse than one running on
- * the host composition.
+ * A host without the roster is an expected absence — the documented legacy
+ * path keeps the host composition. A host WITH a roster must compose what the
+ * caller asked for: an unknown, broken or empty roster raises before an agent
+ * is published, instead of quietly swapping in the host's different prompt
+ * and tool catalog. That includes restoring a preset recorded in a session log.
  *
  * @param ctx - The plugin context (roster lookup + logging).
  * @param requested - The preset id the caller wants, or undefined for the default.
@@ -97,17 +98,16 @@ export interface PresetComposition {
  */
 export async function composePreset(ctx: Context, requested?: string): Promise<PresetComposition> {
   const presets = rosterOf(ctx)
-  if (presets === undefined) return {}
-  let resolvedId: string
-  try {
-    resolvedId = (await resolveCompatiblePreset(presets, requested)).id
-  } catch (error) {
-    ctx.logger.warn(
-      `dsh-tui: agent preset ${requested === undefined ? '(default)' : `"${requested}"`} unavailable ` +
-        `(${error instanceof Error ? error.message : String(error)}) — composing the session without a preset`,
-    )
+  if (presets === undefined) {
+    if (requested !== undefined) {
+      ctx.logger.warn(
+        `dsh-tui: agent preset "${requested}" cannot be composed on this host ` +
+          '(no agentPresets service) — the session runs on the host composition',
+      )
+    }
     return {}
   }
+  const resolvedId = (await resolveCompatiblePreset(presets, requested)).id
   return {
     agentPreset: resolvedId,
     setup: async (agentCtx: Context) => {
