@@ -140,6 +140,17 @@ function rowText(term: InstanceType<typeof XTerm>, y: number): string {
   return line ? (line.translateToString(true) ?? '') : ''
 }
 
+/** Whether the PARSED screen holds `needle` — the wait anchor for buffer
+ *  assertions: stdout.output is appended synchronously, while xterm parses a
+ *  chunk asynchronously, so a string wait can hand the assertion a stale
+ *  buffer (that is what made B/C/D red under full parallel load). */
+function hasText(term: InstanceType<typeof XTerm>, needle: string): boolean {
+  for (let y = 0; y < term.rows; y++) {
+    if (rowText(term, y).includes(needle)) return true
+  }
+  return false
+}
+
 // ─── A. 无图像 → 浮层透明 ─────────────────────────────────────────────
 {
   const stdout = new FakeStdout()
@@ -242,9 +253,11 @@ function rowText(term: InstanceType<typeof XTerm>, y: number): string {
   // B: 覆盖图像的浮层 → 非默认背景，且无 graphics 扰动
   const beforeCover = stdout.output.length
   instance.rerender(tree('covering'))
+  // 等待与断言同一个表达式：断言读的是 term 的解析缓冲区，字符串里出现
+  // `menu` 只代表已写出，xterm 的解析是异步分块的（高负载下会晚于轮询）。
   assert.ok(
-    await settled(() => stdout.output.slice(beforeCover).includes('menu')),
-    'the covering overlay must finish painting',
+    await settled(() => cellsHaveBackground(term, 0, 0, 4, 2)),
+    'B: every overlay cell intersecting the image must carry the cover background',
   )
   const coverSlice = stdout.output.slice(beforeCover)
   assert.match(
@@ -257,16 +270,12 @@ function rowText(term: InstanceType<typeof XTerm>, y: number): string {
     /\x1b_Ga=[dpt],/u,
     'B: covering an image must not delete, retransmit, or replace its placement',
   )
-  assert.ok(
-    cellsHaveBackground(term, 0, 0, 4, 2),
-    'B: every overlay cell intersecting the image must carry the cover background',
-  )
 
   // C: 图像在旁（矩形不相交）→ 仍然透明
   const beforeBeside = stdout.output.length
   instance.rerender(tree('beside'))
   assert.ok(
-    await settled(() => stdout.output.slice(beforeBeside).includes('side')),
+    await settled(() => hasText(term, 'side')),
     'the beside overlay must finish painting',
   )
   const besideSlice = stdout.output.slice(beforeBeside)
@@ -288,8 +297,10 @@ function rowText(term: InstanceType<typeof XTerm>, y: number): string {
   // D: 关闭浮层 → 无 graphics 扰动
   const beforeClose = stdout.output.length
   instance.rerender(tree(null))
+  // 'side' is C's parsed text: it can leave the buffer only through D's own
+  // repaint, so the wait proves that frame actually landed.
   assert.ok(
-    await settled(() => stdout.output.length > beforeClose),
+    await settled(() => !hasText(term, 'side')),
     'closing the overlay must repaint',
   )
   assert.doesNotMatch(
