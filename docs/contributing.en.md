@@ -681,6 +681,12 @@ guide owns detailed contracts such as the toolchain and verification matrix.
   kebab-case and must not collide with a local command.
 - Keep `ask_user_question` serialized through `QuestionStore`; concurrent
   questions are intentionally presented FIFO and summarized after completion.
+- A timed questionnaire wait is counted by the host and **only while no answer UI
+  holds its claim** (`attachWait`). The panel must report `onActivity`
+  (`questionStore.noteActivity()`) on every key and click so the claim re-arms its
+  idle window; a new input path (a key, a click, a future control) that skips that
+  call lets the host expire the question mid-answer as `{pending:true}`.
+  Regressions: `verify-question-wait-claim`, `verify-question-activity`.
 
 ### Terminal Rendering
 

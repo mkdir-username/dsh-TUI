@@ -516,6 +516,11 @@ import 之前 `import './lib/fake-home.mjs'`。`DATA_DIR` 在 import 时由
   命令名必须是可解析的 kebab-case，且不能与本地命令撞名。
 - `ask_user_question` 必须经 `QuestionStore` 串行化；并发问题刻意 FIFO 呈现，
   结束后汇总。
+- 问卷的 timed 等待由宿主计时，而且**只在没有 answer UI 持有 claim 时**计时
+  （`attachWait`）。面板必须在每次按键与点击时上报 `onActivity`
+  （`questionStore.noteActivity()`），claim 才会按空闲窗口重新计时；新加的输入
+  路径（按键、点击、将来的控件）漏掉这次调用，问题就会在作答中途被宿主判成
+  `{pending:true}`。回归：`verify-question-wait-claim`、`verify-question-activity`。
 
 ### 终端渲染
 

@@ -185,7 +185,8 @@ export type AskUserQuestionPanelProps = {
    * The user is working on this question: a key reached the panel, or an answer
    * row was clicked. The host binding re-arms a timed ask's wait from it, so
    * typing or moving between options never loses the question to the asker's
-   * clock.
+   * clock. A new input path that skips this call is a regression: the host then
+   * expires the ask mid-answer as `{pending: true}`.
    */
   readonly onActivity?: () => void
 }
