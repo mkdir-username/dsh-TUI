@@ -612,10 +612,14 @@ function makeChannel(overrides: Record<string, unknown> = {}): Record<string, un
         : ''),
   )
 
+  // Local: a settled reasoning row starts expanded instead of folding on
+  // settle, so a Ctrl+O round trip must not fold it away (transcript expansion
+  // still wins). The fold gesture on such a row is the row click, covered in
+  // repro-thinking-stream-fold.tsx where the harness reports mouse events.
   stdin.write('\x0f') // Ctrl+O
-  check('Ctrl+O expands settled reasoning after the round trip', await settled(() => screen().includes('reasoning line 79')))
+  check('Ctrl+O keeps settled reasoning readable after the round trip', await settled(() => screen().includes('reasoning line 79')))
   stdin.write('\x0f')
-  check('a second Ctrl+O folds settled reasoning again', await settled(() => !screen().includes('reasoning line 79')))
+  check('a second Ctrl+O leaves it readable too', await settled(() => screen().includes('reasoning line 79')))
 
   instance.unmount()
   instances.delete(process.stdout)

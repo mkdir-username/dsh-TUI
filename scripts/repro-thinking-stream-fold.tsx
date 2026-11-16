@@ -188,6 +188,25 @@ for (const listener of listeners) listener()
 await sleep(300) // 固定窗:pacing 翻档后没有可轮询的变化点（正文应保持不变）
 check('turn 结束后正文保持展开（本地：settle 不折叠）', bodyLines(lines()) >= 10, `body=${bodyLines(lines())}`)
 
+// Local: with the full text as the settled default, the row click folds it and
+// the folded header opens it again. Wait past the 500ms double-click window so
+// the second gesture is not read as word selection.
+await sleep(600) // 固定窗:墙钟 同格快连两次会被判双击选词（见上方说明）
+const bodyIdx = lines().findIndex(line => line.includes('推理第'))
+stdin.write(`\x1b[<0;6;${bodyIdx + 1}M`)
+stdin.write(`\x1b[<0;6;${bodyIdx + 1}m`)
+await waitFor(() => bodyLines(lines()) === 0)
+check('落定后点击正文收起整段（本地默认展开）', bodyLines(lines()) === 0, `body=${bodyLines(lines())}`)
+
+await sleep(600) // 固定窗:墙钟 同格快连两次会被判双击选词（见上方说明）
+const foldedHeader = lines().findIndex(line =>
+  line.includes(THINKING_SETTLED_MARKER) && line.includes(t('thinking-label')),
+)
+stdin.write(`\x1b[<0;6;${foldedHeader + 1}M`)
+stdin.write(`\x1b[<0;6;${foldedHeader + 1}m`)
+await waitFor(() => bodyLines(lines()) >= 10)
+check('再点击收起的头行展开全文', bodyLines(lines()) >= 10, `body=${bodyLines(lines())}`)
+
 await inst.unmount()
 console.log(failed === 0 ? '\nALL PASS' : `\n${failed} 项失败`)
 process.exit(failed === 0 ? 0 : 1)

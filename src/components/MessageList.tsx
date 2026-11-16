@@ -2059,6 +2059,10 @@ function TranscriptRow({
       const turnOpen = streaming || thinkingOpen
       const streamPreview = turnOpen && !expanded && !isExpanded &&
         (streamViewToggled ? thinkingFold === 'full' : thinkingFold === 'preview')
+      // Local: a settled row starts with the full text instead of folding on
+      // settle, which reverses its gestures — the row click and Ctrl+O fold it
+      // by hand, and Ctrl+O reopens a row folded by hand.
+      const verbose = expanded || (turnOpen ? !streamPreview : !isExpanded)
       return (
         <Box flexDirection="column" ref={ref}>
           <ThinkingLeafRow
@@ -2067,9 +2071,7 @@ function TranscriptRow({
             marginTopOnTurn={marginTopOnTurn}
             streaming={streaming}
             preview={streamPreview}
-            // Local: thinking stays expanded after the turn settles instead of
-            // folding on settle; Ctrl+O still collapses the row by hand.
-            verbose
+            verbose={verbose}
             durationMs={durationMs}
             reasoningTokens={reasoningTokens}
             isSelected={isSelected}
