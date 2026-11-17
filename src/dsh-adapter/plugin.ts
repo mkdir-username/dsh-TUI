@@ -113,8 +113,8 @@ import { PermissionStore } from '../channel/permissions.js'
 import { registerPromptDebug } from './promptDebug.js'
 import { readActivityFrames } from '../activityPrefs.js'
 import { commitFullscreenFactoryMigration, planFullscreenFactoryMigration, readAppliedMigrations } from '../migrationPrefs.js'
-import { readModelPref } from '../modelPrefs.js'
-import { explicitModelRoute, resolveModelRoute, resumeModelRoute, validateModelRoute } from '../modelRoute.js'
+import { readModelPref, type ModelPref } from '../modelPrefs.js'
+import { DEFAULT_MODEL_ROUTE, explicitModelRoute, resolveModelRoute, resumeModelRoute, validateModelRoute } from '../modelRoute.js'
 import type { ModelRoute } from '../modelRoute.js'
 import { migratePresetPref, presetOverrideFromEnv, readPresetPref } from '../presetPrefs.js'
 import { readEffortPref } from '../effortPrefs.js'
@@ -4158,7 +4158,19 @@ async function resolveAgent(
   const llm = ctx.get('llm') as
     | { listModels(provider: string): Promise<readonly { id: string }[]> }
     | undefined
-  const { route, rejected } = await validateModelRoute(llm, startupRoute, deploymentRoute)
+  // Three stages, not one fallback: a complete route pin in the profile makes
+  // the deployment fallback the SAME dead route, and a single-fallback check
+  // then adopts it — the first turn dies as NO_ADAPTER (field evidence
+  // 2026-11-17). The last stage adopts a provider this launch actually mounted.
+  if (llm === undefined) {
+    // Silent trust is how a dead route reaches the first request.
+    ctx.logger.warn(
+      `dsh-tui: model route ${startupRoute.provider}/${startupRoute.model} could not be verified yet — the llm service is not mounted`,
+    )
+  }
+  const { route, rejected } = llm === undefined
+    ? { route: startupRoute, rejected: undefined }
+    : await resumeModelRoute(llm, startupRoute, deploymentRoute, deploymentRoute)
   if (rejected !== undefined) {
     ctx.logger.warn(
       `dsh-tui: model route ${rejected.provider}/${rejected.model} is not advertised by provider "${rejected.provider}"; falling back to ${route.provider}/${route.model}`,
@@ -4736,18 +4748,41 @@ function disposeRootAndExit(ctx: Context, code: number): void {
 }
 
 /**
+ * What a launcher wrapper (`ds`, a project script) exports to say how it was
+ * invoked, so the resume hint can replay the whole launch instead of only the
+ * composition.
+ */
+export const LAUNCHER_ENV = 'DSH_LAUNCHER'
+
+/**
  * The real way back into a session after the TUI process is gone. The
  * package ships no `dsh-tui` bin — resuming means feeding the session id
  * through `DSH_TUI_RESUME_SESSION` (what cordis.patch.yml's `sessionId`
  * reads) and
  * booting the same profile; on Windows the repo's dsh-tui.cmd wrapper
  * does this via --resume + ~/.dsh-tui/resume.txt.
+ *
+ * The composition alone is not the launch: a wrapper that selected a route
+ * (`--ollama`, the direct-DeepSeek barrier) also exported that route's address,
+ * token and patches, and the route itself lives in the profile rather than in
+ * the composition. Replaying `dsh --config cordis.yml` for such a session
+ * started a process with no adapter for the route the session is pinned to,
+ * and the first turn died as `no adapter registered for provider "ollama"`
+ * (field evidence 2026-11-17). When the wrapper names itself through
+ * {@link LAUNCHER_ENV} the hint replays it verbatim; otherwise it says the
+ * route must be supplied, instead of promising a command that cannot serve it.
  */
-function resumeCommand(profile: string | undefined, sessionId: string): string {
+export function resumeCommand(profile: string | undefined, sessionId: string, pref: ModelPref | undefined = readModelPref()): string {
+  if (process.platform === 'win32') return `dsh-tui --resume ${sessionId}`
+  const launcher = (process.env[LAUNCHER_ENV] ?? '').trim()
+  if (launcher !== '') return `DSH_TUI_RESUME_SESSION=${sessionId} ${launcher}`
   const boot = profile === undefined ? 'dsh --config cordis.yml' : `dsh --profile ${profile}`
-  return process.platform === 'win32'
-    ? `dsh-tui --resume ${sessionId}`
-    : `DSH_TUI_RESUME_SESSION=${sessionId} ${boot}`
+  // The bare composition mounts no configurable providers; naming it for a
+  // session on a launcher route would be a promise this launch cannot keep.
+  const caution = pref === undefined || pref.provider === DEFAULT_MODEL_ROUTE.provider
+    ? ''
+    : `\n(this session runs on «${pref.provider}», which the bare composition does not mount: start it with the same command you used, e.g. \`ds\`)`
+  return `DSH_TUI_RESUME_SESSION=${sessionId} ${boot}${caution}`
 }
 
 /**

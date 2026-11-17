@@ -2,7 +2,7 @@ import type { Agent, AgentHandle, CreateAgentOptions } from '@deepseek-ai/dsh-ag
 import { randomUUID } from 'node:crypto'
 import type { Context } from '@deepseek-ai/cordis'
 import { SessionId, type SessionEvent } from '@deepseek-ai/dsh-session'
-import { explicitModelRoute, recordedModelRoute, resolveModelRoute, validateModelRoute } from '../../modelRoute.js'
+import { explicitModelRoute, recordedModelRoute, resolveModelRoute, resumeModelRoute } from '../../modelRoute.js'
 import { clearResumeTarget, writeResumeTarget, touchAgentViewSession, touchSession } from '../../sessionHistory.js'
 import { mountFailureText } from '../../sessions/resumeFailure.js'
 import type { AgentSession } from '../../agent/session.js'
@@ -482,7 +482,14 @@ export function createSessionResumeActions(
         { provider: options.provider, model: options.model },
       )
       const llm = ctx.get('llm') as { listModels(provider: string): Promise<readonly { id: string }[]> } | undefined
-      const validated = await validateModelRoute(llm, resolved, { provider: options.provider, model: options.model })
+      // Same three stages as the startup path: a single fallback adopts the
+      // deployment route even when that route is the dead one the preference
+      // names (a complete profile pin), and the first turn then dies as
+      // NO_ADAPTER instead of falling back to a provider this launch mounted.
+      const deployment = { provider: options.provider, model: options.model }
+      const validated = llm === undefined
+        ? { route: resolved, rejected: undefined }
+        : await resumeModelRoute(llm, resolved, deployment, deployment)
       const route = validated.route
       if (!current()) return undefined
       if (presetOverride === undefined && !migratePresetPref(presetPref, composed.agentPreset)) {

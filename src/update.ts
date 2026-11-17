@@ -12,6 +12,7 @@ import valid from 'semver/functions/valid.js'
 import validRange from 'semver/ranges/valid.js'
 import { shellQuote } from './utils/shellQuote.js'
 import { DATA_DIR } from './utils/paths.js'
+import { readSessionOwners, type SessionMountOwner } from './sessionMounts.js'
 import { stripResumeArgs } from './sessionHistory.js'
 import { HOST_ENTRY_PATH_ENV, KERNEL_SWITCH_HANDOFF_ENV, RESUME_BACKEND_ENV, RESUME_RETRY_ENV, hostEntryDisabled, parseBackendId, type KernelBackendId } from './kernelPrefs.js'
 import { classifyReplacementOutcome, formatHandoffNotice, handoffEventTag, writeHandoffStage } from './handoffEvents.js'
@@ -4375,6 +4376,29 @@ export function resolveRestartScript(script: string, fileExists: (path: string) 
   return fileExists(current) ? current : script
 }
 
+/**
+ * The pid of another LIVE TUI that owns `sessionId`, excluding the given pids.
+ *
+ * A restarted child spawns its own replacement and only then leaves, so the
+ * code it exits with is its successor's handoff, not a verdict on the spawn.
+ * The mount ledger is the durable fact that separates the two: a live foreign
+ * owner means the session is being driven right now.
+ * @param sessionId - Session the handoff was about (empty: nothing to look up).
+ * @param excluding - Pids that cannot count as the successor (this process, the
+ *   child whose exit is being classified).
+ * @returns The successor's pid, or undefined when nobody else owns the session.
+ */
+export function handoffOwnerPid(
+  sessionId: string,
+  excluding: readonly number[],
+  owners: ReadonlyMap<string, SessionMountOwner> = readSessionOwners(),
+): number | undefined {
+  if (sessionId === '') return undefined
+  const owner = owners.get(sessionId)
+  if (owner === undefined) return undefined
+  return excluding.includes(owner.pid) ? undefined : owner.pid
+}
+
 export async function restartTui(sessionId: string, options: TuiRestartOptions = {}): Promise<number> {
   const kind = options.kind ?? 'restart'
   const tag = options.backend !== undefined ? 'backend-switch' : kind === 'update' ? 'update-restart' : 'restart'
@@ -4396,6 +4420,12 @@ export async function restartTui(sessionId: string, options: TuiRestartOptions =
   if (entry !== ownEntry) {
     argv[0] = entry
     logRestartEvent(`${tag}: release entry re-pointed at current`, { from: ownEntry, to: entry })
+    // The dying process keeps the release it booted from: a plugin patched on
+    // disk reaches the replacement only, so the teardown that runs here is the
+    // old copy's. Naming the gap keeps a restart that crosses releases from
+    // reading as an ordinary one (2026-11-17: the old post-dispose tick crashed
+    // the handing-off process while the replacement booted fine).
+    logRestartEvent(`${tag}: restart crosses releases`, { dying: ownEntry, replacement: entry })
   }
   logRestartEvent(`${tag}: spawning replacement`, {
     node: process.execPath,
@@ -4574,6 +4604,20 @@ export async function restartTui(sessionId: string, options: TuiRestartOptions =
         signal: signal ?? null,
         elapsedMs,
       })
+      // A successor already drives the session: this child spawned it and then
+      // left, which is exactly what restarting an already-restarted process
+      // looks like. Its exit code is the successor's handoff, not a verdict on
+      // the spawn — reading it as failure makes every supervisor in the chain
+      // print despair over a live TUI and abandon the launch chain that owns
+      // the terminal (field evidence 2026-11-17).
+      if (code !== null && code !== 0 && signal === null) {
+        const owner = handoffOwnerPid(sessionId, [process.pid, ...(child.pid === undefined ? [] : [child.pid])])
+        if (owner !== undefined) {
+          logRestartEvent(`${tag}: replacement handed off to pid ${owner} (exit ${code})`)
+          resolve(0)
+          return
+        }
+      }
       // A replacement that took the screen over and died by a signal: the hook
       // may end this process by that signal. Before a handoff's first frame this
       // process still holds the screen, so the failure path below restores it.
