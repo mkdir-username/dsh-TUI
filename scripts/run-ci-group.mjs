@@ -1603,6 +1603,10 @@ const GROUPS = {
 // 运行中的调用、或后端没有 park 时按键仍归侧栏。按键提示画在卡片自身，settled
 // 后消失。
     ["verify-tool-park", ['node', '--import', 'tsx/esm', 'scripts/verify-tool-park.tsx']],
+// The false-waits catalog: every waiting surface must have a row in
+// docs/false-waits.md and a live anchor in the code that performs the wait.
+// A core upgrade moves the anchor — the gate fails and asks for a re-read.
+    ["verify-false-waits", ['node', '--import', 'tsx/esm', 'scripts/verify-false-waits.ts']],
 // 重启把当前回合按 aborted/disposed 关掉，回放里那一行是收尾提示：替换进程把
 // 它读作「Session restarted」（进程回来了、继续干活），崩溃恢复仍写「Session
 // stopped」；重启之后的后续回放不翻回 stopped，重启进程里后来的停止仍如实报。
