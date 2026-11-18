@@ -4,6 +4,7 @@ import { t } from '../../i18n.js'
 import type { ChatRow, ToolResultView, ToolViewPresenter } from './types.js'
 import { markChannelReadDirty } from '../../adapter/channel/read-view.js'
 import { ARGS_PREVIEW_LIMIT, LOCAL_OUTPUT_LIMIT, MAX_ROWS, preview, previewIndented, RESULT_PREVIEW_LIMIT, trimLocalRows } from '../../channel/transcript.js'
+import { toolCancellationOf } from '../../channel/tool-cancel.js'
 
 // Limits and the preview helper are backend-neutral (src/channel/transcript.ts);
 // re-exported here for the existing importers.
@@ -269,8 +270,13 @@ export function toolFailureText(failure: unknown, detail: string): string {
 export function restoreToolResult(row: ChatRow, event: SessionEvent<'tool/result'>): void {
   if (row.tool === undefined) return
   if (event.data.error !== undefined || toolResultPayload(event.data.message).isError) {
-    row.tool.status = 'error'
-    row.tool.errorText = toolErrorText(event)
+    // Same split as the live projector: a cancelled call keeps its wire text
+    // for the expanded layer but does not read as a failure.
+    const cancellation = toolCancellationOf(event.data.error)
+    row.tool.status = cancellation === undefined ? 'error' : 'cancelled'
+    if (cancellation === undefined) delete row.tool.cancelKind
+    else row.tool.cancelKind = cancellation
+    row.tool.errorText = toolErrorText(event) || undefined
     return
   }
   row.tool.status = 'ok'

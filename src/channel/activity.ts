@@ -39,6 +39,7 @@ import { foldAgentMessage } from '../agent/messages.js'
 import { t } from '../i18n.js'
 import { formatJobDuration } from './job-format.js'
 import { preview } from './transcript.js'
+import { toolCancellationOf } from './tool-cancel.js'
 
 const MAX_OUTPUT_EVENTS = 160
 const MAX_TOOL_CALLS = 200
@@ -527,6 +528,13 @@ export function createActivityProjection(getState: () => ActivityState, deps: Ac
       case 'tool.result': {
         const tool = entry.state.toolCalls.find(item => item.id === event.callId)
         if (tool === undefined) return
+        const cancellation = toolCancellationOf(event.errorInfo)
+        if (cancellation !== undefined) {
+          // Nothing failed: the turn was cancelled under the call.
+          tool.status = 'cancelled'
+          tool.endedAt = event.time
+          break
+        }
         tool.status = event.isError ? 'failed' : 'completed'
         tool.endedAt = event.time
         if (event.isError) tool.error = oneLine(event.errorText ?? '', RESULT_PREVIEW) ?? t('subagent-status-failed')

@@ -19,6 +19,7 @@ export type { SessionTreeData, TreeNode, TreeEntry, TreeEntryKind, SessionTreeMe
 import type { SessionEvent } from '@deepseek-ai/dsh-session'
 import { CompactionPreviews } from './compat/compaction-previews.js'
 import { isCompactionCheckpointSource, toolResultPayload } from './compat/messages.js'
+import { toolCancellationOf } from '../channel/tool-cancel.js'
 
 /** Filter modes cycled in the tree screen (pi parity, minus labels). */
 export type TreeFilter = 'default' | 'no-tools' | 'user-only' | 'all'
@@ -499,9 +500,13 @@ export function extractEntries(sessionId: string, events: readonly SessionEvent[
         const index = openTools.get(event.data.message.source.callId)
         if (index === undefined) break
         const entry = entries[index]!
+        const failure = event.data.error
+        const cancellation = toolCancellationOf(failure)
         entries[index] = {
           ...entry,
-          toolStatus: event.data.error !== undefined || toolResultPayload(event.data.message).isError ? 'error' : 'ok',
+          toolStatus: cancellation === undefined
+            ? failure !== undefined || toolResultPayload(event.data.message).isError ? 'error' : 'ok'
+            : 'cancelled',
         }
         openTools.delete(event.data.message.source.callId)
         break

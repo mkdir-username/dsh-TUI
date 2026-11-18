@@ -50,8 +50,9 @@ export interface TreeEntry {
   readonly searchText: string
   /** Event wall-clock time. */
   readonly time: number
-  /** Tool outcome for kind 'tool' (settled by tool/result during extraction). */
-  readonly toolStatus?: 'running' | 'ok' | 'error'
+  /** Tool outcome for kind 'tool' (settled by tool/result during extraction).
+   *  `cancelled`: the turn abort settled the call without an outcome. */
+  readonly toolStatus?: 'running' | 'ok' | 'error' | 'cancelled'
   /** Extra marker (e.g. `aborted` for chunk-only assistant text). */
   readonly label?: string
   /** True on entries of the log's OWN first turn (a complete log's turn 0).

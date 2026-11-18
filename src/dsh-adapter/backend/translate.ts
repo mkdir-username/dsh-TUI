@@ -391,6 +391,10 @@ export function createDshTranslator(deps: DshTranslatorDeps) {
       content: payload.content,
       text,
       ...(isError && (call !== undefined || spawn !== undefined) ? { errorText: toolErrorText(event) } : {}),
+      // Cancellation (`ABORTED`, `ABORTED_BEFORE_DISPATCH`) is a structured
+      // outcome, not prose: presentation must see the code, never parse it
+      // out of the message.
+      ...(data.error === undefined ? {} : { errorInfo: { name: data.error.name, code: data.error.code } }),
       ...(card === undefined ? {} : { images: transcriptImagesOf(data.message.content, deps.attachments) }),
       ...(data.meta === undefined ? {} : { meta: data.meta }),
       ...(card === undefined || isError ? {} : { presentation: presentResultView(card.name, card.args, data) as ToolResultPresentation | undefined }),

@@ -756,8 +756,8 @@ export function SubagentDetailScene({
               {subagent.toolCalls.map((tool, index) => (
                 <Box key={tool.id ?? index} flexDirection="column" marginTop={index === 0 ? 0 : 1}>
                   <Box flexDirection="row" gap={1}>
-                    <Text color={tool.status === 'failed' ? 'error' : tool.status === 'running' ? 'warning' : 'success'}>
-                      {tool.status === 'running' ? '·' : tool.status === 'failed' ? '×' : '✓'}
+                    <Text color={tool.status === 'failed' ? 'error' : tool.status === 'running' ? 'warning' : tool.status === 'cancelled' ? 'subtle' : 'success'}>
+                      {tool.status === 'running' ? '·' : tool.status === 'failed' ? '×' : tool.status === 'cancelled' ? '–' : '✓'}
                     </Text>
                     <Text color={toolNameColor(tool.name)}>{tool.name}</Text>
                     {tool.endedAt && <Text dimColor>{formatDuration(tool.endedAt - tool.startedAt)}</Text>}

@@ -94,6 +94,7 @@ const KIND_PREFIX: Record<TreeEntry['kind'], { text: string; color: TextColor }>
 function toolGlyph(entry: TreeEntry): { glyph: string; color: TextColor } | undefined {
   if (entry.toolStatus === 'ok') return { glyph: ' ✓', color: 'success' }
   if (entry.toolStatus === 'error') return { glyph: ' ✗', color: 'error' }
+  if (entry.toolStatus === 'cancelled') return { glyph: ' –', color: 'subtle' }
   if (entry.toolStatus === 'running') return { glyph: ' …', color: 'warning' }
   return undefined
 }

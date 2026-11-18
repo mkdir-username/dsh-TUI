@@ -71,6 +71,7 @@ import {
   type RawTrajEvent,
 } from './guards.js'
 import { BURST_MIN, type TrajKind, type TrajNode, type TrajTokens } from './types.js'
+import { toolCancellationOf } from '../../channel/tool-cancel.js'
 
 
 /** Per-step streaming timestamps, the source of TTFT and decode duration. */
@@ -575,7 +576,7 @@ function consume(state: FoldState, nodes: TrajNode[], timing: Map<string, StepTi
           ? (message as Record<string, unknown>).content
           : undefined,
       )
-      close(state, open, event, error === undefined ? 'ok' : 'error', code)
+      close(state, open, event, error === undefined ? 'ok' : toolCancellationOf({ code }) === undefined ? 'error' : 'cancelled', code)
       state.tools.delete(callId)
       return
     }

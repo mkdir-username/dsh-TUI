@@ -183,11 +183,16 @@ export interface ToolRow {
   /** Full arguments, shown when Ctrl+O verbose mode is on; dropped when the
    *  row is folded (session log retains it). */
   argsFull?: string
-  status: 'running' | 'ok' | 'error'
+  status: 'running' | 'ok' | 'error' | 'cancelled'
   resultText?: string
   /** Full result text, shown when Ctrl+O verbose mode is on. */
   resultFull?: string
   errorText?: string
+  /** On a cancelled row: which side of dispatch the cancellation landed on.
+   *  `before-dispatch` never ran the body (nothing happened); `after-dispatch`
+   *  started it, so its outcome is unknown. Presentation only — the recorded
+   *  `errorText` keeps the wire wording for the expanded layer. */
+  cancelKind?: 'before-dispatch' | 'after-dispatch'
   /** Tool-owned render intent from dsh-tools `presentCall` (diff/terminal/
    *  generic). Drives the structured card body instead of the raw text. */
   callView?: ToolCallView
@@ -384,7 +389,8 @@ export type SubagentOutputKind = 'text' | 'thinking' | 'tool' | 'error' | 'syste
 export interface SubagentToolCall {
   id?: string
   name: string
-  status: 'running' | 'completed' | 'failed'
+  /** `cancelled`: the turn abort settled the call without an outcome. */
+  status: 'running' | 'completed' | 'failed' | 'cancelled'
   startedAt: number
   endedAt?: number
   argsPreview?: string

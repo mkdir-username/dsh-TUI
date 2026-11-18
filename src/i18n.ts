@@ -1128,6 +1128,11 @@ const dict = {
   'tool-exit-code': { zh: '退出码 {{code}}', en: 'Exit code {{code}}' },
   'tool-killed-signal': { zh: '被信号 {{name}} 终止', en: 'Killed by signal {{name}}' },
   'tool-running-elapsed': { zh: '运行中…（{{duration}}）', en: 'Running… ({{duration}})' },
+  // A turn cancel settles the calls it owned as cancellations, not failures:
+  // `before-dispatch` never reached the body, `after-dispatch` did and its
+  // outcome was not recorded. The card says which, instead of a red error.
+  'tool-cancelled-before-dispatch': { zh: '已取消 — 未执行', en: 'cancelled — the call never ran' },
+  'tool-cancelled-after-dispatch': { zh: '已取消 — 结果未记录', en: 'cancelled — the outcome was not recorded' },
   'tool-running-park-hint': { zh: '{{key}} 转到后台', en: '{{key}} moves it to the background' },
   'tool-park-started': { zh: '已转到后台：{{command}}', en: 'Moved to the background: {{command}}' },
   'diff-patch-added': { zh: '新文件', en: 'new file' },

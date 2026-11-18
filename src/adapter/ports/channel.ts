@@ -30,7 +30,10 @@ import type { HostDisposer } from './owner.js'
 export interface HostChannelToolProjection {
   readonly callId: string
   readonly name: string
-  readonly status: 'running' | 'ok' | 'error'
+  /** `cancelled`: the turn was cancelled while this call was pending — the
+   *  call is settled without an outcome, and `errorText` (when present) is the
+   *  wire wording, not a failure report. */
+  readonly status: 'running' | 'ok' | 'error' | 'cancelled'
   readonly argsPreview: string
   readonly resultPreview?: string
   readonly errorText?: string

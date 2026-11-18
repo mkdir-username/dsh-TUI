@@ -33,8 +33,9 @@ export type TrajKind =
   | 'context'
   | 'todo'
 
-/** Bracket outcome; open brackets stay `running` until their closer lands. */
-export type TrajStatus = 'running' | 'ok' | 'error'
+/** Bracket outcome; open brackets stay `running` until their closer lands.
+ *  `cancelled`: the turn abort settled the call — not a failure. */
+export type TrajStatus = 'running' | 'ok' | 'error' | 'cancelled'
 
 /** Per-message token accounting, present only when the adapter reported it. */
 export interface TrajTokens {

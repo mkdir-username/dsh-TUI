@@ -23,6 +23,7 @@ import { logForDebugging } from '../utils/debug.js'
 import { laneOf } from './activity.js'
 import { buildQuestionRecord, parseQuestionRecordAnswers, parseQuestionRecordQuestions } from './question-record.js'
 import { cleanCommandReport, cleanRenderText, NOTICE_CELLS } from './sanitize.js'
+import { toolCancellationOf } from './tool-cancel.js'
 import { appendLiveOutput, type LiveOutputTail } from './live-output.js'
 import { replaySelectionAttachment } from './selection-record.js'
 import { ARGS_PREVIEW_LIMIT, LOCAL_OUTPUT_LIMIT, preview, previewIndented, RESULT_PREVIEW_LIMIT, trimLocalRows } from './transcript.js'
@@ -448,7 +449,15 @@ export function createChannelProjection(state: ProjectionState, deps: ChannelPro
       }
     }
     if (event.isError) {
-      append({ title: event.errorText ?? '', lines: [] })
+      // A cancelled questionnaire was never answered by a human: say so in the
+      // same words as any other cancelled call instead of echoing the abort.
+      const cancellation = toolCancellationOf(event.errorInfo)
+      append({
+        title: cancellation === undefined
+          ? event.errorText ?? ''
+          : t(cancellation === 'before-dispatch' ? 'tool-cancelled-before-dispatch' : 'tool-cancelled-after-dispatch'),
+        lines: [],
+      })
       return
     }
     const answers = parseQuestionRecordAnswers(event.text)
@@ -1008,8 +1017,10 @@ export function createChannelProjection(state: ProjectionState, deps: ChannelPro
     const suppressedTodo = todoCalls.get(callId)
     if (suppressedTodo !== undefined) {
       todoCalls.delete(callId)
-      // Success stays in the panel; only a failure needs a visible card.
-      if (event.isError) {
+      // Success stays in the panel; only a real failure needs a visible card
+      // (a cancelled todo call is not a failure — the turn-level interrupt row
+      // already accounts for it).
+      if (event.isError && toolCancellationOf(event.errorInfo) === undefined) {
         settleLiveReasoning('tool call')
         const errorCard: ChatRow = {
           id: deps.rowIds.value,
@@ -1045,10 +1056,22 @@ export function createChannelProjection(state: ProjectionState, deps: ChannelPro
     card.images = images.length === 0 ? undefined : images
     card.tool.durationMs = Math.max(0, Date.now() - card.tool.startedAt)
     if (event.isError) {
-      card.tool.status = 'error'
-      const errorText = event.errorText ?? ''
-      card.tool.errorText = errorText
-      state.contextSegments.tools += estimateTokens(errorText)
+      const cancellation = toolCancellationOf(event.errorInfo)
+      if (cancellation === undefined) {
+        card.tool.status = 'error'
+        const errorText = event.errorText ?? ''
+        card.tool.errorText = errorText
+        state.contextSegments.tools += estimateTokens(errorText)
+      } else {
+        // The turn was cancelled under this call (user stop, parent abort,
+        // session close). Nothing failed; the recorded text stays for the
+        // expanded/raw layer and the collapsed card says "cancelled".
+        card.tool.status = 'cancelled'
+        card.tool.cancelKind = cancellation
+        card.tool.errorText = event.errorText === undefined || event.errorText === '' ? undefined : event.errorText
+        // The model still reads this result, so it still occupies context.
+        state.contextSegments.tools += estimateTokens(card.tool.errorText ?? '')
+      }
     } else {
       card.tool.status = 'ok'
       const result = event.text

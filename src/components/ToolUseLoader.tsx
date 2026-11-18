@@ -7,6 +7,8 @@ import type { Theme } from '../theme.js'
 
 type Props = {
   isError: boolean
+  /** The call was cancelled with the turn, not failed: a dim bullet, no ✗. */
+  isCancelled?: boolean
   isUnresolved: boolean
   shouldAnimate: boolean
   /** Raw tool id (bash/read/edit/…) — picks the category color for a settled dot. */
@@ -55,11 +57,21 @@ const CATEGORY_TOKEN: Record<ToolCategory, keyof Theme> = {
  */
 export function ToolUseLoader({
   isError,
+  isCancelled = false,
   isUnresolved,
   shouldAnimate,
   toolName,
 }: Props): React.ReactNode {
   const [ref, isBlinking] = useBlink(shouldAnimate)
+  if (isCancelled) {
+    // Settled without an outcome: dim, unanimated, and deliberately not the
+    // failure glyph — a cancelled call says nothing broke.
+    return (
+      <Box ref={ref} minWidth={2}>
+        <Text dimColor>{BULLET}</Text>
+      </Box>
+    )
+  }
   if (isError) {
     return (
       <Box ref={ref} minWidth={2}>

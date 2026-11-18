@@ -821,6 +821,7 @@ export function AssistantToolUseMessage({
   const revealScope = useRevealScope()
   const isRunning = tool.status === 'running'
   const isError = tool.status === 'error'
+  const isCancelled = tool.status === 'cancelled'
   const sendMessage = sendMessageCardOf(tool)
   // The send-message card's raw layer (args/result JSON) shows on verbose OR
   // a row click — the click is the mouse user's only「看全量」path.
@@ -939,6 +940,12 @@ export function AssistantToolUseMessage({
         body.push(...rawResult.split('\n').map(dim))
       }
     }
+  } else if (isCancelled) {
+    // The turn was cancelled under this call: say what that means for THIS
+    // call instead of echoing the abort (the turn's own interrupt row names
+    // the cause once). The recorded wire text stays reachable in verbose.
+    body = [dim(t(tool.cancelKind === 'after-dispatch' ? 'tool-cancelled-after-dispatch' : 'tool-cancelled-before-dispatch'))]
+    if (verbose && tool.errorText !== undefined) body.push(...tool.errorText.split('\n').map(dim))
   } else if (isError) {
     // Line-aware like every other body: a multi-line error (a stack trace)
     // goes through the SAME line budget and fold hint as tool output — the
@@ -1088,6 +1095,7 @@ export function AssistantToolUseMessage({
             shouldAnimate={isRunning}
             isUnresolved={isRunning}
             isError={isError}
+            isCancelled={isCancelled}
             toolName={tool.name}
           />
           <HeaderTitle name={name} title={headerTitle} isTerminal={headerIsTerminal} folded={foldedHeader} displayArgs={displayArgs} argsLanguage={argsLanguage} nameColor={toolNameColor(tool.name, view?.category ?? tool.callView?.category)} filePath={filePath} onOpenFile={onOpenFile} metaTooltip={() => toolCardMetaTooltip(tool, isRunning, isError)} headerTextBudget={headerTextBudget} />

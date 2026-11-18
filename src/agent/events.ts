@@ -29,6 +29,18 @@ export interface ContentBlockView {
 /** Assistant message block; `reasoning` blocks carry the thinking text. */
 export type AssistantBlock = ContentBlockView
 
+/**
+ * Structured failure identity a backend attaches to a settled tool call
+ * (`tool/result.error` on the DSH wire): the error class and its stable code.
+ * Kept apart from `errorText` so presentation can tell a cancellation
+ * (`ABORTED`/`ABORTED_BEFORE_DISPATCH`) from a real tool failure without
+ * parsing prose.
+ */
+export interface ToolErrorIdentity {
+  readonly name?: string
+  readonly code?: string
+}
+
 /** UI-safe lazy image facade (the attachment bytes load on demand). */
 export type ImageRef = TranscriptImage
 
@@ -293,9 +305,10 @@ export type AgentEvent =
   | { readonly type: 'tool.call'; readonly seq: number; readonly anchor?: string; readonly turn: number; readonly step: number; readonly callId: string; readonly name: string; readonly argsJson: string; readonly parentCallId?: string; readonly agentId?: string; readonly presentation?: ToolCallPresentation; readonly time: number }
   /**
    * A tool call settled. `text` is the result's text blocks joined (the body
-   * a card shows); `errorText` is set exactly when `isError`.
+   * a card shows); `errorText` is set exactly when `isError`, and
+   * `errorInfo` carries the structured identity when the backend logged one.
    */
-  | { readonly type: 'tool.result'; readonly seq: number; readonly turn: number; readonly step: number; readonly callId: string; readonly isError: boolean; readonly time: number; readonly content: readonly ContentBlockView[]; readonly text: string; readonly errorText?: string; readonly images?: readonly ImageRef[]; readonly structured?: unknown; readonly meta?: unknown; readonly presentation?: ToolResultPresentation; readonly parentCallId?: string }
+  | { readonly type: 'tool.result'; readonly seq: number; readonly turn: number; readonly step: number; readonly callId: string; readonly isError: boolean; readonly time: number; readonly content: readonly ContentBlockView[]; readonly text: string; readonly errorText?: string; readonly errorInfo?: ToolErrorIdentity; readonly images?: readonly ImageRef[]; readonly structured?: unknown; readonly meta?: unknown; readonly presentation?: ToolResultPresentation; readonly parentCallId?: string }
   /** A running tool reported progress. */
   | { readonly type: 'tool.progress'; readonly callId: string; readonly elapsedMs: number; readonly parentCallId?: string }
   /**

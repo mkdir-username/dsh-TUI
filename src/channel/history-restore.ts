@@ -20,6 +20,7 @@ import type { AgentEvent, AgentEventOf } from '../agent/events.js'
 import { isSuppressedPresentation } from '../agent/presentation.js'
 import { createActivityProjection } from './activity.js'
 import { createChannelProjection, textOfBlocks, type ProjectionState } from './projection.js'
+import { toolCancellationOf } from './tool-cancel.js'
 
 /** Whether the durable record can restore a row (the fold predicate). */
 export function anchoredRow(row: ChatRow): boolean {
@@ -97,7 +98,10 @@ export function restoreFoldedRows(rows: ChatRow[], record: readonly AgentEvent[]
         const result = results.get(tool.callId)
         if (result !== undefined) {
           if (result.isError) {
-            tool.status = 'error'
+            const cancellation = toolCancellationOf(result.errorInfo)
+            tool.status = cancellation === undefined ? 'error' : 'cancelled'
+            if (cancellation === undefined) delete tool.cancelKind
+            else tool.cancelKind = cancellation
             tool.errorText = result.errorText ?? ''
           } else {
             tool.status = 'ok'

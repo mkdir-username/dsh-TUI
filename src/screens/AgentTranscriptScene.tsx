@@ -499,8 +499,8 @@ function WorkbenchPanel({ subagent, parent, parentRow, rosterIds, siblings, swit
       )}
       {keptTools.map(tool => (
         <Box key={tool.id ?? tool.name + tool.startedAt}>
-          <Box flexShrink={0}><Text color={tool.status === 'failed' ? 'error' : tool.status === 'running' ? 'warning' : 'success'}>{tool.status === 'failed' ? '× ' : tool.status === 'running' ? '● ' : '✓ '}</Text></Box>
-          <Text wrap="truncate-end" dimColor={tool.status === 'completed'}>{tool.name}</Text>
+          <Box flexShrink={0}><Text color={tool.status === 'failed' ? 'error' : tool.status === 'running' ? 'warning' : tool.status === 'cancelled' ? 'subtle' : 'success'}>{tool.status === 'failed' ? '× ' : tool.status === 'running' ? '● ' : tool.status === 'cancelled' ? '– ' : '✓ '}</Text></Box>
+          <Text wrap="truncate-end" dimColor={tool.status === 'completed' || tool.status === 'cancelled'}>{tool.name}</Text>
         </Box>
       ))}
       {hiddenTools > 0 && <Text dimColor>{'  ' + t('agent-view-tools-more', { count: hiddenTools })}</Text>}
