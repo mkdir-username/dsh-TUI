@@ -949,6 +949,13 @@ export interface JobControl {
    */
   parkAny?(): { readonly callId: string; readonly command: string } | null
   /**
+   * End the oldest in-flight `job_output` wait: the read returns at once with
+   * the job's current state and the job itself keeps running. Returns the
+   * released call and its job, or null when no wait is live. Absent for
+   * backends without the job-wait seam.
+   */
+  parkWait?(): { readonly callId: string; readonly jobId: string } | null
+  /**
    * The job's card or panel entry is on screen: keep its output tail fresh
    * (a backend whose output is read on demand polls at most once a second
    * while watched). Returns the unwatch; absent = the output is pushed.

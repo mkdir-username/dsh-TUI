@@ -261,9 +261,51 @@ const BACKGROUND_CARD = toolRow({
   const live = createChannelUi(makeChannel([RUNNING], { kill: () => false, parkAny: () => parkedCall }) as never, 'new', lease)
   check('the UI view forwards parkAny', typeof live.jobControl?.parkAny === 'function')
   check('the forwarded call reaches the backend', live.jobControl?.parkAny?.()?.callId === 'call-7')
+  const releasedWait = { callId: 'call-8', jobId: 'bash-2' }
+  const liveWait = createChannelUi(makeChannel([RUNNING], { kill: () => false, parkWait: () => releasedWait }) as never, 'new', lease)
+  check('the UI view forwards parkWait', typeof liveWait.jobControl?.parkWait === 'function')
+  check('the forwarded wait reaches the backend', liveWait.jobControl?.parkWait?.()?.jobId === 'bash-2')
   const bare = createChannelUi(makeChannel([RUNNING], { kill: () => false }) as never, 'new', lease)
   check('a backend without the seam keeps no parkAny', bare.jobControl?.parkAny === undefined)
+  check('a backend without the seam keeps no parkWait', bare.jobControl?.parkWait === undefined)
   lease.dispose()
+}
+
+
+// ── a waiting job_output is a wait: the same key releases it ───────────────
+{
+  const WAITING = toolRow({
+    name: 'job_output',
+    argsText: '{"job_id":"bash-1","wait":true}',
+    callView: { card: 'read', title: 'Read output from background job bash-1' },
+  })
+  const PLAIN_READ = toolRow({
+    name: 'job_output',
+    argsText: '{"job_id":"bash-1"}',
+    callView: { card: 'read', title: 'Read output from background job bash-1' },
+  })
+  const waits: Array<{ callId: string; jobId: string }> = []
+  const parks: Array<{ callId: string; command: string }> = []
+  const control = {
+    kill: () => false,
+    parkWait: () => {
+      const wait = { callId: 'call-2', jobId: 'bash-1' }
+      waits.push(wait)
+      return wait
+    },
+    parkAny: () => {
+      const park = { callId: 'call-1', command: 'bats suite.bats' }
+      parks.push(park)
+      return park
+    },
+  }
+  const WAIT_TOAST = t('job-wait-park-started', { id: 'bash-1' })
+  const waiting = await press([WAITING], control)
+  check('a waiting job_output card advertises the background key', waiting.after.includes(HINT), waiting.after.split('\n').find(line => line.includes('job_output')) ?? '')
+  check('the key releases the wait first', waits.length === 1 && parks.length === 0, `${waits.length} waits / ${parks.length} parks`)
+  check('the wait toast names the job and says nothing more', waiting.notices.length === 1 && waiting.notices[0] === WAIT_TOAST, JSON.stringify(waiting.notices))
+  const plain = await press([PLAIN_READ], control, null)
+  check('a job_output without wait advertises nothing', !plain.after.includes(HINT))
 }
 
 console.log(failed === 0 ? '\nAll tool-park checks passed.' : `\n${failed} check(s) failed.`)

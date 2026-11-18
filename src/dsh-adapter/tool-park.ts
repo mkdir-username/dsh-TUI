@@ -47,3 +47,42 @@ export function parkAnyToolCall(): ParkedToolCall | null {
     return null
   }
 }
+
+/**
+ * The `job_output` wait rendezvous — the second half of the same human seam.
+ *
+ * A wait on a background job is not a shell call, so the bash ticket above
+ * never sees it: the core tool parks its own AbortController and publishes the
+ * ticket under a symbol of its own (`patch-dsh-job-wait-park.mjs`). Both
+ * tickets follow one contract: ask once, the wait ends, the producer keeps
+ * running.
+ */
+export const JOB_WAIT_PARK = Symbol.for('dsh.job-wait-park')
+
+export interface ParkedWait {
+  readonly callId: string
+  readonly jobId: string
+}
+
+/** Hub the core patch installs; `requestAny` is the only method used here. */
+interface JobWaitHub {
+  requestAny?: () => { callId?: unknown; jobId?: unknown } | null | undefined
+}
+
+/**
+ * End the oldest in-flight `job_output` wait.
+ * @returns the released call and the job it was reading, or null when nothing
+ *   waits: no core patch, no `wait: true` call in flight, or a wait that
+ *   already returned.
+ */
+export function parkAnyJobWait(): ParkedWait | null {
+  const hub = Reflect.get(globalThis, JOB_WAIT_PARK) as JobWaitHub | undefined
+  if (hub === undefined || typeof hub.requestAny !== 'function') return null
+  try {
+    const parked = hub.requestAny()
+    if (parked == null || typeof parked.callId !== 'string' || typeof parked.jobId !== 'string') return null
+    return { callId: parked.callId, jobId: parked.jobId }
+  } catch {
+    return null
+  }
+}

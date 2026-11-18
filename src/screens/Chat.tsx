@@ -5013,6 +5013,13 @@ export function Chat({
     // Когда ждать нечего, ключ не глотается: он падает в sidePanel.handleKey
     // ниже, и ⌘B этим же байтом открывает и закрывает панель.
     if (actionMatches('toolPark', input, key)) {
+      const parkWait = channel.jobControl?.parkWait
+      const released = parkWait === undefined ? null : parkWait.call(channel.jobControl)
+      if (released !== null) {
+        channel.notify(t('job-wait-park-started', { id: released.jobId }), { color: 'success', timeoutMs: 5000 })
+        event.stopImmediatePropagation()
+        return
+      }
       const parkAny = channel.jobControl?.parkAny
       const parked = parkAny === undefined ? null : parkAny.call(channel.jobControl)
       if (parked !== null) {

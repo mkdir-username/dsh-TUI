@@ -102,6 +102,7 @@ export function createChannelUi(channel: ChannelUi, mode: AdapterMode, lease: Ch
           // side-panel toggle on a running call.
           const effects: Partial<Record<keyof NonNullable<ChannelUi['jobControl']>, HostEffectClass>> = { kill: 'mutate' }
           if (typeof control.parkAny === 'function') effects.parkAny = 'mutate'
+          if (typeof control.parkWait === 'function') effects.parkWait = 'mutate'
           const projected = methods(control, effects as Readonly<Record<keyof typeof control, HostEffectClass>>)
           const watch = control.watchOutput
           if (watch === undefined) return projected

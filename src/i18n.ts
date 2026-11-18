@@ -1135,6 +1135,7 @@ const dict = {
   'tool-cancelled-after-dispatch': { zh: '已取消 — 结果未记录', en: 'cancelled — the outcome was not recorded' },
   'tool-running-park-hint': { zh: '{{key}} 转到后台', en: '{{key}} moves it to the background' },
   'tool-park-started': { zh: '已转到后台：{{command}}', en: 'Moved to the background: {{command}}' },
+  'job-wait-park-started': { zh: '已停止等待：{{id}}', en: 'Wait released: {{id}}' },
   'diff-patch-added': { zh: '新文件', en: 'new file' },
   'diff-patch-deleted': { zh: '已删除', en: 'deleted' },
   'tool-live-omitted': { zh: '… 已省略 {{count}} 行', en: { one: '… {{count}} line omitted', other: '… {{count}} lines omitted' } },

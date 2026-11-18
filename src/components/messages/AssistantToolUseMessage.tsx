@@ -250,6 +250,20 @@ type BodyLine = {
 }
 
 /** The collapsed text body keeps three lines. */
+/** A `job_output` call whose args ask for a blocking wait: the card is a wait,
+ *  not work, so the background key applies to it exactly as it does to a
+ *  running command. Local on purpose — the UI layer may import only types from
+ *  the adapter (verify:boundary), and the predicate reads nothing but the row. */
+function isJobOutputWait(name: string | undefined, argsJson: string | undefined): boolean {
+  if (name !== 'job_output' || argsJson === undefined) return false
+  try {
+    const args = JSON.parse(argsJson) as { wait?: unknown }
+    return args.wait === true
+  } catch {
+    return false
+  }
+}
+
 const TEXT_BODY_MAX_LINES = 3
 /** Diff bodies cap at the upstream chat row's 8 (dsh-client-ui-tool's
  *  CHAT_DIFF_MAX_LINES) — denser information than log output. */
@@ -963,7 +977,7 @@ export function AssistantToolUseMessage({
     // A shell card is the one thing the background key can move: say so on the
     // card itself, where the wait is visible, instead of leaving the key to a
     // README. The combo follows a remap of the background action.
-    if (isRunning && tool.callView?.card === 'terminal') {
+    if (isRunning && (tool.callView?.card === 'terminal' || isJobOutputWait(tool.name, tool.argsFull ?? tool.argsText))) {
       body.push(dim(t('tool-running-park-hint', { key: comboDisplay(primaryComboString('toolPark'), true) })))
     }
   }
