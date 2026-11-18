@@ -1610,14 +1610,17 @@ export function PromptInput({
     // offset inside a surrogate pair or combining cluster.
     let offset = normalizeCursorOffset(next, cursorOffset)
     if (block) {
-      // Fold block is atomic: the caret never lands INSIDE [start, end).
-      if (offset > block.start && offset < block.end) {
-        offset = offset - block.start < block.end - offset ? block.start : block.end
-      }
       // Every real edit happens AT the caret, so a block that starts at or
       // after the caret shifts with the value delta; one fully past the
       // caret is untouched. Whole-value replacements (fill/history/editor)
       // clear the block explicitly at their call sites.
+      //
+      // Shift BEFORE clamping: the caret offset describes the NEW text, so
+      // the clamp must read the block's post-edit range. Against the pre-edit
+      // range an insert exactly at the block's head snapped the caret back to
+      // `block.start` — the block then moved past the inserted run and every
+      // following character landed before the previous one ("Выполни " came
+      // out "ыполни В"), with the caret trailing the text.
       const delta = next.length - prev.length
       let start = block.start
       let end = block.end
@@ -1627,6 +1630,10 @@ export function PromptInput({
       }
       start = Math.max(0, Math.min(start, next.length))
       end = Math.max(start, Math.min(end, next.length))
+      // Fold block is atomic: the caret never lands INSIDE [start, end).
+      if (offset > start && offset < end) {
+        offset = offset - start < end - offset ? start : end
+      }
       if (start >= end) updateFoldBlock(null)
       else if (start !== block.start || end !== block.end) updateFoldBlock({ start, end })
     }

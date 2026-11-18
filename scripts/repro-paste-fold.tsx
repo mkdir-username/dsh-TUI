@@ -9,6 +9,9 @@
  *    text around it; Esc expands; Enter submits head+block+tail
  * 5. text typed BEFORE the block stays visible and is submitted with it
  * 6. Backspace at the block's tail deletes the WHOLE block in one key
+ * 7. typing IN FRONT of the chip (the caret sits on the block's head) keeps
+ *    the typed order and leaves the caret right after the last character —
+ *    per key and as one coalesced stdin read
  *
  * Platform-independent: bracketed paste + SGR mouse need no clipboard stub.
  */
@@ -47,7 +50,15 @@ class FakeStdout extends Writable {
   columns = COLS
   rows = ROWS
   isTTY = true
-  _write(chunk: unknown, _e: BufferEncoding, cb: () => void) { term.write(String(chunk), cb) }
+  /** Last native-cursor park of the frame (`CSI row;col H`), 1-indexed. */
+  park: [number, number] | null = null
+  _write(chunk: unknown, _e: BufferEncoding, cb: () => void) {
+    const text = String(chunk)
+    for (const match of text.matchAll(/\x1b\[(\d+);(\d+)H/gu)) {
+      this.park = [Number(match[1]), Number(match[2])]
+    }
+    term.write(text, cb)
+  }
 }
 class FakeStderr extends Writable {
   isTTY = true
@@ -68,6 +79,22 @@ class FakeStdin extends PassThrough {
 const { sleep, settle, settled } = termTest
 const screenHas = (s: string): boolean => termTest.screenHas(term, s)
 const findText = (s: string): { col: number; row: number } | null => termTest.findText(term, s)
+/** The composer's own rows, top to bottom (between its two border lines). */
+const inputRows = (): string[] => {
+  const rows = termTest.viewportLines(term).map(row => row.trimEnd())
+  let bottom = rows.length - 1
+  while (bottom >= 0 && !rows[bottom]!.includes('╰')) bottom--
+  if (bottom < 0) return []
+  let top = bottom - 1
+  while (top >= 0 && !rows[top]!.includes('╭')) top--
+  return top < 0 ? [] : rows.slice(top + 1, bottom)
+}
+/** The value box's first row, i.e. the row text after the `❯ ` prompt glyph. */
+const headAfterPrompt = (row: string | undefined): string => {
+  if (row === undefined) return ''
+  const at = row.indexOf('❯')
+  return (at < 0 ? row : row.slice(at + 1)).trimStart()
+}
 
 const listeners = new Set<() => void>()
 let submitted = ''
@@ -105,11 +132,12 @@ const channel: any = {
 const bump0 = () => { channel.version++; for (const cb of listeners) cb() }
 
 const stdinObj = new FakeStdin()
+const stdoutObj = new FakeStdout()
 const instance = await render(
   <AlternateScreen>
     <Chat channel={channel} questionStore={new QuestionStore()} onExit={() => {}} />
   </AlternateScreen>,
-  { stdout: new FakeStdout(), stdin: stdinObj, stderr: new FakeStderr(), exitOnCtrlC: false, patchConsole: false },
+  { stdout: stdoutObj, stdin: stdinObj, stderr: new FakeStderr(), exitOnCtrlC: false, patchConsole: false },
 )
 // 固定窗:pacing 等首帧——React 树首次渲染 + 输入监听挂接，无单一可观测锚点。
 await sleep(600)
@@ -262,7 +290,82 @@ try {
   await sleep(400) // 固定窗:探针 块删除后 Enter 不得提交
   check('Enter after block delete submits nothing', submitted === 'sentinel')
 
-  // 7. Small (non-foldable) inputs keep the classic Esc = clear behavior.
+  // 7. Typing IN FRONT of the chip: the caret sits exactly on the block's
+  //    head, so every insert shifts the block under it. The typed run must
+  //    keep its order and the caret must sit right AFTER the last character.
+  //    Regression: the atomic-block caret clamp ran against the block's
+  //    PRE-edit range, so an insert at its head snapped the caret back to
+  //    block.start — per-key typing came out rotated ("Выполни " →
+  //    "ыполни В") and a coalesced read parked the caret at the head's start.
+  //    Each sub-case starts from the empty composer the previous submit left.
+  submitted = ''
+  const headRun = 'Выполни '
+  /** 1-indexed park column expected right AFTER `head` in `row` (-1: absent). */
+  const parkAfter = (row: string, head: string): number => {
+    const at = row.indexOf(head)
+    return at < 0 ? -1 : at + head.length + 1
+  }
+  const typeKeys = async (text: string): Promise<void> => {
+    for (const ch of text) {
+      stdinObj.write(ch)
+      await sleep(120) // 固定窗:探针 每个键各自一次 stdin 读与一次渲染
+    }
+  }
+  const pasteBlock = async (): Promise<void> => {
+    stdinObj.write(`\x1b[200~${pasted}\x1b[201~`)
+    await settled(() => screenHas('▸ 12 lines'))
+    stdinObj.write('\x1b[D') // ← over the atomic block: the caret reaches its head
+    await sleep(150) // 固定窗:探针 ← 本身没有可观测的屏幕变化
+  }
+
+  // 7a. Head with its own text: the run must land AFTER `pre:`, not before it.
+  stdinObj.write('pre:')
+  await settled(() => screenHas('pre:'))
+  await pasteBlock()
+  await typeKeys(headRun)
+  const headRow = inputRows()[0] ?? ''
+  check('7a. typing at the head end of a non-empty head keeps the order',
+    headAfterPrompt(headRow).startsWith('pre:' + headRun), JSON.stringify(headAfterPrompt(headRow)))
+  const headPark = parkAfter(headRow, 'pre:' + headRun)
+  check('7a. the caret parks after the whole head',
+    headPark > 0 && stdoutObj.park !== null && stdoutObj.park[1] === headPark,
+    `park=${JSON.stringify(stdoutObj.park)} want ${headPark}`)
+  stdinObj.write('\r')
+  check('7b. Enter submits the typed head in order',
+    await settled(() => submitted === 'pre:' + headRun + pasted),
+    `got ${JSON.stringify(submitted.slice(0, 18))}`)
+
+  // 7c. Per-key delivery into an EMPTY head: one stdin read (and one render)
+  //     per character, so a caret that snaps back rotates the run.
+  submitted = ''
+  await pasteBlock()
+  await typeKeys(headRun)
+  const perKeyRow = inputRows()[0] ?? ''
+  check('7c. typing in front of the chip keeps the typed order',
+    headAfterPrompt(perKeyRow).startsWith(headRun), JSON.stringify(headAfterPrompt(perKeyRow)))
+  const perKeyPark = parkAfter(perKeyRow, headRun)
+  check('7c. the caret parks right after the last typed character',
+    perKeyPark > 0 && stdoutObj.park !== null && stdoutObj.park[1] === perKeyPark,
+    `park=${JSON.stringify(stdoutObj.park)} want ${perKeyPark}`)
+  stdinObj.write('\r')
+  await settle(() => screenHas('▸ 12 lines') === false)
+
+  // 7d. Coalesced delivery: the whole run arrives as ONE stdin read.
+  submitted = ''
+  await pasteBlock()
+  stdinObj.write(headRun)
+  await settled(() => headAfterPrompt(inputRows()[0]).startsWith(headRun.trimEnd()))
+  const coalescedRow = inputRows()[0] ?? ''
+  check('7d. a coalesced read keeps the typed order',
+    headAfterPrompt(coalescedRow).startsWith(headRun), JSON.stringify(headAfterPrompt(coalescedRow)))
+  const coalescedPark = parkAfter(coalescedRow, headRun)
+  check('7d. a coalesced read leaves the caret after the last character',
+    coalescedPark > 0 && stdoutObj.park !== null && stdoutObj.park[1] === coalescedPark,
+    `park=${JSON.stringify(stdoutObj.park)} want ${coalescedPark}`)
+  stdinObj.write('\r')
+  await settle(() => screenHas('▸ 12 lines') === false)
+
+  // 8. Small (non-foldable) inputs keep the classic Esc = clear behavior.
   stdinObj.write('tiny')
   await settle(() => screenHas('tiny'))
   stdinObj.write('\x1b')
