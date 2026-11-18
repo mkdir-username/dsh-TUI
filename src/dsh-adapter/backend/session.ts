@@ -69,6 +69,30 @@ export function isAgentSession(value: unknown): value is AgentSession {
     typeof (value as { capabilities?: unknown }).capabilities === 'object'
 }
 
+declare module '@deepseek-ai/dsh-agent' {
+  interface CancelOptions {
+    /**
+     * Local `dsh.user-stop` engine patch: the user's own stop. While the latch
+     * is armed only a message from the user (`source.kind === 'user'`) may wake
+     * the driver; hook verdicts, jobs, goal rounds and subagent settlements stay
+     * queued until then. Absent on switch/dispose, which keep waking as before.
+     */
+    readonly stop?: boolean
+  }
+}
+
+/**
+ * The engine options for one channel cancel cause. `stop` is set only for the
+ * user's own gestures (`user`, `interrupt`): the Esc ladder promises that after
+ * it nothing continues on its own. A session switch or a rewind is the app's
+ * decision, not the user's stop, and must not latch the agent.
+ */
+export function cancelOptionsFor(cause: CancelCause): { readonly keepInbox?: boolean; readonly stop?: boolean } | undefined {
+  if (cause === 'user') return { keepInbox: true, stop: true }
+  if (cause === 'interrupt') return { stop: true }
+  return undefined
+}
+
 /**
  * Wrap a DSH agent (and the handle that owns it, if any) as an
  * `AgentSession`. Creating the wrapper acquires nothing: listeners exist only
@@ -352,8 +376,15 @@ export function createDshSession(ctx: Context, target: DshSessionTarget, options
       // inputs in a dock and re-delivers nothing until the user sends it, and
       // a switch/dispose never resumes the old queue. keepInbox is only for
       // the user-cancel and normal turn-end paths.
-      if (cause === 'user') agent.cancel({ kind: 'user' }, { keepInbox: true })
-      else dropOwn(() => agent.cancel({ kind: 'user' }))
+      //
+      // `stop` (the local dsh.user-stop engine patch) marks the user's own stop:
+      // the engine then holds every automatic wake — Stop-hook follow-ups,
+      // background jobs, goal rounds, subagent settlements — until the user
+      // writes again. `switch`/`dispose` leave it off, so a session switch or a
+      // rewind still wakes the agent exactly as before.
+      const options = cancelOptionsFor(cause)
+      if (options === undefined) dropOwn(() => agent.cancel({ kind: 'user' }))
+      else agent.cancel({ kind: 'user' }, options)
       // The kernel cancel settles its bookkeeping synchronously: the answer
       // is definitive either way (kept ids for a 'user' cancel, an emptied
       // queue otherwise).

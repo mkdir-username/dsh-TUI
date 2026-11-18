@@ -18,6 +18,7 @@
 import './lib/fake-home.mjs' // must stay first: DATA_DIR resolves at import time
 import { Writable, PassThrough } from 'node:stream'
 import { createChannel } from '../lib/types/dsh-adapter/channel.js'
+import { cancelOptionsFor } from '../lib/types/dsh-adapter/backend/session.js'
 import { setLang, t } from '../lib/types/i18n.js'
 import { settle, settled, sleep, findText } from './lib/term-test.mjs'
 
@@ -78,7 +79,7 @@ const launchOptions = { model: 'deepseek-chat', cwd: '/tmp', provider: 'deepseek
 
   // Esc: dock, not deliver.
   check('A2 interruptAndDock counts', channel.interruptAndDock() === 2)
-  check('A2 interrupt cancel drops the inbox (no keepInbox)', cancelCalls.length === 1 && cancelCalls[0]?.options === undefined, JSON.stringify(cancelCalls))
+  check('A2 interrupt cancel drops the inbox (no keepInbox) and marks the user stop', cancelCalls.length === 1 && JSON.stringify(cancelCalls[0]?.options) === '{"stop":true}', JSON.stringify(cancelCalls))
   check('A2 previews parked as docked', channel.pending.length === 2 && channel.pending.every(item => item.docked === true), JSON.stringify(channel.pending))
 
   // The kernel's discard events (the cancel dropped the inbox) must not
@@ -144,8 +145,14 @@ const launchOptions = { model: 'deepseek-chat', cwd: '/tmp', provider: 'deepseek
   userChannel.submit('保留我')
   await settle(() => userChannel.pending.length === 1)
   userChannel.cancel()
-  check('A7 user cancel keeps the inbox (keepInbox:true)', userCancelCalls.length === 1 && JSON.stringify(userCancelCalls[0]?.options) === '{"keepInbox":true}', JSON.stringify(userCancelCalls))
+  check('A7 user cancel keeps the inbox and marks the user stop', userCancelCalls.length === 1 && JSON.stringify(userCancelCalls[0]?.options) === '{"keepInbox":true,"stop":true}', JSON.stringify(userCancelCalls))
   check('A7 user cancel keeps the preview undocked', userChannel.pending.length === 1 && userChannel.pending[0]?.docked !== true)
+
+  // The stop latch is opt-in and only for the user's own gestures: a session
+  // switch or a rewind must keep waking the agent as before.
+  check('A10 user cancel opts into the stop latch', JSON.stringify(cancelOptionsFor('user')) === '{"keepInbox":true,"stop":true}')
+  check('A10 dock interrupt opts into the stop latch', JSON.stringify(cancelOptionsFor('interrupt')) === '{"stop":true}')
+  check('A10 switch/dispose do not latch', cancelOptionsFor('switch') === undefined && cancelOptionsFor('dispose') === undefined)
 }
 
 // ─────────────────────── Section B: Claude fixture ────────────────────────

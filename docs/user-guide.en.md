@@ -119,6 +119,8 @@ dsh-tui
 | `Esc` (working + pending) | interrupt the turn and re-send the pending message now |
 | `/btw …` while working | Enter runs it directly (side question never interrupts the main turn) |
 
+An interrupt ends the turn and everything attached to it: the in-flight Stop hooks stop, and a hook verdict, a finished background job, a goal round or a subagent settlement stays queued until your next message. Background jobs keep running — only their wake is held — and the next turn opens with a note that the previous one was cancelled.
+
 While a turn is running, the `/` overlay groups commands by their impact on the current conversation: the harmless ones stay on top in their normal style, while commands that are gated, interrupt or replace the conversation, or steer into it sink to the bottom in the theme's grey (`subtle`), with no extra header row. The grey region never blocks use — the gate still gates and the steer still steers. Only two kinds of input steer into the running turn: text that is not a command, and a **direct skill gesture** (`/skill-name …`), which the overlay groups as steering as well.
 
 ### 2.2 Interrupt / exit / system
