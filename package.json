@@ -290,6 +290,7 @@
     "verify:mention-providers": "node --import tsx/esm scripts/verify-mention-providers.tsx",
     "verify:activity-ownership": "node --import tsx/esm scripts/verify-activity-ownership.ts",
     "verify:ctrl-enter-steer": "node scripts/verify-ctrl-enter-steer.mjs",
+    "verify:esc-stop": "node scripts/verify-esc-stop.mjs",
     "verify:tool-park": "node --import tsx/esm scripts/verify-tool-park.tsx",
     "verify:compact-queue": "node scripts/verify-compact-queue.mjs",
     "verify:compact-hold": "node scripts/verify-compact-hold-events.mjs",
