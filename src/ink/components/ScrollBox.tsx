@@ -201,6 +201,7 @@ function ScrollBox({
       // Explicit false overrides the DOM attribute so manual scroll
       // breaks stickiness. Render code checks ?? precedence.
       el.stickyScroll = false;
+      el.lastWheelDir = 0;
       el.pendingScrollDelta = undefined;
       el.scrollAnchor = undefined;
       el.scrollTop = Math.max(0, Math.floor(y));
@@ -211,6 +212,7 @@ function ScrollBox({
       if (!box) return;
       navigationSerialRef.current++;
       box.stickyScroll = false;
+      box.lastWheelDir = 0;
       box.pendingScrollDelta = undefined;
       box.scrollAnchor = {
         el,
@@ -263,6 +265,11 @@ function ScrollBox({
         }
       }
       el.stickyScroll = false;
+      // Reader intent, not geometry: a wheel-up keeps the follow off even when
+      // the view cannot move yet (transcript still fits), which is exactly the
+      // case where the positional at-bottom check would otherwise re-pin on
+      // the next growth frame.
+      el.lastWheelDir = dyFloor < 0 ? -1 : 1;
       // Wheel input cancels any in-flight anchor seek — user override.
       el.scrollAnchor = undefined;
       // Accumulate in pendingScrollDelta; renderer drains it at a capped
@@ -280,6 +287,7 @@ function ScrollBox({
       const maxScroll = Math.max(0, (el.scrollHeight ?? 0) - viewportH);
       el.pendingScrollDelta = undefined;
       el.stickyScroll = true;
+      el.lastWheelDir = 0;
       // Jump intent is not wheel debt: mounting the union of the current
       // position and a far pending delta defeats virtualization. MessageList's
       // sticky tail walk mounts the destination directly, even with estimated

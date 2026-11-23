@@ -39,6 +39,8 @@ export type ScrollGeometryNote = {
   shrunk: boolean
   grew: boolean
   atBottom: boolean
+  /** Direction of the reader's last wheel notch: -1 up, 1 down, 0 explicit navigation. */
+  wheelDir: number
   /** scrollTop captured before at-bottom follow (the user's logical view). */
   scrollTopBeforeFollow: number
   /** scrollTop after pendingScrollDelta drain, before clamps. */

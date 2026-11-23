@@ -268,6 +268,10 @@ const GROUPS = {
 // reported jitter). Asserts two invariants: a still reader keeps the screen
 // byte-identical frame to frame, and one notch up then one down nets zero rows.
     ["verify-scroll-hold-wheel-streaming", ['node', '--import', 'tsx/esm', 'scripts/verify-scroll-hold-wheel-streaming.tsx']],
+// The reader leaves while the transcript still FITS the viewport: the follow is
+// a memory of that wheel-up, not a measurement, so the positional at-bottom
+// check must not re-pin it once the answer starts to overflow.
+    ["verify-scroll-detach-when-fitting", ['node', '--import', 'tsx/esm', 'scripts/verify-scroll-detach-when-fitting.tsx']],
 // 混合失效后重挂必须归还估高差；正向修正不得接回粘底或被旧窗口夹住，
 // header 仍拥有视口顶部时不得把 Home 用户滚离原位。
     ["verify-scroll-anchor-remeasurement", ['node', '--import', 'tsx/esm', 'scripts/verify-scroll-anchor-remeasurement.tsx']],

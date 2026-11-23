@@ -98,6 +98,13 @@ export type DOMElement = {
   // settled measurement) refreshes it. ScrollBox.anchorBy translates it with
   // a geometry correction so the positional check stays in the same coordinates.
   scrollPrevMax?: number
+  // Direction of the last wheel notch: -1 up, +1 down, 0 explicit navigation
+  // (scrollTo/scrollToElement/scrollToBottom). The follow is a MEMORY of the
+  // reader's intent, not a measurement: a wheel-up while the transcript still
+  // FITS the viewport cannot move the view, yet it must keep the follow off
+  // until the reader comes back down. Without this, the next growth frame
+  // reads "scrollTop was at max" from a view that never left and re-pins.
+  lastWheelDir?: -1 | 0 | 1
   stickyScroll?: boolean
   // Renderer → React notification channel, set by ScrollBox to its
   // subscriber-notify. Invoked when the RENDERER restores stickyScroll on

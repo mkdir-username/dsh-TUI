@@ -1703,6 +1703,11 @@ function renderNodeToOutput(
         const scrollTopBeforeFollow = node.scrollTop ?? 0
         const sticky =
           node.stickyScroll ?? Boolean(node.attributes['stickyScroll'])
+        // The reader's last wheel notch. A wheel-up that could not move the
+        // view (transcript still fits) still means "I want to stay here": the
+        // positional check below must not read "scrollTop was at max" as an
+        // invitation to follow, and neither restore path may re-pin the flag.
+        const intentUp = (node.lastWheelDir ?? 0) < 0
         const prevMaxScroll = node.scrollPrevMax ?? Math.max(0, prevScrollHeight - prevInnerHeight)
         // Positional check only valid when content grew — virtualization can
         // transiently SHRINK scrollHeight (tail unmount + stale heightCache
@@ -1729,7 +1734,8 @@ function renderNodeToOutput(
         // content growth, and an idle stream leaves the pill stuck.
         const atBottom =
           sticky ||
-          (scrollTopBeforeFollow >= prevMaxScroll &&
+          (!intentUp &&
+            scrollTopBeforeFollow >= prevMaxScroll &&
             (grew || scrollTopBeforeFollow >= maxScroll))
         if (atBottom && (node.pendingScrollDelta ?? 0) >= 0 && !shrunk) {
           node.scrollTop = maxScroll
@@ -1746,6 +1752,7 @@ function renderNodeToOutput(
           // direct scrollTop writes (e.g. the alt-screen-perf test).
           if (
             node.stickyScroll === false &&
+            !intentUp &&
             scrollTopBeforeFollow >= prevMaxScroll
           ) {
             node.stickyScroll = true
@@ -1819,7 +1826,7 @@ function renderNodeToOutput(
         // issue #421; repro-resize-blank). Clamping a sticky view to the shrunken
         // maxScroll is exactly its contract — show the bottom.
         let scrollTop =
-          shrunk && !sticky ? cur : Math.max(0, Math.min(cur, maxScroll))
+          shrunk && !sticky ? Math.max(0, cur) : Math.max(0, Math.min(cur, maxScroll))
         // Virtual-scroll clamp: if scrollTop raced past the currently-mounted
         // range (burst PageUp before React re-renders), render at the EDGE of
         // the mounted children instead of blank spacer. Do NOT write back to
@@ -1854,6 +1861,7 @@ function renderNodeToOutput(
             shrunk,
             grew,
             atBottom,
+            wheelDir: node.lastWheelDir ?? 0,
             scrollTopBeforeFollow,
             cur,
             scrollTop,
@@ -1904,6 +1912,7 @@ function renderNodeToOutput(
         // shrink-artifact frames and still-draining scrolls are excluded.
         if (
           !shrunk &&
+          !intentUp &&
           node.stickyScroll === false &&
           node.pendingScrollDelta === undefined &&
           scrollTop >= maxScroll

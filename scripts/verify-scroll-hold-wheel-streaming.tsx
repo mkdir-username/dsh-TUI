@@ -369,6 +369,40 @@ for (const frame of holdFrames) {
 check('no blank band (the window covers the painted position)', bandFrame === undefined,
   bandFrame ? `f${bandFrame.frame}` : `frames=${holdNotes.length}`)
 
+// --- case 2b: the same reader, growth arriving as a burst ------------------
+// The cases above grow one line and wait. A real answer appends faster than a
+// Yoga pass can remeasure the rows it moved, so the anchor correction reads a
+// stale top for the very row it is compensating. Same reader, same invariant,
+// token cadence instead of the probe's.
+const burstBaseline = viewportLines(term)
+const burstMarker = topBodyMarker(burstBaseline)
+check('the burst baseline body anchor is visible', burstMarker !== null)
+const burstRow = burstMarker?.row ?? -1
+const burstKey = bodyKey(burstBaseline[burstRow] ?? '')
+frameMark = traceFrames().length
+screenMark = screens.length
+for (let step = 1; step <= 8; step++) {
+  growAbove(`GROW-B${step}`)
+  stream.text += `\nA-HEAD burst ${step}`
+  bump()
+  await sleep(10) // 固定窗:pacing — token cadence: appends land faster than the layout pass
+}
+await sleep(500) // 固定窗:pacing — the burst settles before the final read
+const burstFrames = traceFrames().slice(frameMark)
+const burstNotes = burstFrames.flatMap(frame => frame.scroll)
+check('the burst actually grew the content',
+  burstNotes.some(note => note.scrollHeight > (burstNotes[0]?.scrollHeight ?? 0)),
+  `H ${burstNotes[0]?.scrollHeight ?? 0} -> ${burstNotes.at(-1)?.scrollHeight ?? 0}`)
+const burstSticky = burstNotes.find(note => note.sticky)
+check('a burst never re-pins the follow', burstSticky === undefined,
+  burstSticky ? `sticky@H=${burstSticky.scrollHeight}` : `frames=${burstNotes.length}`)
+const burstRun = burstFrames.filter(frame => (frame.anchor?.applied ?? 0) !== 0)
+check('the burst produced anchor corrections', burstRun.length > 0, `${burstRun.length} frames`)
+const burstScreen = viewportLines(term)
+const burstRowAfter = burstScreen.map(line => bodyKey(line)).indexOf(burstKey)
+check('the tracked line holds its row through the burst', burstRow === -1 ? false : burstRowAfter === burstRow,
+  `row ${burstRow} -> ${burstRowAfter} (expect ${burstRow})`)
+
 // --- case 3: control — at the bottom the follow still works ----------------
 stdin.write('\x1b[1;5F') // Ctrl+End → jump to the bottom
 await sleep(700) // 固定窗:pacing — the jump lands before the control baseline
