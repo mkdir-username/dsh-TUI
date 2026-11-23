@@ -68,6 +68,15 @@ export type ScrollBoxHandle = {
    */
   setClampBounds: (min: number | undefined, max: number | undefined) => void;
   /**
+   * Monotonic counter of EXPLICIT navigation writes — scrollTo,
+   * scrollToElement, scrollToBottom. A caller aligning content by row geometry
+   * (MessageList's scroll anchoring) re-baselines its record when this ticks: a
+   * jump invalidates the row that owned the old viewport top. Wheel drains and
+   * paging run through scrollBy and do NOT tick it — they move the viewport
+   * without breaking the alignment between a row and the content above it.
+   */
+  getNavigationSerial: () => number;
+  /**
    * Scroll-anchoring correction: shift the committed position by `delta` rows
    * because content ABOVE the viewport changed size under a scrollTop that
    * never moved (a folding card, an invalidated height estimate, a deferred
@@ -118,6 +127,9 @@ function ScrollBox({
   // call scrollBy through the full public path (clamp bounds, sticky
   // clearing, subscriber notify) instead of duplicating its logic.
   const handleRef = useRef<ScrollBoxHandle | null>(null);
+  // Explicit-navigation epoch for the scroll-anchoring record (see the handle
+  // doc). A ref, not state: it only ever feeds imperative reads.
+  const navigationSerialRef = useRef(0);
   const notify = () => {
     // #185 self-heal: scroll subscribers drive React state (setScrollTick);
     // a thrown overflow here resets React's nested counter — absorb it.
@@ -185,6 +197,7 @@ function ScrollBox({
     scrollTo(y: number) {
       const el = domRef.current;
       if (!el) return;
+      navigationSerialRef.current++;
       // Explicit false overrides the DOM attribute so manual scroll
       // breaks stickiness. Render code checks ?? precedence.
       el.stickyScroll = false;
@@ -196,6 +209,7 @@ function ScrollBox({
     scrollToElement(el: DOMElement, offset = 0) {
       const box = domRef.current;
       if (!box) return;
+      navigationSerialRef.current++;
       box.stickyScroll = false;
       box.pendingScrollDelta = undefined;
       box.scrollAnchor = {
@@ -260,6 +274,7 @@ function ScrollBox({
     scrollToBottom() {
       const el = domRef.current;
       if (!el) return;
+      navigationSerialRef.current++;
       el.scrollAnchor = undefined;
       const viewportH = el.scrollViewportHeight ?? 0;
       const maxScroll = Math.max(0, (el.scrollHeight ?? 0) - viewportH);
@@ -276,6 +291,9 @@ function ScrollBox({
     },
     getScrollTop() {
       return domRef.current?.scrollTop ?? 0;
+    },
+    getNavigationSerial() {
+      return navigationSerialRef.current;
     },
     getPendingDelta() {
       // Accumulated-but-not-yet-drained delta. useVirtualScroll needs

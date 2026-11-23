@@ -72,11 +72,41 @@ export type ListGeometryNote = {
   rowCount: number
 }
 
+/**
+ * Why the reader's anchor did or did not move this commit. The eye's question
+ * after a scroll jump is never "what is scrollTop" but "did the correction
+ * that should have held my row fire, and what dropped it" — the guards in
+ * MessageList decide that, and they are otherwise invisible in a frame dump.
+ *
+ * `predicted` is the render-pass delta (estimate-space, used to scan the mount
+ * window); `applied` is what the post-commit write actually moved. A frame
+ * with `applied === 0` and a non-zero `predicted` paints the reader's rows
+ * displaced by `predicted` until a later commit corrects them — the class of
+ * one-frame 1-3 row bounce this note exists to name.
+ */
+export type AnchorTraceNote = {
+  rowId: number | null
+  /** The anchor row's content-space top recorded last commit. */
+  prevTop: number | null
+  /** The anchor row's top on the layout this commit rendered. */
+  measuredTop: number | null
+  /** Render-pass estimate delta (positive = content above grew). */
+  predicted: number
+  /** Rows the committed position was shifted by this commit. */
+  applied: number
+  drop: 'none' | 'no-anchor' | 'sticky' | 'moved' | 'row-gone' | 'edge'
+  /** A wheel drain was in flight for this commit. */
+  draining: boolean
+  /** Committed position after the correction. */
+  scrollTop: number
+}
+
 interface TraceState {
   frame: number
   cause: FrameCause | null
   scroll: ScrollGeometryNote[]
   list: ListGeometryNote | null
+  anchor: AnchorTraceNote | null
   aux: Record<string, number>
 }
 
@@ -85,6 +115,7 @@ let state: TraceState = {
   cause: null,
   scroll: [],
   list: null,
+  anchor: null,
   aux: {}
 }
 
@@ -104,6 +135,12 @@ export function noteScrollGeometry(note: ScrollGeometryNote): void {
 export function noteListGeometry(note: ListGeometryNote): void {
   if (!GEOMETRY_TRACE_ENABLED) return
   state.list = note
+}
+
+/** React-side anchor decision for this commit (latest wins). */
+export function noteAnchorTrace(note: AnchorTraceNote): void {
+  if (!GEOMETRY_TRACE_ENABLED) return
+  state.anchor = note
 }
 
 /** Scalar forensics (PromptInput content rows, …). Latest wins. */
@@ -129,6 +166,7 @@ export function endGeometryFrame(durationMs: number): void {
       ms: Math.round(durationMs * 10) / 10,
       scroll: state.scroll,
       list: state.list,
+      anchor: state.anchor,
       aux: state.aux
     })
     try {
@@ -137,5 +175,5 @@ export function endGeometryFrame(durationMs: number): void {
       // Unwritable path etc. — forensics must never break rendering.
     }
   }
-  state = { frame: -1, cause: null, scroll: [], list: null, aux: {} }
+  state = { frame: -1, cause: null, scroll: [], list: null, anchor: null, aux: {} }
 }

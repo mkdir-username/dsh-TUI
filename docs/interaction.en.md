@@ -702,6 +702,12 @@ In inline mode, the terminal emulator owns native scrollback and selection.
   messages / expand all.
 - **Single-click the sticky header / "↓ N new messages"** — Jump back to the pinned message /
   scroll to bottom.
+- **Scrolling while the agent writes** — A manually scrolled transcript holds the reader's
+  rows: content growing above the viewport (a still-expanding thinking block, a settling tool
+  card, a streaming answer) moves the scroll position with it instead of moving the text, and
+  a wheel gesture keeps that hold — the wheel moves exactly its own ±3 lines per notch.
+  Follow-the-bottom resumes only when the reader returns to the bottom (wheel, `End`,
+  `Enter`, or the "↓ N" pill).
 - **Single-click a hyperlink** — Open it in the browser.
 - **Single-click a picker / menu row** — Select and apply immediately (model / skills /
   activity frames / preset / permissions / plan / language / theme / effort / command & file

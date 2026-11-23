@@ -17,7 +17,7 @@ import { SubagentMessage } from './Chat/SubagentMessage.js'
 import { JobCard } from './Chat/JobCard.js'
 import { JobGroupHeader } from './Chat/JobGroupHeader.js'
 import { isMinimalUiMode } from '../minimalUiMode.js'
-import { noteFrameCause, noteListGeometry } from '../ink/geometry-trace.js'
+import { noteAnchorTrace, noteFrameCause, noteListGeometry, type AnchorTraceNote } from '../ink/geometry-trace.js'
 import { getTerminalFlushTick } from '../ink/flush-tick.js'
 import { TurnInterruptedRow } from './TurnInterruptedRow.js'
 import { TurnUsageRow } from './TurnUsageRow.js'
@@ -1068,7 +1068,7 @@ export function MessageList({
   // from fresh Yoga before paint. Never fight following, wheel debt, or a
   // position the user changed. A row below the viewport top (the header's
   // fallback pick) does not own the reader's position.
-  const anchorRef = React.useRef<{ id: number; index: number; top: number; scrollTop: number } | null>(null)
+  const anchorRef = React.useRef<{ id: number; index: number; top: number; scrollTop: number; nav: number } | null>(null)
   const scrollTopRaw = scrollHandle?.getScrollTop() ?? 0
   const pending = scrollHandle?.getPendingDelta() ?? 0
   const viewport = scrollHandle?.getViewportHeight() ?? 24
@@ -1537,21 +1537,56 @@ export function MessageList({
       // recheck input intent in case scrolling moved between render and commit.
       const anchorBase = baseRef.current ?? base
       let anchoredTop = scrollHandle.getScrollTop()
-      if (
-        prevAnchor !== null && prevAnchor.top <= prevAnchor.scrollTop &&
-        visibleRows[prevAnchor.index]?.id === prevAnchor.id &&
-        !scrollHandle.isSticky() && scrollHandle.getPendingDelta() === 0 &&
-        anchoredTop === prevAnchor.scrollTop
-      ) {
-        const measuredTop = localRefs.current.get(prevAnchor.id)?.yogaNode?.getComputedTop()
-        const correction = measuredTop === undefined ? anchorCorrection : prevAnchor.top - measuredTop
-        if (correction !== 0) {
-          scrollHandle.anchorBy(-correction)
-          anchoredTop = scrollHandle.getScrollTop()
+      // Read the note through the guards rather than recomputing them: a
+      // dropped correction is the interesting case (the reader's rows paint
+      // displaced for one commit), and only the decision path knows which
+      // guard dropped it.
+      let anchorDrop: AnchorTraceNote['drop'] = 'none'
+      let anchorApplied = 0
+      let anchorMeasuredTop: number | null = null
+      // A position change is NOT a reason to lose the layout delta of the row
+      // the reader anchored on: wheel drains, paging and the drain's own
+      // settle all move the viewport without changing what sits above it, and
+      // a drain often lands before the commit that would see it as pending.
+      // Skipping those frames let the reader drift by exactly the growth that
+      // arrived inside a gesture (measured: +1..4 rows on a two-notch flick,
+      // the 1-3 rows of the report). Only EXPLICIT navigation (scrollTo /
+      // scrollToElement / scrollToBottom — a rail click, End, a search seek)
+      // re-baselines: a jump invalidates which row owns the viewport top.
+      const draining = scrollHandle.getPendingDelta() !== 0
+      const navSerial = scrollHandle.getNavigationSerial()
+      if (prevAnchor === null) {
+        anchorDrop = 'no-anchor'
+      } else {
+        anchorMeasuredTop = localRefs.current.get(prevAnchor.id)?.yogaNode?.getComputedTop() ?? null
+        if (visibleRows[prevAnchor.index]?.id !== prevAnchor.id) anchorDrop = 'row-gone'
+        else if (prevAnchor.top > prevAnchor.scrollTop) anchorDrop = 'edge'
+        else if (scrollHandle.isSticky()) anchorDrop = 'sticky'
+        else if (navSerial !== prevAnchor.nav) anchorDrop = 'moved'
+        else {
+          // The estimate fallback is computed here rather than reused from the
+          // render pass: that prediction is gated off while a drain runs, and
+          // an unmounted anchor row would then lose its delta entirely.
+          const estimateTop = anchorBase + (offsets[prevAnchor.index] ?? 0)
+          const correction = prevAnchor.top - (anchorMeasuredTop ?? estimateTop)
+          if (correction !== 0) {
+            scrollHandle.anchorBy(-correction)
+            anchoredTop = scrollHandle.getScrollTop()
+            anchorApplied = -correction
+          }
         }
-      } else if (anchorCorrection !== 0) {
-        changed = true
       }
+      if (anchorDrop !== 'none' && anchorCorrection !== 0) changed = true
+      noteAnchorTrace({
+        rowId: prevAnchor?.id ?? null,
+        prevTop: prevAnchor?.top ?? null,
+        measuredTop: anchorMeasuredTop,
+        predicted: anchorCorrection,
+        applied: anchorApplied,
+        drop: anchorDrop,
+        draining,
+        scrollTop: anchoredTop,
+      })
       // Pick and record in the same fresh coordinates as the correction.
       // Recording old offsets after a fresh read would consume that delta again.
       let pick = start
@@ -1568,7 +1603,7 @@ export function MessageList({
       const picked = visibleRows[pick]
       anchorRef.current = picked === undefined
         ? null
-        : { id: picked.id, index: pick, top: pickedTop, scrollTop: anchoredTop }
+        : { id: picked.id, index: pick, top: pickedTop, scrollTop: anchoredTop, nav: navSerial }
     }
     if ((changed || growingStreamNeedsMeasure) && measureTimerRef.current === null) {
       // Layout corrections can cascade for many rows. Yield to the next

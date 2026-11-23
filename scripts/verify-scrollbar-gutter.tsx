@@ -373,7 +373,7 @@ await inst.unmount()
   let fakeScrollTop = 0
   const fakeHandle = {
     scrollTo(y: number) { calls.push(y); fakeScrollTop = Math.max(0, Math.floor(y)) },
-    scrollBy() {}, scrollToElement() {}, scrollToBottom() {},
+    scrollBy() {}, scrollToElement() {}, scrollToBottom() {}, getNavigationSerial: () => 0,
     getScrollTop: () => fakeScrollTop, getPendingDelta: () => 0,
     getScrollHeight: () => PROBE_CONTENT, getFreshScrollHeight: () => PROBE_CONTENT,
     getViewportHeight: () => PROBE_VIEWPORT, getViewportTop: () => 0,

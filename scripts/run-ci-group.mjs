@@ -260,6 +260,11 @@ const GROUPS = {
 // 窗口内（topPad/bottomPad 0），锚定修正就是唯一能改动 committed 位置的
 // 路径——坏基线上它会把读者滚走 3 行，main（无本改动）保持不动。
     ["verify-scroll-anchor-invalidation", ['node', '--import', 'tsx/esm', 'scripts/verify-scroll-anchor-invalidation.tsx']],
+// 读者手动上翻期间的 `live` 增长：思考卡还在流式、工具卡结算，视口上方的内容
+// 变高时（尤其增长落在滚轮手势/排空的提交里），读者锚点必须在滚动方向上被补偿，
+// 而不是因为「位置变过」被丢弃——实测每一轮手势丢 1 行，累计 1-3 行，正是报告里
+// 的抖动。覆盖静止读者逐帧屏幕不变 + 上翻/回位各 3 行原地不动两个不变式。
+    ["verify-scroll-hold-wheel-streaming", ['node', '--import', 'tsx/esm', 'scripts/verify-scroll-hold-wheel-streaming.tsx']],
 // 混合失效后重挂必须归还估高差；正向修正不得接回粘底或被旧窗口夹住，
 // header 仍拥有视口顶部时不得把 Home 用户滚离原位。
     ["verify-scroll-anchor-remeasurement", ['node', '--import', 'tsx/esm', 'scripts/verify-scroll-anchor-remeasurement.tsx']],
