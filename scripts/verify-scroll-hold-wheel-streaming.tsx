@@ -15,14 +15,14 @@
  *   - a still reader: the row owning the viewport top keeps its terminal row
  *     byte for byte across every painted frame, the paint never disagrees with
  *     the committed position, and the mount window never leaves a blank band;
- *   - a wheel gesture: down 3 + up 3 nets zero rows, so the tracked line lands
- *     back on the exact row it started on — growth that happened above the
- *     reader during the gesture contributes nothing on top of it.
+ *   - a wheel gesture: one notch down then one up nets zero rows, so the
+ *     tracked line lands back on the exact row it started on — growth that
+ *     happened above the reader during the gesture contributes nothing on top
+ *     of it.
  *
  * The run fails unless the growth landed in a MOUNTED row above the viewport
  * (an unmounted row freezes its estimate, so nothing can move there) and the
- * gesture case actually observed an in-flight drain frame, so neither case can
- * pass vacuously.
+ * gesture case actually moved the viewport, so neither case can pass vacuously.
  *
  * Run: node --import tsx/esm scripts/verify-scroll-hold-wheel-streaming.tsx
  * Imports src/; no compiled lib/ required. DSH_TEST_COLUMNS=60 tests narrow.
@@ -30,7 +30,7 @@
 process.env.NODE_ENV = 'production'
 process.env.FORCE_COLOR = '3'
 process.env.DSH_TUI_THEME = 'dark'
-process.env.DSH_TUI_LANG = 'zh'
+process.env.DSH_TUI_LANG = 'en'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { readFileSync, rmSync } from 'node:fs'
@@ -83,16 +83,17 @@ const TALL_LINES = 12
 const rows: ChatRow[] = []
 let nextId = 1
 for (let turn = 1; turn <= 20; turn++) {
-  rows.push({ id: nextId++, kind: 'user', text: `问题 ${turn}` })
+  rows.push({ id: nextId++, kind: 'user', text: `Question ${turn}` })
   rows.push({
     id: nextId++, kind: 'assistant',
-    text: Array.from({ length: TALL_LINES }, (_, i) => `回复 ${turn} 第 ${i + 1} 行的正文内容`).join('\n'),
+    text: Array.from({ length: TALL_LINES }, (_, i) => `Answer ${turn} line ${i + 1} of the body`).join('\n'),
   })
 }
 
 const listeners = new Set<() => void>()
 const channel = {
-  // 探针确定性：鲸鱼欢迎期闲置动画不进本探针的测量窗口。
+  // Probe determinism: the welcome whale's idle animation stays out of the
+  // measurement window.
   whaleIdle: false,
   version: 0,
   rows,
@@ -122,7 +123,7 @@ const channel = {
   commandList: [],
   notifications: [],
   subagents: [],
-  lastUserText: '问题 20',
+  lastUserText: 'Question 20',
   subscribe(cb: () => void) { listeners.add(cb); return () => listeners.delete(cb) },
   submit: () => {}, cancel: () => {}, clear: () => {}, notify: () => {},
   listModels: () => Promise.resolve([]), listSessions: () => Promise.resolve([]),
@@ -167,7 +168,7 @@ function bodyKey(line: string): string { return line.trimStart().slice(0, 40) }
 /** First visible history body line: turn number, line-in-turn, terminal row. */
 function topBodyMarker(screen: readonly string[]): { turn: number; line: number; row: number } | null {
   for (let i = 0; i < screen.length; i++) {
-    const match = /回复 (\d+) 第 (\d+) 行/.exec(screen[i] ?? '')
+    const match = /Answer (\d+) line (\d+)/.exec(screen[i] ?? '')
     if (match) return { turn: Number(match[1]), line: Number(match[2]), row: i }
   }
   return null
@@ -194,30 +195,30 @@ const instance = await render(
   </AlternateScreen>,
   { stdout: stdout as unknown as NodeJS.WriteStream, stdin: stdin as unknown as NodeJS.ReadStream, stderr: new FakeStderr() as unknown as NodeJS.WriteStream, exitOnCtrlC: false, patchConsole: false },
 )
-await sleep(1200) // 固定窗:pacing 首屏就绪（trace 只在滚动几何变化的帧落 note）
+await sleep(1200) // 固定窗:pacing — first screen settles (the trace only notes frames whose scroll geometry changed)
 
 // Live turn: a streaming reasoning block ABOVE a streaming answer, so the block
 // the reader has just scrolled past keeps growing over them.
-const reasoning: ChatRow = { id: nextId++, kind: 'reasoning', text: '思考 HEAD', streaming: true }
-const stream: ChatRow = { id: nextId++, kind: 'assistant', text: 'S-HEAD', streaming: true }
+const reasoning: ChatRow = { id: nextId++, kind: 'reasoning', text: 'Reasoning HEAD', streaming: true }
+const stream: ChatRow = { id: nextId++, kind: 'assistant', text: 'A-HEAD', streaming: true }
 channel.rows.push(reasoning)
 channel.rows.push(stream)
 bump()
-await sleep(600) // 固定窗:pacing 流式行首次布局落定
+await sleep(600) // 固定窗:pacing — the streaming rows settle into their first layout
 for (let i = 0; i < 4; i++) {
-  reasoning.text += `\n思考 body ${i + 1}`
-  stream.text += `\nS-HEAD body ${i + 1}`
+  reasoning.text += `\nReasoning body ${i + 1}`
+  stream.text += `\nA-HEAD body ${i + 1}`
   bump()
-  await sleep(150) // 固定窗:pacing prime 阶段每行各自落帧
+  await sleep(150) // 固定窗:pacing — each priming line paints on its own frame
 }
-await sleep(400) // 固定窗:pacing prime 阶段收尾
+await sleep(400) // 固定窗:pacing — priming tail settles before the measured window
 
 /** Wheel notch at the transcript's centre. 64 = up, 65 = down (SGR buttons). */
 function wheelUp(): void { stdin.write('\x1b[<64;50;30M') }
 function wheelDown(): void { stdin.write('\x1b[<65;50;30M') }
 
-stdin.write('\x1b[1;5F') // Ctrl+End → 回底
-await sleep(700) // 固定窗:pacing 等 Ctrl+End 回底生效
+stdin.write('\x1b[1;5F') // Ctrl+End → jump to the bottom
+await sleep(700) // 固定窗:pacing — the jump lands before the park walk starts
 
 // Park the viewport top on the FIRST body line of a turn's answer: the turn
 // BEFORE it then ends two rows above the viewport — mounted, and growing it is
@@ -225,12 +226,12 @@ await sleep(700) // 固定窗:pacing 等 Ctrl+End 回底生效
 let parked = false
 for (let attempt = 0; attempt < 4 && !parked; attempt++) {
   wheelUp()
-  await sleep(700) // 固定窗:pacing 每格上翻落定后再看屏（逐格逼近）
+  await sleep(700) // 固定窗:pacing — each notch settles before the screen is read again
   const marker = topBodyMarker(viewportLines(term))
   if (marker !== null && marker.line === 1 && marker.turn >= 2) parked = true
 }
 const parkedMarker = topBodyMarker(viewportLines(term))
-check('视口顶部停在一轮答案的首行', parked, JSON.stringify(parkedMarker))
+check('the viewport top parks on a turn answer first line', parked, JSON.stringify(parkedMarker))
 if (!parked || parkedMarker === null) {
   await instance.unmount()
   rmSync(TRACE, { force: true })
@@ -240,24 +241,24 @@ if (!parked || parkedMarker === null) {
 const beforeFrame = lastNoteFrame()
 const before = beforeFrame?.scroll.at(-1)
 if (before === undefined) {
-  check('geometry trace 可用', false, '未捕获到任何 scroll note（DSH_TUI_GEOMETRY_TRACE 未生效？）')
+  check('geometry trace is available', false, 'no scroll note captured (is DSH_TUI_GEOMETRY_TRACE in effect?)')
   await instance.unmount()
   rmSync(TRACE, { force: true })
   process.exit(1)
 }
-check('上滚已打断跟随', before.sticky === false)
+check('the wheel-up broke the follow', before.sticky === false)
 
 // The victim: the answer of the turn the parked one follows. It is the row
 // directly above the parked prompt, so its appended lines land above the
 // viewport top.
 const victimTurn = parkedMarker.turn - 1
-const victimIndex = channel.rows.findIndex(row => row.kind === 'assistant' && row.text.startsWith(`回复 ${victimTurn} 第`))
+const victimIndex = channel.rows.findIndex(row => row.kind === 'assistant' && row.text.startsWith(`Answer ${victimTurn} line`))
 const victim = channel.rows[victimIndex]
 const parkList = lastList()
 const mountedAbove = victim !== undefined && parkList !== null &&
   victimIndex >= parkList.start && victimIndex < parkList.end
-check('上一轮答案已挂载（估算会随实测更新）', mountedAbove,
-  parkList ? `window ${parkList.start}..${parkList.end}, victim=${victimIndex}` : 'list note 缺失')
+check('the previous answer is mounted (its estimate tracks measurement)', mountedAbove,
+  parkList ? `window ${parkList.start}..${parkList.end}, victim=${victimIndex}` : 'list note missing')
 if (victim === undefined || !mountedAbove) {
   await instance.unmount()
   rmSync(TRACE, { force: true })
@@ -275,82 +276,86 @@ const growAbove = (label: string): void => {
 // tracked line has to keep the exact row it started on — while every round
 // drops one more growth step into whatever interleaving the drain produces.
 wheelDown()
-await sleep(700) // 固定窗:pacing 下移一格落定
+await sleep(700) // 固定窗:pacing — the down notch settles before the gesture baseline
 const gestureStartScreen = viewportLines(term)
 const gestureStartRow = topBodyMarker(gestureStartScreen)?.row ?? -1
 // A concrete visible line, tracked by text: the topmost body line changes as
 // the view scrolls, so the delta has to be measured on one fixed line.
 const gestureKey = bodyKey(gestureStartScreen[gestureStartRow] ?? '')
 const gestureList = lastList()
-check('手势起点上一轮答案仍挂载', gestureList !== null && victimIndex >= gestureList.start && victimIndex < gestureList.end,
-  gestureList ? `window ${gestureList.start}..${gestureList.end}, victim=${victimIndex}` : 'list note 缺失')
+check('the previous answer is still mounted at the gesture start',
+  gestureList !== null && victimIndex >= gestureList.start && victimIndex < gestureList.end,
+  gestureList ? `window ${gestureList.start}..${gestureList.end}, victim=${victimIndex}` : 'list note missing')
 let frameMark = traceFrames().length
 let screenMark = screens.length
 const ROUNDS = 4
 for (let round = 1; round <= ROUNDS; round++) {
   wheelUp()
   growAbove(`GROW-C${round}`)
-  stream.text += `\nS-HEAD gesture ${round}`
+  stream.text += `\nA-HEAD gesture ${round}`
   bump()
-  await sleep(260) // 固定窗:pacing 增长落在 drain 之后的提交里
+  await sleep(260) // 固定窗:pacing — the growth lands in the commit that follows the drain
   wheelDown()
-  await sleep(260) // 固定窗:pacing 回位一格，下一轮从同一停靠点起跑
+  await sleep(260) // 固定窗:pacing — the down notch returns to the same park for the next round
 }
-await sleep(700) // 固定窗:pacing 手势收尾后的静置窗
+await sleep(700) // 固定窗:pacing — the gesture settles before the final read
 const gestureFrames = traceFrames().slice(frameMark)
 const gestureNotes = gestureFrames.flatMap(frame => frame.scroll)
 // The drain is the whole point, and it may land before the commit that would
 // report it as pending — so prove it by the position actually moving, not by a
 // flag. A gesture case that never moved would pass vacuously.
-check('手势确实推动过视口', gestureNotes.some(note => note.scrollTop !== before.scrollTop),
+check('the gesture actually moved the viewport', gestureNotes.some(note => note.scrollTop !== before.scrollTop),
   `top=${gestureNotes.map(note => note.scrollTop).join(',')}`)
 const gestureScreen = viewportLines(term)
 const gestureRowAfter = gestureScreen.map(line => bodyKey(line)).indexOf(gestureKey)
-check('上翻/回位各 3 行 = 原地，增长未叠加', gestureStartRow >= 0 && gestureRowAfter === gestureStartRow,
-  `row ${gestureStartRow} → ${gestureRowAfter} (expect ${gestureStartRow})`)
+check('up 3 / down 3 nets zero rows — growth adds nothing',
+  gestureStartRow >= 0 && gestureRowAfter === gestureStartRow,
+  `row ${gestureStartRow} -> ${gestureRowAfter} (expect ${gestureStartRow})`)
 const grownLeaked = gestureScreen.some(line => line.includes('GROW-C'))
-check('手势期间增长留在视口之上', !grownLeaked,
+check('the growth stayed above the viewport during the gesture', !grownLeaked,
   grownLeaked ? 'grown lines entered the viewport — placement no longer proves the above-viewport case' : '')
-check('手势期间未重新粘底', !gestureNotes.some(note => note.sticky))
+check('the gesture never re-pinned the follow', !gestureNotes.some(note => note.sticky))
 
 // --- case 2: growth above a still reader -----------------------------------
 // The wheel is parked now: any row displacement is drift the reader never asked
 // for, so the row owning the viewport top must keep its terminal row.
 const baselineScreen = viewportLines(term)
 const baselineMarker = topBodyMarker(baselineScreen)
-check('基线正文锚点可见', baselineMarker !== null)
+check('the baseline body anchor is visible', baselineMarker !== null)
 const baselineRow = baselineMarker?.row ?? -1
 const baselineKey = bodyKey(baselineScreen[baselineRow] ?? '')
 frameMark = traceFrames().length
 screenMark = screens.length
 for (let step = 1; step <= 3; step++) {
   growAbove(`GROW-A${step}`)
-  stream.text += `\nS-HEAD tail ${step}`
-  reasoning.text += `\n思考 tail ${step}`
+  stream.text += `\nA-HEAD tail ${step}`
+  reasoning.text += `\nReasoning tail ${step}`
   bump()
-  await sleep(180) // 固定窗:pacing 每步增长各自落帧（观察窗断言的是整段不变式）
+  await sleep(180) // 固定窗:pacing — each growth step paints before the next (the window asserts one invariant throughout)
 }
-await sleep(400) // 固定窗:pacing 静置窗——纠正必须收敛，之后才取样
+await sleep(400) // 固定窗:pacing — the correction converges before the final read
 
 const holdFrames = traceFrames().slice(frameMark)
 const holdNotes = holdFrames.flatMap(frame => frame.scroll)
-check('增长帧确实观察到', holdNotes.some(note => note.scrollHeight > before.scrollHeight),
-  `H ${before.scrollHeight} → ${holdNotes.at(-1)?.scrollHeight ?? before.scrollHeight}`)
+check('the growth frames were observed', holdNotes.some(note => note.scrollHeight > before.scrollHeight),
+  `H ${before.scrollHeight} -> ${holdNotes.at(-1)?.scrollHeight ?? before.scrollHeight}`)
 const stickyBack = holdNotes.find(note => note.sticky)
-check('未重新粘底', stickyBack === undefined, stickyBack ? `sticky@H=${stickyBack.scrollHeight}` : `frames=${holdNotes.length}`)
+check('the follow was not re-pinned', stickyBack === undefined,
+  stickyBack ? `sticky@H=${stickyBack.scrollHeight}` : `frames=${holdNotes.length}`)
 // Growth ABOVE the reader legitimately moves the content coordinate by its
 // amount — the compensation follows it so the ROWS do not move. What may never
 // happen is a frame whose paint disagrees with the committed position.
 const paintDisagreed = holdNotes.find(note => note.renderScrollTop !== note.scrollTop)
-check('绘制与 committed 逐帧一致', paintDisagreed === undefined,
+check('the paint never disagrees with the committed position', paintDisagreed === undefined,
   paintDisagreed ? `top=${paintDisagreed.scrollTop} render=${paintDisagreed.renderScrollTop}` : `frames=${holdNotes.length}`)
 const holdScreens = screens.slice(screenMark)
-check('xterm 正文锚点逐帧不变', holdScreens.length > 0 && holdScreens.every(frame => bodyKey(frame[baselineRow] ?? '') === baselineKey),
+check('the xterm body anchor is byte-identical frame to frame',
+  holdScreens.length > 0 && holdScreens.every(frame => bodyKey(frame[baselineRow] ?? '') === baselineKey),
   `row=${baselineRow} ${baselineKey}`)
 // The correction has to have RUN: a probe that never saw the anchor move would
 // pass vacuously (that is what an unmounted victim looks like).
 const appliedFrames = holdFrames.filter(frame => (frame.anchor?.applied ?? 0) !== 0)
-check('锚点修正确实执行', appliedFrames.length > 0, `${appliedFrames.length} frames`)
+check('the anchor correction actually ran', appliedFrames.length > 0, `${appliedFrames.length} frames`)
 // Window coverage: the viewport top must not sit inside the topPad spacer.
 let bandFrame: GeometryFrame | undefined
 for (const frame of holdFrames) {
@@ -361,25 +366,26 @@ for (const frame of holdFrames) {
     if (band > 0 && note.renderScrollTop !== note.clampMin && bandFrame === undefined) bandFrame = frame
   }
 }
-check('无空白带（窗口覆盖绘制位置）', bandFrame === undefined, bandFrame ? `f${bandFrame.frame}` : `frames=${holdNotes.length}`)
+check('no blank band (the window covers the painted position)', bandFrame === undefined,
+  bandFrame ? `f${bandFrame.frame}` : `frames=${holdNotes.length}`)
 
 // --- case 3: control — at the bottom the follow still works ----------------
-stdin.write('\x1b[1;5F') // Ctrl+End → 回底
-await sleep(700) // 固定窗:pacing 等回底生效
+stdin.write('\x1b[1;5F') // Ctrl+End → jump to the bottom
+await sleep(700) // 固定窗:pacing — the jump lands before the control baseline
 const controlFrame = lastNoteFrame()
-check('回底恢复跟随', controlFrame?.scroll.at(-1)?.sticky === true)
+check('returning to the bottom re-engages the follow', controlFrame?.scroll.at(-1)?.sticky === true)
 const controlTop = controlFrame?.scroll.at(-1)?.scrollTop ?? 0
 frameMark = traceFrames().length
 for (let step = 1; step <= 3; step++) {
-  stream.text += `\nS-HEAD control ${step}`
+  stream.text += `\nA-HEAD control ${step}`
   bump()
-  await sleep(180) // 固定窗:pacing 控制组每步增长
+  await sleep(180) // 固定窗:pacing — each control growth paints before the next
 }
-await sleep(400) // 固定窗:pacing 控制组静置窗
+await sleep(400) // 固定窗:pacing — the control window settles
 const controlNotes = traceFrames().slice(frameMark).flatMap(frame => frame.scroll)
-check('跟随态仍粘底', controlNotes.length > 0 && controlNotes.every(note => note.sticky))
-check('跟随态位置随内容下移', (controlNotes.at(-1)?.scrollTop ?? 0) > controlTop,
-  `${controlTop} → ${controlNotes.at(-1)?.scrollTop ?? controlTop}`)
+check('the follow stays pinned at the bottom', controlNotes.length > 0 && controlNotes.every(note => note.sticky))
+check('the follow position advances with the content', (controlNotes.at(-1)?.scrollTop ?? 0) > controlTop,
+  `${controlTop} -> ${controlNotes.at(-1)?.scrollTop ?? controlTop}`)
 
 if (failed > 0) {
   dumpFrames(gestureFrames, 'gesture frames')
@@ -389,5 +395,5 @@ console.log('\nRendered screen:\n' + viewportLines(term).join('\n'))
 
 await instance.unmount()
 rmSync(TRACE, { force: true })
-console.log(failed === 0 ? '\nALL PASS' : `\n${failed} 项失败`)
+console.log(failed === 0 ? '\nALL PASS' : `\n${failed} failed`)
 process.exit(failed === 0 ? 0 : 1)
