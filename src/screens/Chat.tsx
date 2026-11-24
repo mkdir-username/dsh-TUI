@@ -56,6 +56,7 @@ import { useBackendChannels } from './chat/useBackendChannels.js'
 import { backendModeStatus as modeStatus, backendPermissionCommand, parseMcpCommand } from './chat/backendCommands.js'
 import { PermissionStore, type PermissionPanelSource } from '../channel/permissions.js'
 import { goalStatusLines, parseGoalCommand } from '../channel/goal-command.js'
+import { clearHandoffSkip, readHandoffSkip, writeHandoffSkip, type HandoffSkipMode } from '../handoffSkip.js'
 import { AskUserQuestionPanel } from '../components/questions/AskUserQuestionPanel.js'
 import { ApprovalPanel } from '../components/approvals/ApprovalPanel.js'
 import { ExtensionDialog } from '../components/ExtensionDialog.js'
@@ -755,6 +756,21 @@ export function Chat({
   }, [extensionShortcuts, channel])
   const [expanded, setExpanded] = React.useState(false)
   const [helpOpen, setHelpOpen] = React.useState(false)
+  // `/hs` (handoff-skip) is chat-scoped: the file is the Stop hooks' copy of
+  // this fact, the state below is the footer's copy. `once` covers the turn in
+  // progress, so the falling edge of `working` is what ends it — a token left
+  // behind would silence the NEXT stop as well.
+  const hsSessionId = channel.sessionRef?.sessionId ?? channel.agentId
+  const [handoffSkip, setHandoffSkip] = React.useState<HandoffSkipMode>(() => readHandoffSkip(hsSessionId))
+  React.useEffect(() => { setHandoffSkip(readHandoffSkip(hsSessionId)) }, [hsSessionId])
+  const wasWorkingRef = React.useRef(channel.working)
+  React.useEffect(() => {
+    const was = wasWorkingRef.current
+    wasWorkingRef.current = channel.working
+    if (!was || channel.working || handoffSkip !== 'once') return
+    clearHandoffSkip(hsSessionId)
+    setHandoffSkip('off')
+  }, [channel.working, handoffSkip, hsSessionId])
   const [handle, setHandle] = React.useState<ScrollBoxHandle | null>(null)
   /**
    * Conversation timeline snapshot (reported by MessageList): one entry
@@ -4247,6 +4263,47 @@ export function Chat({
           case 'clear':
             return goals.clear()
         }
+      }
+      case 'hs': {
+        // Never a message: the composer dispatches a known command before any
+        // steer, so this runs mid-turn and only touches the chat-scoped file
+        // the DSH Stop hooks read.
+        setHelpOpen(false)
+        // The flag is read by the DSH hook shim and by nothing else: another
+        // kernel gets the reason instead of a file no check will ever read.
+        if (channel.backendCapabilities.backendId !== 'dsh') {
+          channel.notify(t('hs-dsh-only'), { color: 'warning', timeoutMs: 4000 })
+          return true
+        }
+        const argument = rawInput.trim()
+        if (argument === '--on') {
+          if (writeHandoffSkip(hsSessionId, 'on')) {
+            setHandoffSkip('on')
+            channel.notify(t('hs-on'), { color: 'warning', timeoutMs: 4000 })
+          } else channel.notify(t('hs-write-failed'), { color: 'error', timeoutMs: 5000 })
+          return true
+        }
+        if (argument === '--off') {
+          clearHandoffSkip(hsSessionId)
+          setHandoffSkip('off')
+          channel.notify(t('hs-off'), { color: 'success', timeoutMs: 3000 })
+          return true
+        }
+        if (argument !== '') {
+          channel.notify(t('hs-usage'), { color: 'error', timeoutMs: 4000 })
+          // A promise (not `false`): the line is an invalid command, so it
+          // must stay editable and never reach the model as text.
+          return Promise.resolve(false)
+        }
+        if (handoffSkip === 'on') {
+          channel.notify(t('hs-already-on'), { color: 'warning', timeoutMs: 3000 })
+          return true
+        }
+        if (writeHandoffSkip(hsSessionId, 'once')) {
+          setHandoffSkip('once')
+          channel.notify(t('hs-armed'), { color: 'success', timeoutMs: 3000 })
+        } else channel.notify(t('hs-write-failed'), { color: 'error', timeoutMs: 5000 })
+        return true
       }
       case 'channel': {
         // 渠道选择器。/channel 只在声明了 channels 能力的内核下进命令表，

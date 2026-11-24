@@ -74,6 +74,7 @@ export const LOCAL_COMMANDS: LocalCommand[] = [
   { name: 'fork', description: 'Fork the current session into a resumable copy' },
   { name: 'export', description: 'Save the session as a Markdown file' },
   { name: 'btw', description: 'Ask a quick side question without interrupting the conversation' },
+  { name: 'hs', description: 'Skip the end-of-turn controller check for this step (--on/--off: all stop pings in this chat)' },
   { name: 'trace', description: 'Show the session event trace timeline' },
   { name: 'agentview', description: 'Open the agent view (all sessions)' },
   { name: 'bg', description: 'Open the session manager (DSH backgrounds this session first)' },
@@ -208,6 +209,9 @@ const LOCAL_COMMAND_REQUIREMENTS: ReadonlyMap<string, LocalCommandRequirement> =
   ['model', 'models'], ['effort', 'effort'], ['agents', 'subagents'], ['jobs', 'tasks'], ['mcp', 'mcp'],
   ['context', 'context'], ['login', 'login'], ['logout', 'login'], ['init', 'init'],
   ['recap', 'sideQuery'], ['btw', 'sideQuery'], ['rename', 'rename'], ['color', 'color'],
+  // /hs writes the chat-scoped file only the DSH Stop hooks read; the command
+  // is offered everywhere and explains itself on a kernel without that bridge.
+  ['hs', 'any'],
   // /trace opens on every backend; one without trajectory data shows the
   // unsupported state (channel.trajectorySource() decides, not this table).
   ['trace', 'any'],
