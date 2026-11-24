@@ -619,7 +619,7 @@ export function settingField(key: SettingKey): SettingDefinition & { path: reado
  * Shortcut remap fields (`shortcuts.<action>`): one per SHORTCUT_ACTIONS
  * entry; the help text names the platform's default combos.
  */
-export const SHORTCUT_FIELD_META: Record<ShortcutActionId, { label: string; zh: string; hintEn: (defaults: string) => string; hintZh: (defaults: string) => string }> = {
+export const SHORTCUT_FIELD_META: Record<ShortcutActionId, { label: string; zh?: string; hintEn: (defaults: string) => string; hintZh: (defaults: string) => string }> = {
   paste: {
     label: 'Paste shortcut',
     zh: '粘贴快捷键',

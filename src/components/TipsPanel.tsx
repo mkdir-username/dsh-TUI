@@ -49,12 +49,12 @@ export function TipsPanel({ onClose }: { onClose: () => void }): React.ReactNode
             {GROUP_ORDER.map(group => (
               <Box key={group} flexDirection="column" marginBottom={1}>
                 <Text bold color="accent">
-                  {lang === 'zh' ? TIP_GROUP_LABELS[group].zh : TIP_GROUP_LABELS[group].en}
+                  {lang === 'zh' ? TIP_GROUP_LABELS[group].zh ?? TIP_GROUP_LABELS[group].en : TIP_GROUP_LABELS[group].en}
                 </Text>
                 {TIPS.filter(tip => tip.group === group).map(tip => (
                   <Text key={tip.id} dimColor>
                     {'  · '}
-                    {lang === 'zh' ? tip.zh : tip.en}
+                    {lang === 'zh' ? tip.zh ?? tip.en : tip.en}
                   </Text>
                 ))}
               </Box>

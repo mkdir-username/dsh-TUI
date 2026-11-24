@@ -3172,9 +3172,9 @@ export function writeLangPref(lang: Lang, dir: string = PREFS_DIR): boolean {
  * user must not get a Chinese UI. The POSIX/C locale means "no locale
  * selected" and conventionally maps to English — importantly it is what
  * CI runners (LANG=C.UTF-8) report, so tests asserting English UI copy
- * stay deterministic. Only an ABSENT locale (typical on Windows, where
- * these POSIX vars don't exist and imply nothing about the user) keeps
- * the zh default.
+ * stay deterministic. An ABSENT locale (typical on Windows, where these
+ * POSIX vars don't exist) also resolves to English: English is the fork's
+ * default language, and zh is opt-in only.
  */
 export function detectLocaleLang(): Lang {
   // `||` (not `??`): an EMPTY locale variable means "unset" and must fall
@@ -3185,7 +3185,7 @@ export function detectLocaleLang(): Lang {
     process.env.LANG ||
     ''
   const locale = raw.split('.')[0]?.toLowerCase() ?? ''
-  if (locale === '') return 'zh'
+  if (locale === '') return 'en'
   return locale.startsWith('zh') ? 'zh' : 'en'
 }
 
@@ -3193,8 +3193,8 @@ export function detectLocaleLang(): Lang {
  * Resolve the startup language: `DSH_TUI_LANG` when it holds a valid value
  * (pinned at process start — the repro/verify scripts rely on this for
  * deterministic UI copy), else the persisted `/lang` choice, else the OS
- * locale guess, else `zh` (the original hard-coded language). The
- * cordis.yml `lang` precedence lives in plugin.apply.
+ * locale guess (English for anything that is not an explicit zh locale).
+ * The cordis.yml `lang` precedence lives in plugin.apply.
  */
 export function resolveStartupLang(): Lang {
   const envLang = process.env.DSH_TUI_LANG

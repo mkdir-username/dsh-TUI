@@ -150,8 +150,10 @@ draft、只跑一次 CI 就关，`pr-gate` 与 `issue-link` 都按机器人放�
   workflow 只编排；`pr-gate.yml` 必须 checkout 默认分支，不能跑 PR 头。
 - `lib/`：由 `src/` 生成、忽略入库并随 npm 分发的 JavaScript、声明与声明映射。
   `./invariant` 也直接使用 `lib/types/dsh-adapter/invariant.js` 的编译结果。
-- `README.md`（英文，默认门面）与 `README_ZH.md`（中文）：双语用户文档。
-  行为、配置、快捷键与限制必须两版同步。
+- `README.md`: the English user documentation (the default front page).
+  `README_ZH.md` and the Chinese docs are legacy data, not a counterpart to
+  maintain: behavior, configuration, shortcuts and limitations are documented
+  in English only.
 
 ## 运行时形态（Runtime Shape）
 
@@ -477,7 +479,7 @@ import 之前 `import './lib/fake-home.mjs'`。`DATA_DIR` 在 import 时由
 - profile 覆盖会替换整个 `config` 块。文档展示覆盖时，包含替换后必须存活的
   每个键。
 - 新增或重命名插件选项时，同步更新 `src/index.ts` 的 `Config` 接口与 Schema、
-  运行时消费、`cordis.patch.yml` 与 `cordis.yml` 的相应行，以及双 README。
+  运行时消费、`cordis.patch.yml` 与 `cordis.yml` 的相应行，以及README。
 
 ### 会话与通道状态
 
@@ -501,7 +503,7 @@ import 之前 `import './lib/fake-home.mjs'`。`DATA_DIR` 在 import 时由
 - 按键优先级是行为，不是偶然的控制流。聚焦的问卷或模态先于全局处理器消费
   按键；鼠标文本选区先于 rewind/clear 消费 Escape；提示词只在无浮层时拥有
   文本编辑。
-- 不要在单个组件里硬编码新快捷键就完事。同步更新相关帮助 UI 与双 README
+- 不要在单个组件里硬编码新快捷键就完事。同步更新相关帮助 UI 与README
   快捷键表，并为与既有模式的冲突新增或扩展回归。
 - 本地 slash 命令在 `src/commands.ts` 声明、`Chat.tsx` 分发；注册表命令运行时
   合并。新增命令时同步更新声明、分发、帮助/文档与 i18n 描述（`src/i18n.ts` 的
@@ -557,10 +559,10 @@ import 之前 `import './lib/fake-home.mjs'`。`DATA_DIR` 在 import 时由
 
 | 改动 | 需要同步 |
 | --- | --- |
-| /settings 可改的设置（新增/改说明） | 只在 `src/settings/definitions.ts` 写一次（中英标题与说明、类型、选项；按 key 排序），Config Schema 在 `src/dsh-adapter/index.ts`，运行时 format/parse 留在 `src/dsh-adapter/plugin.ts` 的字段里。`pnpm compile` 生成随 npm 包发布的 `lib/settings.json`，官网设置参考由它生成；`verify:settings` 检查定义完整。官网参考上线前，`docs/user-guide{,.en}.md` 的设置表仍需同步一行 |
-| 其他插件配置或环境行为 | `src/dsh-adapter/index.ts`、运行时消费、`cordis.patch.yml`、`cordis.yml`（注释只写示例值与必要语义）、`README.md`、`README_ZH.md` |
-| Slash 命令或快捷键 | `src/commands.ts`、`src/screens/Chat.tsx`、帮助/输入组件、双 README、相关技能映射/测试 |
-| 主题契约、插件接缝或持久化主题行为 | `src/theme.ts`、`src/themeCatalog.ts`、`src/dsh-adapter/themes.ts`、所有色板、主题 provider/picker、自定义主题解析器、主题验证、双 README、插件文档 |
+| /settings 可改的设置（新增/改说明） | 只在 `src/settings/definitions.ts` 写一次（English title and help, kind, options；按 key 排序），Config Schema 在 `src/dsh-adapter/index.ts`，运行时 format/parse 留在 `src/dsh-adapter/plugin.ts` 的字段里。`pnpm compile` 生成随 npm 包发布的 `lib/settings.json`，官网设置参考由它生成；`verify:settings` 检查定义完整。官网参考上线前，`docs/user-guide{,.en}.md` 的设置表仍需同步一行 |
+| 其他插件配置或环境行为 | `src/dsh-adapter/index.ts`、运行时消费、`cordis.patch.yml`、`cordis.yml`（注释只写示例值与必要语义）、`README.md` |
+| Slash 命令或快捷键 | `src/commands.ts`、`src/screens/Chat.tsx`、帮助/输入组件、README、相关技能映射/测试 |
+| 主题契约、插件接缝或持久化主题行为 | `src/theme.ts`、`src/themeCatalog.ts`、`src/dsh-adapter/themes.ts`、所有色板、主题 provider/picker、自定义主题解析器、主题验证、README、插件文档 |
 | 会话/channel 行为 | 后端中立的放 `src/dsh-adapter/channel/core/`，DSH 专属的放 `channel/extensions.ts` 及其 specialist、受影响的 UI 投影、编译产物、聚焦 channel/回放回归（含 `verify-backend-channel`、`verify-channel-rollback`） |
 | 渲染器/布局行为 | `src/ink/` 或 Yoga 源、编译产物、CI 回归、聚焦滚动/resize/PTY 探针 |
 | 技能发现或呈现 | DSH adapter、slash 命令合并、`/skills` 与相关回归；项目维护技能放 `.agents/skills/` 且不得加入 npm 包 |
@@ -569,7 +571,7 @@ import 之前 `import './lib/fake-home.mjs'`。`DATA_DIR` 在 import 时由
 | `/update` 三层对齐（TUI / dsh 引擎 / 启动器）或引擎选版 | `src/updateHost.ts`（peer 范围解析、选版、安装布局判定）、`src/update.ts`（`resolveUpdatePlan` 与串行执行）、`src/dsh-adapter/contract.ts`（宿主包常量与已装目录）、`scripts/verify-update.mjs` / `verify-update-host.mjs` 及 CI 分组、`scripts/verify-manifest-deps.ts` 的 peer 范围门禁、双语文档的更新章节与环境变量表 |
 | 贡献入口或 PR 门禁 | `.mergify.yml`、`docs/contributing.md`、`docs/contributing.en.md`、`.github/workflows/pr-gate.yml`、`.github/scripts/pr-intake/`、`.github/APPROVED_CONTRIBUTORS` |
 | 包版本或依赖 | `package.json`、`pnpm-lock.yaml`、适用时的生成/发布产物；不要顺手搅动旧 npm 锁文件 |
-| 新增或改动后端 | 新建 `src/backends/<id>/`（`manifest.ts` + 实现），并提交 `pnpm compile` 重新生成的 `src/dsh-adapter/backends.generated.ts`（入库的生成产物，过期会被 `verify-backend-registry` 判红）：构建期索引由 `scripts/gen-backend-index.mjs` 生成，**不要**手改 `src/kernelPrefs.ts`、`src/dsh-adapter/backends.ts`（目录与身份断言都按 ID 取项，新增目录不必同步任何回归）；边界门禁的厂商包/`native.<id>` 规则由 manifest 派生，但派生结果与 `scripts/verify-adapter-boundary.ts` 的 `EXPECTED_*` 快照**逐字比对**——声明了非空 `vendorPackages` 或 `nativeKey` 的后端必须把该快照与 `ADAPTER.md` 一并更新（门禁报错会写明），只声明 `vendorPackages: []`、不声明 `nativeKey` 的后端无需改动；`install` 是声明式配方（`{ executor, specifier, version }`），宿主侧执行器表在 `src/dsh-adapter/install/`（首版只有 `pnpm-profile-add`）：注册表查表派生"这个条目可不可装"，装的是你声明的 specifier，声明了宿主不认识的执行器只等于"没有安装面"（不抛错）；没有包可装的后端（驱动系统 CLI 的那类）就不声明；名字走 manifest（插件用 `kind:'literal'`，绝不进 i18n 字典）；模块级/进程级资源池声明 `unloadExport`，会话级资源仍归 `session.dispose()`；`id`、`label` 与 `install` 的边界见 `ADAPTER.md` 的「后端 manifest」；新增后端要把聚焦回归登记进 `scripts/run-ci-group.mjs`，注册表门禁是 `scripts/verify-backend-registry.ts`；用户可见取值（`--backend`、配置行）同步双 README 与 `docs/configuration{,.en}.md` |
+| 新增或改动后端 | 新建 `src/backends/<id>/`（`manifest.ts` + 实现），并提交 `pnpm compile` 重新生成的 `src/dsh-adapter/backends.generated.ts`（入库的生成产物，过期会被 `verify-backend-registry` 判红）：构建期索引由 `scripts/gen-backend-index.mjs` 生成，**不要**手改 `src/kernelPrefs.ts`、`src/dsh-adapter/backends.ts`（目录与身份断言都按 ID 取项，新增目录不必同步任何回归）；边界门禁的厂商包/`native.<id>` 规则由 manifest 派生，但派生结果与 `scripts/verify-adapter-boundary.ts` 的 `EXPECTED_*` 快照**逐字比对**——声明了非空 `vendorPackages` 或 `nativeKey` 的后端必须把该快照与 `ADAPTER.md` 一并更新（门禁报错会写明），只声明 `vendorPackages: []`、不声明 `nativeKey` 的后端无需改动；`install` 是声明式配方（`{ executor, specifier, version }`），宿主侧执行器表在 `src/dsh-adapter/install/`（首版只有 `pnpm-profile-add`）：注册表查表派生"这个条目可不可装"，装的是你声明的 specifier，声明了宿主不认识的执行器只等于"没有安装面"（不抛错）；没有包可装的后端（驱动系统 CLI 的那类）就不声明；名字走 manifest（插件用 `kind:'literal'`，绝不进 i18n 字典）；模块级/进程级资源池声明 `unloadExport`，会话级资源仍归 `session.dispose()`；`id`、`label` 与 `install` 的边界见 `ADAPTER.md` 的「后端 manifest」；新增后端要把聚焦回归登记进 `scripts/run-ci-group.mjs`，注册表门禁是 `scripts/verify-backend-registry.ts`；用户可见取值（`--backend`、配置行）同步README 与 `docs/configuration{,.en}.md` |
 | Claude Agent SDK 版本 | `package.json` 的 optional peer 与 dev 两处精确版本、`pnpm-lock.yaml`、`src/backends/claude/contract.ts`（`VALIDATED_SDK_VERSION`/`VALIDATED_CLI_VERSIONS`）、`docs/claude-backend{,.en}.md` 的安装命令；`verify:claude-contract` 检查一致 |
 | Codex 协议/验证版本 | 用 `scripts/codex-protocol-sync.mjs` 正规生成类型、更新 `src/backends/codex/contract.ts`、方法表/fixture/脱敏与 live/replay 回归、双语 Codex 用户说明；不添加 Codex SDK npm 依赖，不拿最低版本当全部实验接口已验证 |
 | 上游验证线 bump | `src/dsh-adapter/contract.ts`、`src/dsh-adapter/host-contract.ts`（`HOST_REPLICA_VERSION`，复核复刻面后 `scripts/verify-host-contract.ts --snapshot` 重写 `host-replica.snapshot.json`）、`src/dsh-adapter/oauth/`、`package.json` peer+dev 两组范围、`pnpm-workspace.yaml`、`.github/workflows/ci.yml` alpha-compat 的上游 SHA、`scripts/verify-upstream-contract.ts` 的主线断言（`verify-{alpha-source,patch-surface,web-coexistence}` 从 `contract.ts` 读期望版本，CI 的兼容线源码检查用 `DSH_HARNESS_EXPECTED_VERSION` 指定版本，主线上游 tag 缺席时也用它临时覆盖主线 checkout）、`patch-surface.snapshot.json`、`ADAPTER.md`、`docs/user-guide.md`；步骤见 [ADAPTER.md](../ADAPTER.md) 升级流程 |

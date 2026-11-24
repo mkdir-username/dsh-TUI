@@ -14,11 +14,11 @@ export type TipGroup = 'keys' | 'commands' | 'workflow' | 'display' | 'pitfalls'
 export interface Tip {
   id: string
   group: TipGroup
-  zh: string
+  zh?: string
   en: string
 }
 
-export const TIP_GROUP_LABELS: Record<TipGroup, { zh: string; en: string }> = {
+export const TIP_GROUP_LABELS: Record<TipGroup, { zh?: string; en: string }> = {
   keys: { zh: '快捷键', en: 'Shortcuts' },
   commands: { zh: '命令', en: 'Commands' },
   workflow: { zh: '工作流', en: 'Workflow' },

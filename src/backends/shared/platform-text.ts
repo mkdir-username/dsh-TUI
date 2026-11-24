@@ -25,7 +25,7 @@ import type { LocalizedText } from './localized-text.js'
 
 /** One platform string in the languages the TUI ships. */
 export interface PlatformTextEntry {
-  readonly zh: LocalizedText
+  readonly zh?: LocalizedText
   readonly en: LocalizedText
 }
 

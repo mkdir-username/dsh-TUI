@@ -256,11 +256,11 @@ const texts = {
     'tool-name-bash',
     'tool-name-edit',
   ]),
-} as const satisfies Record<string, { readonly zh: LocalizedText; readonly en: LocalizedText }>
+} as const satisfies Record<string, { readonly en: LocalizedText; readonly zh?: LocalizedText }>
 
 /** Read-only view of {@link texts} for audits (`scripts/verify-i18n.ts` and the
  *  backend's own gates), mirroring `i18nDict` on the host side. */
-export const codexTexts: Readonly<Record<string, { readonly zh: LocalizedText; readonly en: LocalizedText }>> = texts
+export const codexTexts: Readonly<Record<string, { readonly en: LocalizedText; readonly zh?: LocalizedText }>> = texts
 
 /** A key of {@link texts}; a typo is a compile error. */
 export type CodexTextKey = keyof typeof texts
@@ -287,7 +287,10 @@ export function codexLocale(): BackendLocale {
  *  the elicitation flow fills its own placeholders (see
  *  {@link codexElicitationText}). */
 export function codexTemplate(key: CodexTextKey): string {
-  return texts[key][codexLocale()]
+  // `en` is the source of truth: an entry may carry only English, so a missing
+  // translation falls back to it.
+  const entry: Readonly<{ en: string; zh?: string }> = texts[key]
+  return entry[codexLocale()] ?? entry.en
 }
 
 /**

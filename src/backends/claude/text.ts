@@ -233,11 +233,11 @@ const texts = {
     'status-rate-limit-five-hour',
     'status-rate-limit-seven-day',
   ]),
-} as const satisfies Record<string, { readonly zh: LocalizedText; readonly en: LocalizedText }>
+} as const satisfies Record<string, { readonly en: LocalizedText; readonly zh?: LocalizedText }>
 
 /** Read-only view of {@link texts} for audits (scripts/verify-i18n.ts and the
  *  backend's own gates), mirroring `i18nDict` on the host side. */
-export const claudeTexts: Readonly<Record<string, { readonly zh: LocalizedText; readonly en: LocalizedText }>> = texts
+export const claudeTexts: Readonly<Record<string, { readonly en: LocalizedText; readonly zh?: LocalizedText }>> = texts
 
 /** A key of {@link texts}; a typo is a compile error. */
 export type ClaudeTextKey = keyof typeof texts
@@ -270,7 +270,10 @@ export function claudeLocale(): BackendLocale {
  */
 export function claudeTemplate(key: ClaudeTextKey, params: ClaudeTextParams = {}): string {
   const locale = localeSource()
-  return pickLocalizedText(texts[key][locale], locale, params) ?? key
+  // `en` is the source of truth: an entry may carry only English, so a missing
+  // translation falls back to it before the key itself.
+  const entry: Readonly<{ en: LocalizedText; zh?: LocalizedText }> = texts[key]
+  return pickLocalizedText(entry[locale], locale, params) ?? pickLocalizedText(entry.en, 'en', params) ?? key
 }
 
 /** One string of this backend in the active language. */

@@ -346,7 +346,7 @@ const BOTTOM_WORD = 'HARNESS'
 
 /** 一款字体的非几何数据：中英标签 + 字形表。 */
 interface FaceData {
-  readonly zh: string
+  readonly zh?: string
   readonly en: string
   readonly glyphs: GlyphTable
   readonly fallback: GlyphRows
@@ -358,7 +358,7 @@ const font = (id: SplashFontId, face: FaceData): SplashFont => {
   const glyphWidth = [...(face.glyphs.D ?? face.fallback)[0] ?? ''].length
   return {
     id,
-    label: face.zh,
+    label: face.zh ?? face.en,
     labelEn: face.en,
     glyphWidth,
     glyphs: face.glyphs,
@@ -487,7 +487,7 @@ export function splashFontIdOf(setting: SplashFontSetting): string | undefined {
 export interface SplashFontOption {
   readonly value: SplashFontSetting
   readonly label: string
-  readonly descriptions: { readonly zh: string }
+  readonly descriptions: { readonly zh?: string }
 }
 
 /**

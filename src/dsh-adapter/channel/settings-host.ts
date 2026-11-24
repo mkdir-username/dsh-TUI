@@ -118,7 +118,7 @@ export function webSettingsSections(ctx: ServiceLookup, namespaces: readonly Set
   const secretField = (options: {
     path: readonly string[]
     label: string
-    zh: string
+    zh?: string
     hint: string
     hintZh: string
     ns: string | undefined

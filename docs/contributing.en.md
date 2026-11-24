@@ -198,9 +198,10 @@ boundaries and helpers over introducing parallel abstractions.
 - `lib/`: ignored JavaScript, declarations, and declaration maps generated from
   `src/` and shipped to npm. `./invariant` uses the compiled
   `lib/types/dsh-adapter/invariant.js` entry as well.
-- `README.md` (English, the default front page) and `README_ZH.md` (Chinese):
-  the bilingual user documentation. Keep behavior, configuration, shortcuts,
-  and limitations synchronized between them.
+- `README.md`: the English user documentation. Keep behavior, configuration,
+  shortcuts, and limitations synchronized in English across `README.md` and
+  `docs/*.en.md`; `README_ZH.md` and the Chinese docs are legacy data, not a
+  counterpart anybody maintains.
 
 ## Runtime Shape
 
@@ -732,10 +733,10 @@ guide owns detailed contracts such as the toolchain and verification matrix.
 
 | If you change | Keep these in sync |
 | --- | --- |
-| A /settings setting (new, or changed text) | Written once in `src/settings/definitions.ts` (en/zh label and help, kind, options; keys sorted); the Config schema lives in `src/dsh-adapter/index.ts`, runtime format/parse stays on the field in `src/dsh-adapter/plugin.ts`. `pnpm compile` generates `lib/settings.json`, shipped in the npm package, and the website's settings reference is built from it; `verify:settings` checks the definitions. Until that reference is live, the settings table in `docs/user-guide{,.en}.md` still needs its row |
-| Other plugin config or environment behavior | `src/dsh-adapter/index.ts`, runtime consumer, `cordis.patch.yml`, `cordis.yml` (comments: example values and essential semantics only), `README.md`, `README_ZH.md` |
-| Slash commands or shortcuts | `src/commands.ts`, `src/screens/Chat.tsx`, help/input components, both READMEs, relevant skill mapping/tests |
-| Theme contract, plugin seam, or persisted theme behavior | `src/theme.ts`, `src/themeCatalog.ts`, `src/dsh-adapter/themes.ts`, all palettes, theme provider/picker, custom-theme parser, theme verification, both READMEs, plugin docs |
+| A /settings setting (new, or changed text) | Written once in `src/settings/definitions.ts` (English label and help, kind, options; keys sorted); the Config schema lives in `src/dsh-adapter/index.ts`, runtime format/parse stays on the field in `src/dsh-adapter/plugin.ts`. `pnpm compile` generates `lib/settings.json`, shipped in the npm package, and the website's settings reference is built from it; `verify:settings` checks the definitions. Until that reference is live, the settings table in `docs/user-guide{,.en}.md` still needs its row |
+| Other plugin config or environment behavior | `src/dsh-adapter/index.ts`, runtime consumer, `cordis.patch.yml`, `cordis.yml` (comments: example values and essential semantics only), `README.md` |
+| Slash commands or shortcuts | `src/commands.ts`, `src/screens/Chat.tsx`, help/input components, relevant skill mapping/tests |
+| Theme contract, plugin seam, or persisted theme behavior | `src/theme.ts`, `src/themeCatalog.ts`, `src/dsh-adapter/themes.ts`, all palettes, theme provider/picker, custom-theme parser, theme verification, plugin docs |
 | Session/channel behavior | Backend-neutral: `src/dsh-adapter/channel/core/`; DSH-only: `channel/extensions.ts` and its specialists; affected UI projections, compiled output, focused channel/replay regression (incl. `verify-backend-channel`, `verify-channel-rollback`) |
 | Renderer/layout behavior | `src/ink/` or Yoga source, compiled output, CI regressions, focused scroll/resize/PTY probe |
 | Skill discovery or presentation | DSH adapter, slash-command merge, `/skills`, and focused regressions; maintainer-only skills live in `.agents/skills/` and must stay out of npm |

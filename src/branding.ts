@@ -119,7 +119,7 @@ export function brandThemeFor(brand: Brand, themeName: ThemeName): string | unde
 
 /** 开屏欢迎语（品牌档；deepseek 沿用 i18n 的 `logo-tagline`）。英文两行以
  *  `\n` 分隔，渲染层按行拆开居中。 */
-export const BRAND_TAGLINE: Readonly<Record<Brand, { readonly zh: string; readonly en: string }>> = Object.freeze({
+export const BRAND_TAGLINE: Readonly<Record<Brand, { readonly en: string; readonly zh?: string }>> = Object.freeze({
   deepseek: Object.freeze({ zh: '', en: '' }),
   codex: Object.freeze({ zh: '用 Codex 构建一切', en: 'Build anything with Codex' }),
   claude: Object.freeze({ zh: '创造精彩，守护关键。', en: "Create what's exciting.\nMaintain what's essential." }),
@@ -129,7 +129,7 @@ export const BRAND_TAGLINE: Readonly<Record<Brand, { readonly zh: string; readon
 export const BRAND_SETTING_OPTIONS: readonly {
   readonly value: BrandSetting
   readonly label: string
-  readonly descriptions: { readonly zh: string }
+  readonly descriptions: { readonly zh?: string }
 }[] = [
   { value: 'auto', label: 'Follow backend (default)', descriptions: { zh: '跟随后端（默认）' } },
   { value: 'deepseek', label: 'DeepSeek (mist blue)', descriptions: { zh: 'DeepSeek（雾蓝）' } },
