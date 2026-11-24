@@ -83,6 +83,7 @@ import { normalizeScrollGutter } from '../tuiDisplayPrefs.js'
 import { OverlayAbove } from '../components/OverlayAbove.js'
 import { TooltipLayer } from '../components/Tooltip.js'
 import { PromptInput, composerImageRefsForText, type PromptController } from '../components/PromptInput.js'
+import { interruptTurnFromEscape } from '../components/turnInterrupt.js'
 import { backspaceAt, deleteAt, deleteRange, insertAt, lineEnd, lineStart, nextPoint, pointsOf, previousPoint, wordEnd, wordStart } from '../components/questions/answerField.js'
 import { flattenPasteInline } from '../channel/sanitize.js'
 import { turnUsageParts } from '../components/TurnUsageRow.js'
@@ -5841,33 +5842,13 @@ export function Chat({
       // reaches the working-turn interrupt below.
       event.stopImmediatePropagation()
     } else if (key.escape && channel.working && !helpOpen && !promptControllerRef.current?.vimActive()) {
-      // Esc interrupts a running turn (the prompt input
-      // only sees esc when idle, where it has the double-tap-clear meaning).
-      // With messages queued, the queue DOCKS (Claude Code parity): the
-      // abort drops the backend copies, the previews park channel-side and
-      // the composer's dock hint offers ↑ to edit one / ⏎ to send them all
-      // — nothing auto-sends. Already-docked rows dock nothing new; the
-      // turn still needs its plain abort.
+      // Esc interrupts a running turn. The decision itself lives in
+      // `interruptTurnFromEscape` because the composer can receive this same
+      // key (see its Esc ladder) and must reach the same answer.
       // vim mode (either submode) yields: there Esc is a MODE key (INSERT→
       // NORMAL, NORMAL = no-op/cancel pending d) and the prompt owns it;
       // interrupting still works via Ctrl+C / Ctrl+Enter.
-      const undocked = channel.pending.some(item => item.docked !== true)
-      if (undocked) {
-        // Docking is Esc's documented meaning for queued rows, and it starts
-        // its own interrupt; keep it even while a plain abort is in flight.
-        if (channel.interruptAndDock() === 0 && !channel.cancelPending) channel.cancel()
-      } else if (channel.cancelPending) {
-        // The abort is already in flight: `cancel()`/`interruptAndDock()`
-        // ignore repeats by contract, so answer the press instead of
-        // swallowing it. Past the watchdog window the turn is wedged, and
-        // the warning names `/restart` (allowed mid-turn) as the way out.
-        channel.notify(t(interruptWarnedRef.current ? 'interrupt-stuck' : 'interrupt-pending'), {
-          color: 'warning',
-          timeoutMs: interruptWarnedRef.current ? 10_000 : 4_000,
-        })
-      } else {
-        channel.cancel()
-      }
+      interruptTurnFromEscape(channel, { stuck: interruptWarnedRef.current })
       event.stopImmediatePropagation()
     } else if (
       key.escape

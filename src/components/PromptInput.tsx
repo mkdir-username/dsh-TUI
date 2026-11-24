@@ -7,6 +7,7 @@ import { basename, resolve } from 'node:path'
 import { t } from '../i18n.js'
 import { Box, Text, useInput, useTerminalSize, useTheme, type ScrollBoxHandle } from '../ui.js'
 import { COMPOSER_IMAGE_TOKEN, imageTokenSpans, imageTokenAround, snapOffImageToken, expandImageTokenRange, type ImageTokenSpan } from './composerImageTokens.js'
+import { interruptTurnFromEscape } from './turnInterrupt.js'
 import { EffortChargeGlyph } from './EffortChargeGlyph.js'
 import { EffortInputBorder, type InputBorderLabel } from './EffortInputBorder.js'
 import { EffortTierBadge } from './EffortTierBadge.js'
@@ -3779,15 +3780,13 @@ export function PromptInput({
     }
 
     if (key.escape) {
-      // With pending messages while working, Esc = interrupt and DOCK the
-      // queue (Claude Code parity): the previews park channel-side and the
-      // dock hint offers ↑ to edit one / ⏎ to send them all — nothing
-      // auto-sends. A queue already fully docked docks nothing new; the
-      // turn still needs its plain abort.
-      if (channel.working && channel.pending.length > 0) {
-        if (channel.interruptAndDock() === 0) channel.cancel()
-        return
-      }
+      // A live turn outranks every idle meaning of Esc, the rewind gesture
+      // included: Chat normally owns the key while a turn runs, but when its
+      // global layer yields the keyboard (or its state lags a beat) the press
+      // lands here — and "stop" must never become "Esc again to rewind" while
+      // the answer keeps streaming. Queued rows still DOCK (Claude Code
+      // parity) through the shared decision.
+      if (interruptTurnFromEscape(channel)) return
       // A single Esc clears the current input (if any); the double-tap
       // path below handles rewind/clear on an already-empty input. A BIG
       // input folds into a block instead (Esc = the fold toggle; the
