@@ -1,22 +1,35 @@
 /**
- * i18n 字典静态门禁（verify:build 的一环）：类型系统管不到的六类静默失败——
- *   1. 语言完整性：非 cmd-desc-* 条目必须同时携带 zh 与 en（cmd-desc-* 的 en
- *      真源在命令注册表，字典只带 zh，见 i18n.ts 的 tOr 注释）；
- *   2. 占位符：单花括号 `{name}` 是 `{{name}}` 的手误，t() 不替换、原样上屏；
- *      zh/en 的 `{{name}}` 名字集合互不为子集时视为改名漂移（一侧刻意省略
- *      占位符是合法本地化，如 en 单数句去掉 {{n}}，所以只拦"两侧都有但
- *      名字对不上"）；
- *   3. 死 key：src/ 与 scripts/ 里没有任何字面引用、又不属于运行时拼接
- *      前缀家族的条目。拼接家族（tOr(`cmd-desc-${name}`) 等）按前缀放行；
- *   4. 英文文案字面量：整句级 UI 英文（折叠提示、终止信号句）只允许活在
- *      字典里，src/ 其他文件出现即打回（issue #980 的漏网形态——键已存在
- *      而组件绕过 t() 硬编码）。scripts/ 的夹具断言 en 输出属合法，不查；
- *   5. 后端自带文案（B-3/B-5）：注册的后端字典按同样规则查语言完整性与占位符；
- *   6. 跨字典一致性：与后端共用的平台文案只有一处真源
- *      （src/backends/shared/platform-text.ts）——宿主字典与两个后端各自展开
- *      它，逐字比对；任一侧写回一份不同的内联副本（同名键在展开之后会覆盖
- *      真源）即红。防的是"副本被重新引入"。
- * 运行：node --import tsx/esm scripts/verify-i18n.ts
+ * Static gate for the i18n dictionary (part of verify:build): the six classes
+ * of silent failure the type system cannot express.
+ *
+ *   1. Completeness: every non-`cmd-desc-*` entry must carry `en` (the source
+ *      of truth). `zh` is optional translated data — no entry is required to
+ *      duplicate its copy into a second language (the `cmd-desc-*` family
+ *      takes its en text from the command registry, see the `tOr` note in
+ *      i18n.ts).
+ *   2. Placeholders: a single-brace `{name}` is a typo for `{{name}}`, which
+ *      `t()` leaves on screen. When both languages carry `{{name}}` sets, one
+ *      being a subset of the other is treated as a rename drift (deliberately
+ *      dropping a placeholder on one side is legitimate localization, e.g. an
+ *      English singular sentence without `{{n}}`, so only "present on both
+ *      sides but names disagree" fails).
+ *   3. Dead keys: an entry with no literal reference in `src/` or `scripts/`
+ *      and no runtime-concatenated prefix family. Concatenated families
+ *      (`tOr(\`cmd-desc-${name}\`)` and friends) pass by prefix.
+ *   4. English copy literals: sentence-level UI English is allowed only in the
+ *      dictionary; any other `src/` file fails (issue #980's leak shape — the
+ *      key exists while a component bypasses `t()`). Fixture assertions of en
+ *      output inside `scripts/` are legitimate and are not scanned.
+ *   5. Backend-authored copy (B-3/B-5): a registered backend dictionary is
+ *      checked for completeness and placeholders by the same rules.
+ *   6. Cross-dictionary consistency: platform copy shared with the backends
+ *      has one source (`src/backends/shared/platform-text.ts`) — the host
+ *      dictionary and both backends expand it and are compared verbatim; a
+ *      different inline copy written back on either side (a same-named key
+ *      would shadow the source after expansion) fails. This is what stops the
+ *      copy from being reintroduced.
+ *
+ * Run: node --import tsx/esm scripts/verify-i18n.ts
  */
 import { execFileSync } from 'node:child_process'
 import { existsSync, readFileSync } from 'node:fs'
@@ -76,21 +89,24 @@ function isSubset(a: Set<string>, b: Set<string>): boolean {
   return true
 }
 
-// ── 1+2：逐条目检查语言完整性与占位符 ─────────────────────────────────
+// ── 1+2: per-entry completeness and placeholders ────────────────────────
 const singleBrace = /(?<!\{)\{(\w+)\}(?!\})/
 for (const [key, entry] of Object.entries(i18nDict)) {
-  if (entry.zh === undefined) fail(`${key}: 缺 zh`)
-  if (entry.en === undefined && !key.startsWith('cmd-desc-')) fail(`${key}: 缺 en`)
+  // `en` is the source of truth; `zh` is optional translated data, so no entry
+  // is required to duplicate its copy into a second language.
+  if (entry.en === undefined && !key.startsWith('cmd-desc-')) fail(`${key}: missing en`)
+  // Only a language the entry actually carries is scanned; a single-language
+  // entry cannot have a cross-language placeholder drift.
   for (const lang of ['zh', 'en'] as const) {
     for (const form of forms(entry[lang])) {
       const m = singleBrace.exec(form)
-      if (m) fail(`${key}.${lang}: 单花括号 {${m[1]}}——t() 不替换，应为 {{${m[1]}}}`)
+      if (m) fail(`${key}.${lang}: single brace {${m[1]}} — t() does not substitute it, use {{${m[1]}}}`)
     }
   }
   const zh = placeholders(entry.zh)
   const en = placeholders(entry.en)
-  if (entry.en !== undefined && !isSubset(zh, en) && !isSubset(en, zh)) {
-    fail(`${key}: 占位符名不一致 zh={{${[...zh].join(',')}}} en={{${[...en].join(',')}}}`)
+  if (entry.en !== undefined && entry.zh !== undefined && !isSubset(zh, en) && !isSubset(en, zh)) {
+    fail(`${key}: placeholder names disagree zh={{${[...zh].join(',')}}} en={{${[...en].join(',')}}}`)
   }
 }
 

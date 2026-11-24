@@ -18,12 +18,15 @@
  * always resolves to `other`). Missing keys render the key itself so a typo
  * is visible in the UI instead of silently blank.
  *
- * The dictionary shape is enforced at compile time (`satisfies` below):
- * every entry carries zh, and en is optional only for the `cmd-desc-*`
- * family whose en truth lives in the command registry (see {@link tOr}).
- * scripts/verify-i18n.ts adds the checks types cannot express: placeholder
- * parity between languages, single-brace typos, dead keys, and English
- * UI-copy literals outside the dictionary (issue #980's leak shape).
+ * The dictionary shape is enforced at compile time (`satisfies` below): `en`
+ * is the source of truth for every UI string and `zh` is optional translated
+ * data, so new copy never has to be duplicated into a second language (the
+ * `cmd-desc-*` family has no dictionary entry at all — its en truth lives in
+ * the command registry, see {@link tOr}). A key without the active language
+ * falls back to `en`, then to the key itself. scripts/verify-i18n.ts adds the
+ * checks types cannot express: a missing `en`, placeholder parity where both
+ * languages exist, single-brace typos, dead keys, and English UI-copy
+ * literals outside the dictionary (issue #980's leak shape).
  *
  * ## Adding a language (e.g. `ja`) — the full checklist
  *
@@ -3019,7 +3022,7 @@ const dict = {
     en: 'Could not record the guide in ~/.dsh-tui/onboarding.json, so it may ask again next launch',
   },
   'cmd-desc-setup': { zh: '重跑首次引导（账号与模型接入 / 语言主题 / 模型工作区 / 快捷键）' },
-} as const satisfies Record<string, { zh: I18nText; en?: I18nText }>
+} as const satisfies Record<string, { en?: I18nText; zh?: I18nText }>
 
 export type I18nKey = keyof typeof dict
 export type I18nParams = Record<string, string | number>
@@ -3067,7 +3070,10 @@ export function isLang(value: unknown): value is Lang {
  */
 export function t(key: I18nKey, params: I18nParams = {}): string {
   const entry = dict[key] as Partial<Record<Lang, I18nText>> | undefined
-  return substitute(pickText(entry?.[activeLang], params) ?? key, params)
+  // `en` is the source of truth: a translation in the active language wins,
+  // anything else falls back to English before the raw key.
+  const text = pickText(entry?.[activeLang], params) ?? pickText(entry?.en, params, 'en') ?? key
+  return substitute(text, params)
 }
 
 // Cached per shipped language; CLDR-backed and built into Node, so zh always
@@ -3078,10 +3084,10 @@ const pluralRules: Record<Lang, Intl.PluralRules> = {
 }
 
 /** Resolve plural forms to one template using the `count` param. */
-function pickText(text: I18nText | undefined, params: I18nParams): string | undefined {
+function pickText(text: I18nText | undefined, params: I18nParams, lang: Lang = activeLang): string | undefined {
   if (text === undefined || typeof text === 'string') return text
   const count = Number(params.count)
-  const category = pluralRules[activeLang].select(Number.isFinite(count) ? count : 0)
+  const category = pluralRules[lang].select(Number.isFinite(count) ? count : 0)
   return category === 'one' ? text.one : text.other
 }
 
@@ -3104,7 +3110,8 @@ function substitute(template: string, params: I18nParams): string {
  */
 export function tOr(key: string, fallback: string, params: I18nParams = {}): string {
   const entry = (dict as Record<string, Partial<Record<Lang, I18nText>>>)[key]
-  return substitute(pickText(entry?.[activeLang], params) ?? fallback, params)
+  const text = pickText(entry?.[activeLang], params) ?? pickText(entry?.en, params, 'en') ?? fallback
+  return substitute(text, params)
 }
 
 /** Read-only view of the dictionary for audits (scripts/verify-i18n.ts). */
