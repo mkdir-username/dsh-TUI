@@ -41,12 +41,10 @@ function formatDuration(ms: number): string {
 }
 
 /**
- * Compact goal chip for the status footer: phase glyph + the word `goal` +
- * rounds (a goal a backend budgets by tokens: tokens used / budget instead),
- * colored by phase. The word names the counter: a bare `1/256` reads as an
- * unexplained quota, not as "round one of the goal's continuation cap".
- * `minimal` swaps the glyph for a text form, per the minimal-mode no-emoji
- * contract.
+ * Compact goal chip for the status footer: phase glyph + rounds (a goal a
+ * backend budgets by tokens: tokens used / budget instead), colored by
+ * phase. `minimal` swaps the glyph for a text form, per the minimal-mode
+ * no-emoji contract.
  */
 export function GoalStatusChip({ goal, minimal = false }: { goal: ChannelGoal; minimal?: boolean }): React.ReactNode {
   const progress = goal.budget === undefined ? `${goal.roundsStarted}/${goal.maxGoalRounds}` : formatGoalBudgetCompact(goal.budget)
@@ -54,7 +52,7 @@ export function GoalStatusChip({ goal, minimal = false }: { goal: ChannelGoal; m
     <Text color={phaseColor(goal.phase)} dimColor={goal.phase === 'complete'}>
       {minimal
         ? `goal ${progress}`
-        : `${PHASE_GLYPH[goal.phase]} goal ${progress}`}
+        : `${PHASE_GLYPH[goal.phase]} ${progress}`}
     </Text>
   )
 }
