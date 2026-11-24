@@ -203,6 +203,10 @@ function ScrollBox({
       el.stickyScroll = false;
       el.lastWheelDir = 0;
       el.pendingScrollDelta = undefined;
+      el.scrollFollowPending = false;
+      // The next paint establishes a new follow baseline at the jump target,
+      // so a wheel in the same input batch cannot include the jump distance.
+      el.scrollPaintedTop = undefined;
       el.scrollAnchor = undefined;
       el.scrollTop = Math.max(0, Math.floor(y));
       scrollMutated(el);
@@ -214,6 +218,8 @@ function ScrollBox({
       box.stickyScroll = false;
       box.lastWheelDir = 0;
       box.pendingScrollDelta = undefined;
+      box.scrollFollowPending = false;
+      box.scrollPaintedTop = undefined;
       box.scrollAnchor = {
         el,
         offset
@@ -286,6 +292,8 @@ function ScrollBox({
       const viewportH = el.scrollViewportHeight ?? 0;
       const maxScroll = Math.max(0, (el.scrollHeight ?? 0) - viewportH);
       el.pendingScrollDelta = undefined;
+      el.scrollFollowPending = false;
+      el.scrollPaintedTop = undefined;
       el.stickyScroll = true;
       el.lastWheelDir = 0;
       // Jump intent is not wheel debt: mounting the union of the current
@@ -358,6 +366,11 @@ function ScrollBox({
       const next = Math.max(0, Math.round(current + delta));
       if (next === current) return;
       el.scrollTop = next;
+      // Keep the painted baseline in the same content coordinates without
+      // consuming the wheel remainder still waiting behind a mount clamp.
+      if (el.scrollPaintedTop !== undefined) {
+        el.scrollPaintedTop += next - current;
+      }
       // This moves content coordinates, not user intent. Translate the trusted
       // bottom by the applied delta so a positive remeasurement cannot look
       // like scrolling past the old max and accidentally restore sticky.
