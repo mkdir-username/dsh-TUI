@@ -320,7 +320,7 @@ const probeGoal = {
 
 const withGoal = await renderStatus({ goal: probeGoal })
 check('compact StatusLine renders the goal chip when a goal exists', () => {
-  assert.ok(withGoal.includes('● 2/5'), `missing goal chip in:\n${withGoal}`)
+  assert.ok(withGoal.includes('● goal 2/5'), `missing goal chip in:\n${withGoal}`)
 })
 
 const withGoalHidden = await renderStatus({
