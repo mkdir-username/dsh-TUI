@@ -228,6 +228,7 @@ export function StatusLine({
   wake,
   activity: projectedActivity,
   pluginFields,
+  handoffSkip,
 }: {
   channel: Channel
   selectionActive?: boolean
@@ -238,6 +239,10 @@ export function StatusLine({
    *  `right-tail` (the row's right edge). Absent/empty renders exactly the
    *  footer this seam found: no extra Box, no gap, no flex change. */
   pluginFields?: readonly TuiStatusFieldEntry[]
+  /** `/hs` is active for this chat: `once` covers the turn in progress, `on`
+   *  every later turn. A safety readout, so neither the field switches nor the
+   *  minimal UI hide it. */
+  handoffSkip?: 'once' | 'on'
   /** The backend's OWN permission mode (the typed `modes` capability):
    *  `id` is the backend mode id (default / acceptEdits / plan /
    *  bypassPermissions / dontAsk / auto …), `name` the label the backend
@@ -794,9 +799,11 @@ const selectionBadge = formatSelectionBadge(channel.selection)
             </Box>
           </Box>
         ) : null}
-        {row3Text === undefined ? null : (
+        {row3Text === undefined && handoffSkip === undefined ? null : (
           <Box flexDirection="row" flexShrink={0}>
-            <Text wrap="wrap" dimColor>{row3Text}</Text>
+            {handoffSkip === undefined ? null : <Text color="warning">{handoffSkip === 'on' ? '⏸ hs' : '⏸ hs¹'}</Text>}
+            {handoffSkip !== undefined && row3Text !== undefined ? <Text dimColor> · </Text> : null}
+            {row3Text === undefined ? null : <Text wrap="wrap" dimColor>{row3Text}</Text>}
           </Box>
         )}
         {/* Row 3: one stable hint/activity/detail area plus an optional

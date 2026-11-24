@@ -7553,6 +7553,8 @@ export function Chat({
           selectionActive={selectionActive}
           helpOpen={helpOpen}
           pluginFields={statusFields}
+          // Chat-scoped /hs: a safety readout, so it rides every footer mode.
+          handoffSkip={handoffSkip === 'off' ? undefined : handoffSkip}
           // Backend-native permission modes: the footer mode segment always
           // shows (the base mode included) and clicks into the same
           // /permission picker the command opens (the launchpad param row's

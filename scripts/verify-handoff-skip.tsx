@@ -195,18 +195,38 @@ check(
 )
 check('2 nothing ever reached the model', h.submits.length === 0, `submits=${h.submits.length}`)
 
+// ── 3. the footer chip ───────────────────────────────────────────────────
+// The refused line deliberately stayed in the composer: clear it before the
+// next command, or every later line is appended to it.
+for (let i = 0; i < '/hs --bogus'.length; i += 1) await h.typeLine('\x7f')
+await h.typeLine('/hs --on')
+await h.enter()
+check('3 on-mode shows the chip', await settled(() => h.screen().includes('⏸ hs') && !h.screen().includes('⏸ hs¹')), h.screen().slice(-300))
+h.emit([{ type: 'turn.start', turn: 3, origin: 'user', time: Date.now() }])
+h.emit([{ type: 'turn.end', turn: 3, reason: { kind: 'completed' }, time: Date.now() }])
+check('3 the chip survives a turn boundary', await settled(() => h.screen().includes('⏸ hs')), h.screen().slice(-300))
+await h.typeLine('/hs --off')
+await h.enter()
+check('3 --off removes the chip', await settled(() => !h.screen().includes('⏸')), h.screen().slice(-300))
+await h.typeLine('/hs')
+await h.enter()
+check('3 the one-shot has its own small mark', await settled(() => h.screen().includes('⏸ hs¹')), h.screen().slice(-300))
+
 await h.unmount()
 
 // Another kernel has no DSH hook bridge: the command answers with the reason
 // and never writes a file nothing would read.
+const modeBeforeOther = readHandoffSkip(SID)
 const other = await mountChat('claude')
 await other.typeLine('/hs --on')
 await other.enter()
 const otherToasts = other.channel.notifications.map(item => item.text).join(' | ')
 check(
   '2 a non-DSH kernel is refused with the reason, nothing written',
-  await settled(() => otherToasts.includes(t('hs-dsh-only'))) && readHandoffSkip(SID) === 'off' && other.submits.length === 0,
-  `${otherToasts} / mode=${readHandoffSkip(SID)} / submits=${other.submits.length}`,
+  await settled(() => otherToasts.includes(t('hs-dsh-only')))
+    && readHandoffSkip(SID) === modeBeforeOther
+    && other.submits.length === 0,
+  `${otherToasts} / mode=${readHandoffSkip(SID)} (was ${modeBeforeOther}) / submits=${other.submits.length}`,
 )
 await other.unmount()
 
