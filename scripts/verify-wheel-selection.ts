@@ -112,7 +112,7 @@ function applyScroll(
   const side: 'above' | 'below' = up ? 'above' : 'below'
   const shift = up ? -rows : rows
   if (hasSelection(sel)) {
-    captureScrolledRows(sel, screen, firstRow, lastRow, side, 0, viewport)
+    captureScrolledRows(sel, screen, firstRow, lastRow, side, 0, 0, viewport)
   }
   return shiftSelectionForFollow(sel, shift, VIEWPORT_TOP, VIEWPORT_BOTTOM)
 }

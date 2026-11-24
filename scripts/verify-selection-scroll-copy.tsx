@@ -342,33 +342,37 @@ async function scenarioA(): Promise<void> {
       ROWS - 1,
       (rig.node.scrollViewportTop ?? 0) + (rig.node.scrollViewportHeight ?? 1) - 1,
     )
+    // The pointer rests two rows above the last visible row: this fork
+    // auto-scrolls a drag held on the viewport edge rows, and a continuous
+    // scroll would consume the pages this scenario pages through.
+    const pointerRow = Math.max(start.row, bottom - 2)
     rig.press(start.col, start.row)
     // 固定窗:pacing press→motion 步间。
     await sleep(60)
-    rig.drag(start.col + 20, bottom)
+    rig.drag(start.col + 20, pointerRow)
     // 固定窗:pacing motion→翻页步间。
     await sleep(100)
 
-    check('A 拖拽中：focus 留在指针对应的下边缘', rig.state().focus?.row === bottom, JSON.stringify(rig.state()))
+    check('A 拖拽中：focus 留在指针对应的下边缘', rig.state().focus?.row === pointerRow, JSON.stringify(rig.state()))
 
     await rig.page('down')
-    const first = contiguous('A PgDn', rig.copyMarkers(), START, visibleMarkerEnd(rig, bottom, start.col + 20))
+    const first = contiguous('A PgDn', rig.copyMarkers(), START, visibleMarkerEnd(rig, pointerRow, start.col + 20))
     check('A PgDn: 选区扩展到了新页', first >= 30, `end=${first}`)
-    check('A PgDn: focus 仍留在下边缘', rig.state().focus?.row === bottom, JSON.stringify(rig.state()))
+    check('A PgDn: focus 仍留在下边缘', rig.state().focus?.row === pointerRow, JSON.stringify(rig.state()))
 
     await rig.page('down')
-    const second = contiguous('A PgDn2', rig.copyMarkers(), START, visibleMarkerEnd(rig, bottom, start.col + 20))
+    const second = contiguous('A PgDn2', rig.copyMarkers(), START, visibleMarkerEnd(rig, pointerRow, start.col + 20))
     check('A PgDn2: 继续向下扩展', second > first, `${first} -> ${second}`)
 
     await rig.page('up')
-    const back = contiguous('A PgUp', rig.copyMarkers(), START, visibleMarkerEnd(rig, bottom, start.col + 20))
+    const back = contiguous('A PgUp', rig.copyMarkers(), START, visibleMarkerEnd(rig, pointerRow, start.col + 20))
     check('A PgUp: 反向滚动不重复且回到上一页', back <= second, `${second} -> ${back}`)
 
     await rig.wheel('down', 8)
-    const wheelDown = contiguous('A wheel down', rig.copyMarkers(), START, visibleMarkerEnd(rig, bottom, start.col + 20))
+    const wheelDown = contiguous('A wheel down', rig.copyMarkers(), START, visibleMarkerEnd(rig, pointerRow, start.col + 20))
     check('A wheel down: 滚轮也扩展选区', wheelDown > back, `${back} -> ${wheelDown}`)
     await rig.wheel('up', 8)
-    const wheelBack = contiguous('A wheel up', rig.copyMarkers(), START, visibleMarkerEnd(rig, bottom, start.col + 20))
+    const wheelBack = contiguous('A wheel up', rig.copyMarkers(), START, visibleMarkerEnd(rig, pointerRow, start.col + 20))
     check('A wheel up: 反向滚轮不重复且收回', wheelBack <= wheelDown, `${wheelDown} -> ${wheelBack}`)
   } finally {
     await rig.unmount()

@@ -455,7 +455,7 @@ function applyFollowDrain(
   const sel = makeSelection({ col: 3, row: 9 }, { col: 1, row: 5 }, true)
   // Chrome below shrinks the viewport [0..9] → [0..7]: the bottom band
   // [8..9] leaves, and its end (the anchor row) resets the anchor column.
-  shiftSelectionForViewportResize(sel, screen, 0, 9, 0, 7, viewport)
+  shiftSelectionForViewportResize(sel, screen, 0, 9, 0, 7, 0, viewport)
   check('C16 band captured from the PRE frame', texts(sel.scrolledOffBelow), [
     rowText('O08'),
     'O09', // end row keeps the anchor's col constraint (cols 0..3)
