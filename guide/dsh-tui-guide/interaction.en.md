@@ -326,6 +326,9 @@ While the model is working, three paths have different placement:
 - Pressing `Esc` while the model works interrupts the turn and holds the queued
   messages above the input instead of re-sending them; the hint row reads
   `↑ Edit · Ctrl+Enter steer · Esc interrupts and holds the queue`. DSH and Claude behave the same.
+  After the interrupt nothing continues on its own: a Stop hook's verdict, a finished
+  background job, a goal round or a subagent settlement stays queued until your next
+  message — background jobs keep running, only their wake is held.
   - With messages held and idle, `↑` on an empty input opens the queued-message
     selector: `↑`/`↓` move, `⏎` takes the selected message back into the input
     for editing, `Esc` leaves the selector. You can also click a held message
@@ -700,6 +703,12 @@ In inline mode, the terminal emulator owns native scrollback and selection.
   messages / expand all.
 - **Single-click the sticky header / "↓ N new messages"** — Jump back to the pinned message /
   scroll to bottom.
+- **Scrolling while the agent writes** — A manually scrolled transcript holds the reader's
+  rows: content growing above the viewport (a still-expanding thinking block, a settling tool
+  card, a streaming answer) moves the scroll position with it instead of moving the text, and
+  a wheel gesture keeps that hold — the wheel moves exactly its own ±3 lines per notch.
+  Follow-the-bottom resumes only when the reader returns to the bottom (wheel, `End`,
+  `Enter`, or the "↓ N" pill).
 - **Single-click a hyperlink** — Open it in the browser.
 - **Single-click a picker / menu row** — Select and apply immediately (model / skills /
   activity frames / preset / permissions / plan / language / theme / effort / command & file

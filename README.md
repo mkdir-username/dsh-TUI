@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  <strong>English</strong> | <a href="README_ZH.md">简体中文</a>
+  <strong>English</strong>
 </p>
 
 <p align="center">
@@ -578,7 +578,7 @@ Runtime path, module boundaries, performance notes and persistence locations: [A
 - While the TUI owns an active raw input, it reasserts OS raw mode on input-gap/focus recovery and every five seconds without waiting for a key. This repairs externally reset cooked/ECHO state even when Node still reports `isRaw=true`; recovery may take one interval while the event loop runs. The periodic check stops during editor pauses and shutdown/handoff and does not resend display protocols.
 - A dropped file is restored from its OSC 8 `file://` URI alone: multi-file drops, non-Windows terminal drop encodings and terminator-less truncated frames are not covered, and the hyperlink's own display name is never used.
 - A background session lives inside this process and stops when the TUI exits.
-- `/thinking` is not persisted; the kernel `minimal` agent preset (极简模式, one persistent-shell tool) mounts no compaction and does not prune tool results — a long session can hit the context limit, oversized tool output stays in the context in full, and `/compact` plus the questionnaire are unavailable under it (Help and `/` completion mark the entry, and entering the preset says so once); that is a different thing from the `/settings → Minimal UI` (极简界面) display switch; `/update` needs a `dsh --profile` launch and is refused while a turn is running.
+- `/thinking` is not persisted; the kernel `minimal` agent preset (minimal mode, one persistent-shell tool) mounts no compaction and does not prune tool results — a long session can hit the context limit, oversized tool output stays in the context in full, and `/compact` plus the questionnaire are unavailable under it (Help and `/` completion mark the entry, and entering the preset says so once); that is a different thing from the `/settings → Minimal UI` display switch; `/update` needs a `dsh --profile` launch and is refused while a turn is running.
 - The status-bar `≈¥` and `/cost` are session estimates that include subagent usage (priced per each agent's model × peak/idle × cache components); unofficial or unlisted models show tokens only and are marked unpriced. **The platform bill is authoritative.**
 - Fragmented SGR mouse reports are covered at the mechanism level with controlled fixture comparisons; the reporter environments (macOS → SSH, WSL2 with `dsh web`) have not been re-tested.
 

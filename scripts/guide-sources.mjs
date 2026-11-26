@@ -31,9 +31,10 @@ export const GUIDE_DIR = `${GUIDE_ROOT}/${GUIDE_SKILL}`
 /** 手写索引：不参与同步，也不允许被当作残留删掉。 */
 export const GUIDE_INDEX = 'SKILL.md'
 /**
- * 面向用户的手册基名——`docs/<name>.md`（中文）与 `docs/<name>.en.md`（英文）。
- * 实现向/社区向文档（architecture、contributing、roadmap…）不进包：用户问不到，
- * 也没必要让每个安装多背一份。
+ * User-facing manual basenames — `docs/<name>.en.md`. English is the only
+ * shipped manual language; implementation/community docs (architecture,
+ * contributing, roadmap…) stay out of the package: users never ask for them,
+ * and every install would carry a copy for nothing.
  */
 export const GUIDE_DOCS = [
   'getting-started',
@@ -48,9 +49,9 @@ export const GUIDE_DOCS = [
   'vscode',
   'plugins',
 ]
-/** 清单里的全部文件名（中英各一份），稳定排序。 */
+/** Every shipped manual file, English only, stable order. */
 export function guideFiles() {
-  return GUIDE_DOCS.flatMap(name => [`${name}.md`, `${name}.en.md`]).sort()
+  return GUIDE_DOCS.map(name => `${name}.en.md`).sort()
 }
 /** 文件字节的 sha256（十六进制）。 */
 export function sha256(bytes) {
