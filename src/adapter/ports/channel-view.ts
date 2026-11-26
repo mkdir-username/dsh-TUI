@@ -965,10 +965,13 @@ export interface BackgroundJobState {
 export interface JobControl {
   kill(id: string): boolean
   /**
-   * Move the oldest in-flight foreground call to the background: the command
-   * keeps running as a job while the turn moves on. Returns the parked call,
-   * or null when nothing waits (no seam in this backend, or a process that has
-   * not spawned yet). Absent for backends that can only read and kill jobs.
+   * Move the oldest in-flight foreground call to the background: a command
+   * keeps running as a job, a delegated child keeps running and delivers its
+   * handoff later, while the turn moves on. Returns the parked call (its
+   * command, or the delegated task's description), or null when nothing waits
+   * (no seam in this backend, a process that has not spawned yet, or a
+   * delegation still queued for a slot). Absent for backends that can only
+   * read and kill jobs.
    */
   parkAny?(): { readonly callId: string; readonly command: string } | null
   /**

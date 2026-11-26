@@ -22,7 +22,7 @@
 process.env.FORCE_COLOR = '3'
 process.env.DSH_TUI_LANG = 'zh' // 中文文案断言必须在 i18n import 前固定语言。
 
-const [{ PassThrough, Writable }, React, { Terminal: XTerm }, { render }, { Chat }, { QuestionStore }, { t }, { comboDisplay, primaryComboString }, { settled, sleep, viewportLines }] =
+const [{ PassThrough, Writable }, React, { Terminal: XTerm }, { render }, { Chat }, { QuestionStore }, { t }, { comboDisplay, primaryComboString }, { settled, sleep, viewportLines }, { parkAnyDelegation, parkAnyToolCall }] =
   await Promise.all([
     import('node:stream'),
     import('react'),
@@ -33,6 +33,7 @@ const [{ PassThrough, Writable }, React, { Terminal: XTerm }, { render }, { Chat
     import('../src/i18n.js'),
     import('../src/utils/keymap.js'),
     import('./lib/term-test.mjs'),
+    import('../src/dsh-adapter/tool-park.js'),
   ])
 const instances = (await import('../src/ink/instances.js')).default
 
@@ -306,6 +307,42 @@ const BACKGROUND_CARD = toolRow({
   check('the wait toast names the job and says nothing more', waiting.notices.length === 1 && waiting.notices[0] === WAIT_TOAST, JSON.stringify(waiting.notices))
   const plain = await press([PLAIN_READ], control, null)
   check('a job_output without wait advertises nothing', !plain.after.includes(HINT))
+}
+
+// ── a delegated child is the same kind of wait ─────────────────────────────
+// The delegation plugin publishes `dsh.delegate-park`; the TUI asks it exactly
+// like the two core seams. A dropped seam turns Ctrl+B into a side-panel toggle
+// on a running delegation — the very symptom this section exists to prevent.
+{
+  const DELEGATION = toolRow({
+    name: 'delegate',
+    argsText: '{"description":"долгая задача","prompt":"go"}',
+    callView: { card: 'generic', title: 'долгая задача', kind: 'execute' },
+  })
+  const key = Symbol.for('dsh.delegate-park')
+  const installed = { requestAny: () => ({ callId: 'call-9', description: 'долгая задача' }) }
+  ;(globalThis as Record<PropertyKey, unknown>)[key] = installed
+  const calls: Array<{ callId: string; command: string }> = []
+  const control = {
+    kill: () => false,
+    parkAny: () => {
+      const parked = parkAnyToolCall() ?? parkAnyDelegation()
+      if (parked !== null) calls.push(parked)
+      return parked
+    },
+  }
+  const seeded = await press([DELEGATION], control)
+  check('a running delegation card advertises the background key', seeded.after.includes(HINT), seeded.after.split('\n').find(line => line.includes('долгая задача')) ?? '')
+  check('the key asks the delegation seam', calls.length === 1 && calls[0]?.callId === 'call-9', JSON.stringify(calls))
+  check('the toast names the delegated task', seeded.notices.some(text => text.includes('долгая задача')), JSON.stringify(seeded.notices))
+  check('a parked delegation never touches the panel', !prefs.getSidePanelOpen())
+  delete (globalThis as Record<PropertyKey, unknown>)[key]
+  check('the delegation seam reads nothing without a hub', parkAnyDelegation() === null)
+  check('a bash ticket still wins over a delegation ticket', parkAnyToolCall() === null)
+  // Nothing to park: the very same byte must go back to being the panel toggle.
+  const empty = await press([DELEGATION], control, null, { cols: 120, rows: 30, fullscreen: true })
+  check('an empty delegation park opens the side panel', prefs.getSidePanelOpen())
+  check('an empty delegation park raises no toast', empty.notices.length === 0, JSON.stringify(empty.notices))
 }
 
 console.log(failed === 0 ? '\nAll tool-park checks passed.' : `\n${failed} check(s) failed.`)

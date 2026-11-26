@@ -20,6 +20,7 @@ const DSH_PACKAGES = resolve(HOME, '.bun/install/global/node_modules/@deepseek-a
 const SURFACES = [
   'job_output-wait',
   'bash-foreground',
+  'delegate-wait',
   'heavy-slot',
   'workflow',
   'job_kill',
@@ -37,6 +38,10 @@ interface Anchor {
 const ANCHORS: Record<Surface, Anchor> = {
   'job_output-wait': { file: resolve(DSH_PACKAGES, 'dsh-tool-jobs/lib/index.js'), pattern: 'releasedBy = "user steered"' },
   'bash-foreground': { file: resolve(DSH_PACKAGES, 'dsh-tool-bash/lib/index.js'), pattern: 'waitOnJob' },
+  // The delegation plugin lives outside this repository (a personal dotfiles
+  // plugin), so the anchor is the TUI half of the seam: the symbol the plugin
+  // publishes and this package asks. A rename on either side fails here.
+  'delegate-wait': { file: resolve(ROOT, 'src/dsh-adapter/tool-park.ts'), pattern: 'dsh.delegate-park' },
   'heavy-slot': { file: resolve(HOME, '.claude/bin/heavy-slot'), pattern: 'HEAVY_SLOT_TIMEOUT' },
   workflow: { file: resolve(DSH_PACKAGES, 'dsh-tool-workflow/lib/index.js'), pattern: 'jobs.start' },
   job_kill: { file: resolve(DSH_PACKAGES, 'dsh-tool-jobs/lib/index.js'), pattern: 'already-finished' },

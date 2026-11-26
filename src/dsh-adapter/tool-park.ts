@@ -20,9 +20,14 @@
  */
 export const TOOL_PARK = Symbol.for('dsh.tool-park')
 
-/** One parked call: the ticket's id and the command it was handed. */
+/** One parked call: the ticket's id and the label it was handed. */
 export interface ParkedToolCall {
   readonly callId: string
+  /**
+   * What the toast names: the command a shell call runs, or the description a
+   * delegated task was started with. Both read as "the work moved to the
+   * background" in the same sentence, so the card and the toast keep one shape.
+   */
   readonly command: string
 }
 
@@ -82,6 +87,42 @@ export function parkAnyJobWait(): ParkedWait | null {
     const parked = hub.requestAny()
     if (parked == null || typeof parked.callId !== 'string' || typeof parked.jobId !== 'string') return null
     return { callId: parked.callId, jobId: parked.jobId }
+  } catch {
+    return null
+  }
+}
+
+/**
+ * The delegation plugin's ticket — the third producer on the same human seam.
+ *
+ * A `delegate` call waits for its child inside the plugin, not inside a core
+ * tool, and it holds a delegation slot until the child settles. The plugin
+ * publishes this ticket only while the call waits; asking once makes the call
+ * return an ack at once, keeps the child running (and its slot held), and
+ * delivers the real handoff as a message when the child finishes. Same
+ * contract as the two tickets above: ask once, the wait ends, the producer
+ * keeps running.
+ */
+export const DELEGATE_PARK = Symbol.for('dsh.delegate-park')
+
+/** Hub the delegation plugin installs; `requestAny` is the only method used here. */
+interface DelegateParkHub {
+  requestAny?: () => { callId?: unknown; description?: unknown } | null | undefined
+}
+
+/**
+ * Move the oldest waiting delegation to the background.
+ * @returns the parked call (its id and the task description), or null when
+ *   nothing waits: no delegation plugin, or a call that has not started yet
+ *   (a call still queued for a slot has no ticket).
+ */
+export function parkAnyDelegation(): ParkedToolCall | null {
+  const hub = Reflect.get(globalThis, DELEGATE_PARK) as DelegateParkHub | undefined
+  if (hub === undefined || typeof hub.requestAny !== 'function') return null
+  try {
+    const parked = hub.requestAny()
+    if (parked == null || typeof parked.callId !== 'string') return null
+    return { callId: parked.callId, command: typeof parked.description === 'string' ? parked.description : '' }
   } catch {
     return null
   }

@@ -279,6 +279,14 @@ function isJobOutputWait(name: string | undefined, argsJson: string | undefined)
   }
 }
 
+/** A delegation call is a wait too: the child runs in the plugin, not inside
+ *  the call, and the background key parks it exactly like a foreground
+ *  command. Name-based because the row carries nothing else the UI may trust —
+ *  the delegation plugin owns the tool and its arguments. */
+function isDelegationCall(name: string | undefined): boolean {
+  return name === 'delegate' || name === 'delegate_fork'
+}
+
 const TEXT_BODY_MAX_LINES = 3
 /** Diff bodies cap at the upstream chat row's 8 (dsh-client-ui-tool's
  *  CHAT_DIFF_MAX_LINES) — denser information than log output. */
@@ -1190,10 +1198,10 @@ export function AssistantToolUseMessage({
     if (isRunning && body.length === 0) {
       body = [dim(t('tool-running-elapsed', { duration: formatDuration(Math.max(0, Date.now() - (tool.startedAt ?? Date.now()))) }))]
     }
-    // A shell card is the one thing the background key can move: say so on the
-    // card itself, where the wait is visible, instead of leaving the key to a
-    // README. The combo follows a remap of the background action.
-    if (isRunning && (tool.callView?.card === 'terminal' || isJobOutputWait(tool.name, tool.argsFull ?? tool.argsText))) {
+    // A shell card and a delegation card are what the background key can move:
+    // say so on the card itself, where the wait is visible, instead of leaving
+    // the key to a README. The combo follows a remap of the background action.
+    if (isRunning && (tool.callView?.card === 'terminal' || isJobOutputWait(tool.name, tool.argsFull ?? tool.argsText) || isDelegationCall(tool.name))) {
       body.push(dim(t('tool-running-park-hint', { key: comboDisplay(primaryComboString('toolPark'), true) })))
     }
   }

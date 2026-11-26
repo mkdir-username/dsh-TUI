@@ -719,7 +719,7 @@ export const SHORTCUT_FIELD_META: Record<ShortcutActionId, { label: string; zh?:
   toolPark: {
     label: 'Move to background shortcut',
     zh: '转入后台快捷键',
-    hintEn: d => `Move a waiting foreground shell call to the background: the turn stops waiting, the command keeps running as a job. With nothing waiting the key does nothing. Default: ${d}.`,
+    hintEn: d => `Move a waiting foreground call to the background: a shell command keeps running as a job, a delegated child keeps running and delivers its handoff as a message later. With nothing waiting the key does nothing. Default: ${d}.`,
     hintZh: d => `把等待中的前台 shell 调用转入后台：本轮不再等它，命令作为任务继续跑。没有等待中的调用时按键不做事。默认 ${d}。`,
   },
   sidePanel: {
