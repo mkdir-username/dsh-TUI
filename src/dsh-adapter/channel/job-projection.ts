@@ -2,7 +2,7 @@ import type { Agent } from '@deepseek-ai/dsh-agent'
 import { markChannelReadDirty } from '../../adapter/channel/read-view.js'
 import { t } from '../../i18n.js'
 import { BackgroundJobStore, formatJobDuration, type BackgroundJobState, type JobsRuntime } from '../jobs.js'
-import { parkAnyDelegation, parkAnyJobWait, parkAnyToolCall } from '../tool-park.js'
+import { parkAnyDelegation, parkAnyJobWait, parkAnyToolCall, parkAnyWorkflow } from '../tool-park.js'
 import type { ChannelOwner } from './owner.js'
 import { toolCommandOf } from './projection-helpers.js'
 import type { ChannelState, ChatRow, JobControl } from './types.js'
@@ -155,9 +155,10 @@ export function createJobProjection(
       return true
     },
     parkAny() {
-      // Bash first (the oldest seam), then a waiting delegation: one key, one
-      // meaning — move the oldest waiting foreground call to the background.
-      return parkAnyToolCall() ?? parkAnyDelegation()
+      // Bash first (the oldest seam), then a waiting delegation, then a
+      // workflow: one key, one meaning — move the oldest waiting foreground
+      // call to the background.
+      return parkAnyToolCall() ?? parkAnyDelegation() ?? parkAnyWorkflow()
     },
     parkWait() {
       return parkAnyJobWait()

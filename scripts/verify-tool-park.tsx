@@ -22,7 +22,7 @@
 process.env.FORCE_COLOR = '3'
 process.env.DSH_TUI_LANG = 'zh' // 中文文案断言必须在 i18n import 前固定语言。
 
-const [{ PassThrough, Writable }, React, { Terminal: XTerm }, { render }, { Chat }, { QuestionStore }, { t }, { comboDisplay, primaryComboString }, { settled, sleep, viewportLines }, { parkAnyDelegation, parkAnyToolCall }] =
+const [{ PassThrough, Writable }, React, { Terminal: XTerm }, { render }, { Chat }, { QuestionStore }, { t }, { comboDisplay, primaryComboString }, { settled, sleep, viewportLines }, { parkAnyDelegation, parkAnyToolCall, parkAnyWorkflow }] =
   await Promise.all([
     import('node:stream'),
     import('react'),
@@ -343,6 +343,36 @@ const BACKGROUND_CARD = toolRow({
   const empty = await press([DELEGATION], control, null, { cols: 120, rows: 30, fullscreen: true })
   check('an empty delegation park opens the side panel', prefs.getSidePanelOpen())
   check('an empty delegation park raises no toast', empty.notices.length === 0, JSON.stringify(empty.notices))
+}
+
+// ── a foreground workflow is the same kind of wait ─────────────────────────
+// The core patch publishes `dsh.workflow-park` while the tool waits for the
+// batch; the TUI asks it after the two core seams and the delegation ticket,
+// because a workflow is the rarest of the four.
+{
+  const WORKFLOW = toolRow({
+    name: 'workflow',
+    argsText: '{"script":"return 1","meta":{"name":"audit-sweep","description":"Audit the tree"}}',
+    callView: { card: 'generic', title: 'workflow: audit-sweep', kind: 'execute' },
+  })
+  const key = Symbol.for('dsh.workflow-park')
+  const installed = { requestAny: () => ({ callId: 'call-7', label: 'audit-sweep' }) }
+  ;(globalThis as Record<PropertyKey, unknown>)[key] = installed
+  const calls: Array<{ callId: string; command: string }> = []
+  const control = {
+    kill: () => false,
+    parkAny: () => {
+      const parked = parkAnyToolCall() ?? parkAnyDelegation() ?? parkAnyWorkflow()
+      if (parked !== null) calls.push(parked)
+      return parked
+    },
+  }
+  const seeded = await press([WORKFLOW], control)
+  check('a running workflow card advertises the background key', seeded.after.includes(HINT), seeded.after.split('\n').find(line => line.includes('audit-sweep')) ?? '')
+  check('the key asks the workflow seam', calls.length === 1 && calls[0]?.callId === 'call-7', JSON.stringify(calls))
+  check('the toast names the workflow', seeded.notices.some(text => text.includes('audit-sweep')), JSON.stringify(seeded.notices))
+  delete (globalThis as Record<PropertyKey, unknown>)[key]
+  check('the workflow seam reads nothing without a hub', parkAnyWorkflow() === null)
 }
 
 console.log(failed === 0 ? '\nAll tool-park checks passed.' : `\n${failed} check(s) failed.`)

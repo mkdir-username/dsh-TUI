@@ -24,9 +24,10 @@ export const TOOL_PARK = Symbol.for('dsh.tool-park')
 export interface ParkedToolCall {
   readonly callId: string
   /**
-   * What the toast names: the command a shell call runs, or the description a
-   * delegated task was started with. Both read as "the work moved to the
-   * background" in the same sentence, so the card and the toast keep one shape.
+   * What the toast names: the command a shell call runs, the description a
+   * delegated task was started with, or the name of a workflow. All read as
+   * "the work moved to the background" in the same sentence, so the card and
+   * the toast keep one shape.
    */
   readonly command: string
 }
@@ -123,6 +124,39 @@ export function parkAnyDelegation(): ParkedToolCall | null {
     const parked = hub.requestAny()
     if (parked == null || typeof parked.callId !== 'string') return null
     return { callId: parked.callId, command: typeof parked.description === 'string' ? parked.description : '' }
+  } catch {
+    return null
+  }
+}
+
+/**
+ * The workflow tool's ticket — the fourth producer on the same human seam.
+ *
+ * A foreground workflow waits for every subagent of the batch inside the core
+ * tool. That tool already knows how to hand the run to jobs (`canPromote` →
+ * `startBackgroundRun`), it just has no way to be told "now"; the core patch
+ * `patch-dsh-workflow-steer.mjs` publishes this ticket while the call waits.
+ * Same contract as the other three: ask once, the wait ends, the run lives on.
+ */
+export const WORKFLOW_PARK = Symbol.for('dsh.workflow-park')
+
+/** Hub the workflow core patch installs; `requestAny` is the only method used here. */
+interface WorkflowParkHub {
+  requestAny?: () => { callId?: unknown; label?: unknown } | null | undefined
+}
+
+/**
+ * Move the oldest waiting foreground workflow to the background.
+ * @returns the parked call (its id and the workflow name), or null when
+ *   nothing waits: no core patch, or a run that already settled.
+ */
+export function parkAnyWorkflow(): ParkedToolCall | null {
+  const hub = Reflect.get(globalThis, WORKFLOW_PARK) as WorkflowParkHub | undefined
+  if (hub === undefined || typeof hub.requestAny !== 'function') return null
+  try {
+    const parked = hub.requestAny()
+    if (parked == null || typeof parked.callId !== 'string') return null
+    return { callId: parked.callId, command: typeof parked.label === 'string' ? parked.label : '' }
   } catch {
     return null
   }
