@@ -89,11 +89,13 @@ if (phraseBody === undefined) {
 // as wrong as a missing one, so the test reads it from the compiled source.
 const firstOutputMs = Number((source.match(/const RP_FIRST_OUTPUT_MS = ([\d_]+)/)?.[1] ?? '').replaceAll('_', ''))
 check('the no-output bound is two minutes', firstOutputMs === 120_000, String(firstOutputMs))
-const abortPhrase = new Function('RP_TIMEOUT_MS', 'RP_FIRST_OUTPUT_MS', `${phraseBody}\nreturn abortPhrase`)(15 * 60 * 1000, firstOutputMs)
+const timeoutMinutes = Number(source.match(/const RP_TIMEOUT_MS = (\d+) \* 60 \* 1000/)?.[1] ?? '')
+check('the restruct-plan bound outlasts an audited plan', timeoutMinutes === 25, String(timeoutMinutes))
+const abortPhrase = new Function('RP_TIMEOUT_MS', 'RP_FIRST_OUTPUT_MS', `${phraseBody}\nreturn abortPhrase`)(timeoutMinutes * 60 * 1000, firstOutputMs)
 check('cancel names the user', abortPhrase('user', new Error('user cancelled compaction')) === 'отменён пользователем (Esc)', abortPhrase('user', new Error('x')))
 check('settle names the switch', abortPhrase('switch', new Error('session switch')) === 'прерван сменой сессии', abortPhrase('switch', new Error('x')))
 check('disposal names the closed agent', abortPhrase('disposed', new Error('agent disposed')) === 'прерван: агент закрыт', abortPhrase('disposed', new Error('x')))
-check('timeout names the bound', abortPhrase('timeout', new Error('TimeoutError')) === 'не уложился в 15 минут', abortPhrase('timeout', new Error('x')))
+check('timeout names the bound', abortPhrase('timeout', new Error('TimeoutError')) === `не уложился в ${timeoutMinutes} минут`, abortPhrase('timeout', new Error('x')))
 check('an unknown abort keeps its reason', abortPhrase('signal', new Error('boom')) === 'boom')
 check('a reasonless abort stays neutral', abortPhrase('signal', undefined) === 'отмена')
 check(

@@ -225,7 +225,11 @@ export function createManualCompaction(
     return undefined
   }
   const RP_PROMPT = 'Пользователь набрал /compact: это его явная команда выполнить restruct-plan сейчас, до сжатия контекста. Ты — форк этой сессии, запущенный TUI, история диалога тебе видна. Вызови Skill restruct-plan для плана .dev/<slug>/, над которым шла работа, и запиши на диск всё, что знает только диалог: прогресс, грабли, тупики, проверенные факты. Перед записью в .dev/ прочитай каталог плана — его сторожит гейт dev-docs. Вопросов не задавай, ответить некому. Ничего не коммить и не пушить. Последней строкой ответа выведи ровно RP_DONE <slug> или RP_SKIP <причина>.'
-  const RP_TIMEOUT_MS = 15 * 60 * 1000
+  /** The bound is a guard against a hung fork, not a work budget: a fork that
+   *  audits the plan it just wrote spends minutes in the queue on top of the
+   *  write itself. Two live cycles were cut at fifteen minutes on 2026-11-26,
+   *  the second one six seconds after its receipt arrived. */
+  const RP_TIMEOUT_MS = 25 * 60 * 1000
   /** A fork that has produced nothing after this long is not slow, it is stuck:
    *  measured first-token latency on real forks is 19.5s (worst inter-step gap 43.9s). */
   const RP_FIRST_OUTPUT_MS = 120_000
