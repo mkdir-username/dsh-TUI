@@ -8,9 +8,9 @@ a human and the agent may do about it.
 |---|---|---|---|---|---|
 | `job_output-wait` | read card "Read output from background job …" | `jobs.wait`: settlement, timeout, or a user steer | up to 10 min (`timeout_ms` clips 900000→600000) | JOB | ⌘B / Ctrl+B on the waiting card |
 | `bash-foreground` | terminal card `❯ command` | the foreground call waits on its process (`waitOnJob`) | as long as the command runs | PROC | ⌘B / Ctrl+B (core patch `patch-dsh-tool-park.mjs`) |
-| `delegate-wait` | delegation card (`delegate`, `delegate_fork`) | the call awaits the child's result inside the delegation plugin; the child holds a delegation slot meanwhile | up to 15 min (`delegateTimeoutMs`) | TREE | ⌘B / Ctrl+B (plugin seam `dsh.delegate-park`); a call still queued for a slot has no ticket |
+| `delegate-wait` | delegation card (`delegate`, `delegate_fork`) | the call awaits the child's result inside the delegation plugin; the child holds a delegation slot meanwhile | up to 15 min (`delegateTimeoutMs`) | TREE | ⌘B / Ctrl+B (plugin seam `dsh.delegate-park`), also while the call is still queued for a slot |
 | `heavy-slot` | terminal card | the slot queue waits for the machine to calm down, then the run | up to 9 min of queue | PROC+QUEUE | ⌘B after it started; the right path is `run_in_background` |
-| `workflow` | workflow card with phases | waits for every subagent of the batch | minutes | TREE | none: the batch result *is* the answer |
+| `workflow` | workflow card with phases | waits for every subagent of the batch; the run keeps going after the call returns | minutes | TREE | ⌘B / Ctrl+B (core patch `patch-dsh-workflow-steer.mjs`, symbol `dsh.workflow-park`) |
 | `job_kill` | read card | `stopping` until the producer actually stops | seconds | SHORT | — |
 | `ask_user_question` | question dialog | waits for a human; `pending` is not a skip | unbounded | HUMAN | answer / Esc |
 | `mcp-long-call` | tool card (`gemini_ask`, `session_prompt`, deploys) | network wait bounded by the configured deadline | 60–180 s | NET | only by lowering the deadline |

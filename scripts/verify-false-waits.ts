@@ -35,18 +35,23 @@ interface Anchor {
   readonly pattern: string
 }
 
-const ANCHORS: Record<Surface, Anchor> = {
-  'job_output-wait': { file: resolve(DSH_PACKAGES, 'dsh-tool-jobs/lib/index.js'), pattern: 'releasedBy = "user steered"' },
-  'bash-foreground': { file: resolve(DSH_PACKAGES, 'dsh-tool-bash/lib/index.js'), pattern: 'waitOnJob' },
+// A surface may have more than one anchor: the workflow wait lives in the
+// installed package, while its detach lives in this repository's seam.
+const ANCHORS: Record<Surface, readonly Anchor[]> = {
+  'job_output-wait': [{ file: resolve(DSH_PACKAGES, 'dsh-tool-jobs/lib/index.js'), pattern: 'releasedBy = "user steered"' }],
+  'bash-foreground': [{ file: resolve(DSH_PACKAGES, 'dsh-tool-bash/lib/index.js'), pattern: 'waitOnJob' }],
   // The delegation plugin lives outside this repository (a personal dotfiles
   // plugin), so the anchor is the TUI half of the seam: the symbol the plugin
   // publishes and this package asks. A rename on either side fails here.
-  'delegate-wait': { file: resolve(ROOT, 'src/dsh-adapter/tool-park.ts'), pattern: 'dsh.delegate-park' },
-  'heavy-slot': { file: resolve(HOME, '.claude/bin/heavy-slot'), pattern: 'HEAVY_SLOT_TIMEOUT' },
-  workflow: { file: resolve(DSH_PACKAGES, 'dsh-tool-workflow/lib/index.js'), pattern: 'jobs.start' },
-  job_kill: { file: resolve(DSH_PACKAGES, 'dsh-tool-jobs/lib/index.js'), pattern: 'already-finished' },
-  ask_user_question: { file: resolve(DSH_PACKAGES, 'dsh-tool-ask-user/lib/index.js'), pattern: 'pendingNotice' },
-  'mcp-long-call': { file: resolve(HOME, '.dsh/cordis.patch.yml'), pattern: 'toolCallTimeouts' },
+  'delegate-wait': [{ file: resolve(ROOT, 'src/dsh-adapter/tool-park.ts'), pattern: 'dsh.delegate-park' }],
+  'heavy-slot': [{ file: resolve(HOME, '.claude/bin/heavy-slot'), pattern: 'HEAVY_SLOT_TIMEOUT' }],
+  workflow: [
+    { file: resolve(DSH_PACKAGES, 'dsh-tool-workflow/lib/index.js'), pattern: 'jobs.start' },
+    { file: resolve(ROOT, 'src/dsh-adapter/tool-park.ts'), pattern: 'dsh.workflow-park' },
+  ],
+  job_kill: [{ file: resolve(DSH_PACKAGES, 'dsh-tool-jobs/lib/index.js'), pattern: 'already-finished' }],
+  ask_user_question: [{ file: resolve(DSH_PACKAGES, 'dsh-tool-ask-user/lib/index.js'), pattern: 'pendingNotice' }],
+  'mcp-long-call': [{ file: resolve(HOME, '.dsh/cordis.patch.yml'), pattern: 'toolCallTimeouts' }],
 }
 
 let failed = 0
@@ -62,9 +67,10 @@ if (!existsSync(DOC)) {
   const catalog = readFileSync(DOC, 'utf8')
   for (const surface of SURFACES) {
     check(`catalog row: ${surface}`, catalog.includes(`| \`${surface}\``))
-    const anchor = ANCHORS[surface]
-    const source = existsSync(anchor.file) ? readFileSync(anchor.file, 'utf8') : ''
-    check(`anchor: ${surface}`, source.includes(anchor.pattern), anchor.file)
+    for (const anchor of ANCHORS[surface]) {
+      const source = existsSync(anchor.file) ? readFileSync(anchor.file, 'utf8') : ''
+      check(`anchor: ${surface}`, source.includes(anchor.pattern), anchor.file)
+    }
   }
 }
 
