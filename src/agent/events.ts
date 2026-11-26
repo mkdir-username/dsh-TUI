@@ -1,5 +1,5 @@
 /**
- * The Agent Domain event vocabulary (docs/agent-backend-design.md): one
+ * The Agent Domain event vocabulary: one
  * superset every backend translator emits and the shared projector
  * (`src/channel/projection.ts`) consumes. Replay and live use the same
  * vocabulary; a backend that lacks a capability emits nothing for it rather

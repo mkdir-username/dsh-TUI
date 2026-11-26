@@ -63,7 +63,7 @@ Resuming a DSH session preserves its recorded reasoning effort (or its live sele
 - **Extensions** — browser interaction, computer use and more.
 - **Built for long sessions** — event-driven projection, virtualization, bounded caches.
 
-Keys and commands: [Interaction and commands](docs/interaction.en.md). Everything else: [documentation index](docs/README.md).
+Keys and commands: [Interaction and commands](docs/interaction.en.md). Everything else: [documentation index](docs/README.en.md).
 
 Plugin side panels stay enabled when unrelated settings change. Editing the enabled panel list still applies your explicit selection.
 
@@ -681,7 +681,7 @@ These three actions have no cancellation — the service offers none — so `esc
 - **Plugins** — [Admission and development](tui-profile/docs/plugin-admission-and-development.md) · [Seams](docs/plugins.en.md)
 - **Contribute** — [Contributing](docs/contributing.en.md) · [Roadmap](docs/roadmap.en.md) · [Community](docs/community-management.en.md)
 
-Everything, bilingual: [docs/README.md](docs/README.md).
+Everything: [docs/README.en.md](docs/README.en.md).
 
 ## Community
 
@@ -727,12 +727,6 @@ Details: [Permissions and security boundary](docs/architecture.en.md#permissions
   thumps, sleep Z's, and click hearts. dsh-ui-whale is the DeepSeek Harness
   web whale-pet plugin by [@lhh010](https://github.com/lhh010), BSD-3-Clause.
   Thank you for the art and the inspiration 🐋💜
-
-## Friends' Links
-
-Community, related projects, and companion tools built by friends:
-[see the links page](docs/links.md)
-
 
 ## Maintainers
 

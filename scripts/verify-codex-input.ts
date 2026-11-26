@@ -1,5 +1,5 @@
 /**
- * Codex session input (docs/codex-backend-design.md §5.7, D8, D9, C0 V6) on
+ * Codex session input (docs/codex-backend.en.md §5.7, D8, D9, C0 V6) on
  * the fake app-server: the four placements, the client follow-up queue
  * (FIFO, one turn at a time), steer and its fallback, `now`, the claim of a
  * user row by its client id (nothing optimistic), a failed turn start,

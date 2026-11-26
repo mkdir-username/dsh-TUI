@@ -2,7 +2,7 @@
  * verify-migrate-parse — 迁移源解析层回归（纯函数，合成 fixture，不读本机数据）。
  *
  * 覆盖 src/dsh-adapter/migrate/parse/ 与各源 *.parse.ts：注入识别与包装剥离、
- * 标题归一、工具调用配对，以及 docs/foreign-session-tabs-design.md §4.3 的
+ * 标题归一、工具调用配对，以及 docs/migrate.en.md §4.3 的
  * 逐源规则。fixture 全部是手写的合成数据，不提交任何真实会话内容。
  * 事件落盘与续聊链路见 scripts/verify-migrate.mjs。
  *

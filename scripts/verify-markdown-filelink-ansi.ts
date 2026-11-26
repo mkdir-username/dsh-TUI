@@ -170,7 +170,7 @@ try {
   )
 
   // ── 折行不丢色 ──────────────────────────────────────────────────────
-  // 代码注释与 docs/themes.md 曾把「真彩链接折行处丢色」写成已知取舍；实测
+  // 代码注释与 docs/themes.en.md 曾把「真彩链接折行处丢色」写成已知取舍；实测
   // wrap-ansi 10 在续行重发 SGR 并补齐 OSC 8，取舍不成立。这里钉住
   // 渲染器真正使用的折行入口（wrap 样式 = trim:false + hard:true）。
   setActiveThemeName('dark')

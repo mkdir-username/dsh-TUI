@@ -1,8 +1,8 @@
 // Maintainer probe, not a regression test and not part of CI.
 //
-// The C0 verification checklist of docs/codex-backend-design.md §12.1
+// The C0 verification checklist of docs/codex-backend.en.md §12.1
 // (V1–V17): one minimal probe per item against a real `codex app-server`,
-// conclusions recorded in docs/codex-backend-progress.md. Every run is
+// conclusions recorded in docs/codex-backend.en.md. Every run is
 // pinned by scripts/lib/codex-cheap-only.mjs (throwaway CODEX_HOME, relay
 // provider by `-c`, gpt-5.6-terra at effort low).
 //

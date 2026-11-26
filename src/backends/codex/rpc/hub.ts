@@ -1,6 +1,6 @@
 /**
  * `CodexHub`: one `codex app-server` child and one JSON-RPC connection shared
- * by every Codex thread of this TUI process (docs/codex-backend-design.md
+ * by every Codex thread of this TUI process (docs/codex-backend.en.md
  * D2, §5.3).
  *
  * - Handshake: `initialize` (client info, experimental API, the high-rate

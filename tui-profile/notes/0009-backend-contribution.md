@@ -4,7 +4,7 @@
 
 **Coordinates:** `tui.dsh/v1alpha1` `Backend`
 
-**Base protocol:** [`protocols/tui-contributions.js`](../protocols/tui-contributions.js)（definition、validator 与 handler assertion），宿主侧的分层与实现说明见 [`docs/agent-backend-design.md`](../../docs/agent-backend-design.md)。
+**Base protocol:** [`protocols/tui-contributions.js`](../protocols/tui-contributions.js)（definition、validator 与 handler assertion），宿主侧的分层与实现说明见 [`ADAPTER.md`](../../ADAPTER.md)。
 
 ## Scope
 
@@ -129,10 +129,10 @@ Conformance requirement 是 `TUI-BACKEND-001`（记在 `conformance/requirements
 
 1. **只增不删**：已发布的字段与方法的语义不改。导出面自 B-2 / PR #1449（2026-10-10 合入）起算，**第一版冻结在本节所述的这次发布**。
 2. **破坏性变更发新坐标**（`apiVersion + kind`）：不得偷改老坐标的语义。
-3. **先弃用再移除**：在一个**已发布的次版本**里先给弃用告警，之后才移除，且**移除条件必须可判定**——模板是 `docs/plugins.md` 的 `minimal` → `minimalUi`（那条写着"移除条件（可判定）：v0.13"，执行体是 `scripts/verify-minimal-ui-naming.ts`）。
+3. **先弃用再移除**：在一个**已发布的次版本**里先给弃用告警，之后才移除，且**移除条件必须可判定**——模板是 `docs/plugins.en.md` 的 `minimal` → `minimalUi`（那条写着"移除条件（可判定）：v0.13"，执行体是 `scripts/verify-minimal-ui-naming.ts`）。
 4. **形状由 digest + conformance + 门禁钉住**：改了正文却不换坐标 = `profileHash` 漂移 = 直接红（见「破坏性变更怎么被发现」）。
 
-**同批纳入承诺的前端缝**：稳定候选那六条（接缝六 设置区块 / 八 全屏场景 / 十 托管对话框 / 十一 状态行 / 十二 快捷键 / 十三 条目渲染器，清单见 `docs/plugins.md` 的稳定性表）。**不在冻结范围**：实验面（toast、侧栏 Panel）与「新能力还能不能加」这个天花板——新能力仍可加，只是加完不许删、不许改语义。
+**同批纳入承诺的前端缝**：稳定候选那六条（接缝六 设置区块 / 八 全屏场景 / 十 托管对话框 / 十一 状态行 / 十二 快捷键 / 十三 条目渲染器，清单见 `docs/plugins.en.md` 的稳定性表）。**不在冻结范围**：实验面（toast、侧栏 Panel）与「新能力还能不能加」这个天花板——新能力仍可加，只是加完不许删、不许改语义。
 
 ### 承诺（冻结范围内，可以依赖）
 
@@ -155,7 +155,7 @@ Conformance requirement 是 `TUI-BACKEND-001`（记在 `conformance/requirements
 | 4 | `lastSession` 的接口与恢复目标的传递方式（含 `DSH_TUI_RESUME_BACKEND` 这个 env 名）：**语义进协议，接口不进** | 「Resume semantics」节 |
 | 5 | 会话记录 / transcript 的真源归属；`SessionCatalog.snapshotKey()` 只用于首屏快照，**永不作为 transcript 权威** | `src/agent/backend.ts` |
 | 6 | **不会再加取值**：取值集合只增不删，来源策略演进 = 加取值；`BACKEND_CONFIRMATION_POLICIES` 这个常量今天也不在公开导出面上 | definition |
-| 7 | 后端自带文案的**字面量**：与宿主共用的那批平台文案已收口为**单一数据源**、由跨字典门禁钉住（改一处不会再漏另一处）；各后端**自己**的文案字面量仍不承诺——改它不算 breaking | `src/backends/shared/platform-text.ts` + `verify-i18n` 的跨字典段；「文案与公开面」见 `docs/agent-backend-design.md` |
+| 7 | 后端自带文案的**字面量**：与宿主共用的那批平台文案已收口为**单一数据源**、由跨字典门禁钉住（改一处不会再漏另一处）；各后端**自己**的文案字面量仍不承诺——改它不算 breaking | `src/backends/shared/platform-text.ts` + `verify-i18n` 的跨字典段；「文案与公开面」见 `ADAPTER.md` |
 
 ### 破坏性变更怎么被发现
 

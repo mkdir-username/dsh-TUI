@@ -1,5 +1,5 @@
 /**
- * CodexHub against the fake app-server (docs/codex-backend-design.md §5.3,
+ * CodexHub against the fake app-server (docs/codex-backend.en.md §5.3,
  * §10.3): handshake parameters and opt-outs, routing by thread (a subagent
  * thread routed to its parent's sink, thread-less traffic to the global
  * listeners), server requests keyed by connection generation (redelivery

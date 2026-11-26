@@ -48,7 +48,7 @@ dsh-tui-vscode 是 dsh-TUI 的 VS Code companion 扩展。它在 dsh 生态里�
 - **2026-08-21 官方单插件校验入口（PR #5）**：admission 算法抽为共用核心 `admission-core.js`，新增 `npm run validate:manifest` 一键复核本试点。
 - **2026-08-21 「RFC 0009」（供应链事件响应）曾在 `dsh-ecosystem-spec` 以 PR #8 提议中**（历史记录）：该提案没有进入仓内 `notes/`（`notes/` 只到 `0008`），撤销注册表与准入清单的方向如需继续，应回到上游 [dsh-std](https://github.com/T-Auto/dsh-std) 或本仓 issue 重新提出；本 Note 仅作留档。
 - **2026-08-18~22 README 门面重写**：生态可见性转由 tui 插件市场承担；规范本体同期零漂移（当时的 `dsh-ecosystem-spec` spec / registry / schemas / submodule 均未动）。
-- **2026-08-23 dsh-TUI 主仓宿主侧落地确认**：`docs/plugins.md` 载明校验/协商库、Host Descriptor 构建、授权存储、效果台账与 `/plugins` 诊断面已落地；加载强制仍归 dsh CLI Loader。
+- **2026-08-23 dsh-TUI 主仓宿主侧落地确认**：`docs/plugins.en.md` 载明校验/协商库、Host Descriptor 构建、授权存储、效果台账与 `/plugins` 诊断面已落地；加载强制仍归 dsh CLI Loader。
 
 ## 收敛计划
 

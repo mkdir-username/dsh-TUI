@@ -1,5 +1,5 @@
 # 证据化行为与流程判据
-历史维护者审查归纳仅供发现成文红线外的重复缺陷，不是永久真源；每次核当前代码、依赖源码、目标 head 及 AGENTS.md、ADAPTER.md、docs/contributing.md。下称“红线”均指 references/redlines.md，“验证映射”均指 references/verification-map.md；行为为 A 轴，契约/安全为 B/C 轴，流程为 D 轴。
+历史维护者审查归纳仅供发现成文红线外的重复缺陷，不是永久真源；每次核当前代码、依赖源码、目标 head 及 AGENTS.md、ADAPTER.md、docs/contributing.en.md。下称“红线”均指 references/redlines.md，“验证映射”均指 references/verification-map.md；行为为 A 轴，契约/安全为 B/C 轴，流程为 D 轴。
 
 ## A1｜退出、清理与资源生命周期｜❌
 资源 owner、幂等清理、成功/错误/信号/超时覆盖、退出/teardown 区分、拆树 ref 与退出闩锁以红线 4 为唯一真源；另核光标单一 owner、disposer 的 token-safe（旧清理不得误销新资源）、跨 agent 资源仅真正会话释放时关闭、临时敏感文件消费后删或明生命周期。可选链静默漏清理、单 agent 销共享资源、teardown 触发进程退出均阻断。

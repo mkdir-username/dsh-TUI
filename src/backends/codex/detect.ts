@@ -1,5 +1,5 @@
 /**
- * Codex backend detection (docs/codex-backend-design.md §5.4): is a usable
+ * Codex backend detection (docs/codex-backend.en.md §5.4): is a usable
  * `codex` installed, is it a supported version, and is there a credential
  * it could use — all without starting the app-server or touching the
  * network. Never throws.

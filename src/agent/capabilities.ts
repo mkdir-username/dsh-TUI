@@ -1,5 +1,5 @@
 /**
- * Typed optional session capabilities (docs/agent-backend-design.md).
+ * Typed optional session capabilities.
  * Every member is optional: absence means the backend does not support it,
  * and the channel says so explicitly instead of a silent no-op.
  *

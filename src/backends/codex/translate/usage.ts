@@ -1,5 +1,5 @@
 /**
- * Token usage and rate limits (docs/codex-backend-design.md §7.5).
+ * Token usage and rate limits (docs/codex-backend.en.md §7.5).
  *
  * `thread/tokenUsage/updated` reports `last` (the latest model call) and
  * `total`. OpenAI counts cached and cache-written prompt tokens inside

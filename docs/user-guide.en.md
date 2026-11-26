@@ -1,7 +1,5 @@
 # dsh-TUI User Guide
 
-[Documentation index](README.md) · [中文](user-guide.md)
-
 > A user manual for day-to-day use: launch, keys, commands, session workflow, UI indicators, and tips.
 
 ## Table of contents
@@ -238,7 +236,7 @@ A "History only" row offers edit and new here; rename and remove apply only to r
 - Select code in the editor → a `⧉ N lines selected` badge appears **live** under the input, and the selected lines are **auto-attached** to context on submit.
 - The transcript shows a 「⧉ Selected N lines from <相对路径>」
   indicator line (text from the editor, unsaved changes included).
-- No IDE installed/connected → skipped automatically, nothing else affected (see [vscode.md](vscode.md)).
+- No IDE installed/connected → skipped automatically, nothing else affected (see [vscode.en.md](vscode.en.md)).
 
 **History search (Ctrl+R)**
 Lists only inputs from the current project (the session's working directory), plus unscoped history from before the upgrade.
@@ -467,7 +465,7 @@ Command-line resume: `dsh-tui --resume` (last session) / `dsh-tui --resume <id>`
 launch selected**: a backend with no last session, or a derived target belonging to a
 different backend, refuses with a clear error and exit code 1 — no silent cold start, no new
 session (safe mode's "retry normal startup" degrades to a warning plus a cold start, see the
-[README](../README.md)).
+repository README).
 
 ### 4.2 Time-travel rewind (double-press Esc)
 

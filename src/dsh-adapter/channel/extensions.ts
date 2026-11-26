@@ -159,7 +159,7 @@ export function attachDshExtensions(
   let backgroundCurrentAction!: () => Promise<BackgroundResult>
   let agentView!: ReturnType<typeof createAgentViewProjection>
 
-  // The DSH child transcript source (docs/dsh-child-transcript.md). Built
+  // The DSH child transcript source. Built
   // only when the host composition serves session persistence at attach;
   // without it there is no history method, so the shared transcript tab
   // never renders for this session. Every dependency is re-resolved per

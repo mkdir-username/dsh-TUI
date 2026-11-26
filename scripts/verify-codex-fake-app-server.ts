@@ -1,6 +1,6 @@
 /**
  * Self-test of the fake Codex app-server (scripts/lib/codex-fake-app-server.ts,
- * docs/codex-backend-design.md §10.1) through a minimal JSON-RPC client
+ * docs/codex-backend.en.md §10.1) through a minimal JSON-RPC client
  * written here, independent of the backend's own rpc layer: scripted
  * answers, errors, deferred replies, server requests waiting for the
  * client, crash reporting, and the replay of a recorded wire fixture

@@ -2014,7 +2014,7 @@ const dict = {
   'team-failure': { zh: '团队记录被拒：{{failure}}', en: 'Team record rejected: {{failure}}' },
 
   // ── /team：团队状态与开关。旧宿主（≤0.2.2-rc.1）开关是 /plugin enable|disable；
-  //    rc.2+ 由 /team on|off 写会话级选择（见 docs/agent-teams-design.md「开关机制」）──
+  //    rc.2+ 由 /team on|off 写会话级选择（见 docs/user-guide.en.md「开关机制」）──
   'team-cmd-unavailable': { zh: '当前内核没有 Agent Teams。', en: 'The current kernel has no Agent Teams.' },
   'team-cmd-usage': { zh: '未知子命令「{{sub}}」。用法：/team [status|on|off]', en: 'Unknown subcommand "{{sub}}". Usage: /team [status|on|off]' },
   'team-cmd-mode': { zh: '团队模式：{{state}}', en: 'Team mode: {{state}}' },

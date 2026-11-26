@@ -1,5 +1,5 @@
 /**
- * Version contract of the Codex backend (docs/codex-backend-design.md D3).
+ * Version contract of the Codex backend (docs/codex-backend.en.md D3).
  * There is no npm dependency: the backend drives the user's own `codex`
  * binary over `codex app-server`, and the protocol types under
  * `protocol/generated/` are that binary's generator output, vendored by

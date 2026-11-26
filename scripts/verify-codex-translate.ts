@@ -1,5 +1,5 @@
 /**
- * Codex translator gate (docs/codex-backend-design.md §7, §10.3): every
+ * Codex translator gate (docs/codex-backend.en.md §7, §10.3): every
  * thread of every scrubbed wire fixture in scripts/fixtures/codex/wire/
  * runs through the live translator and the one shared projector, and the
  * result (event sequence, transcript rows, status-relevant state) must equal

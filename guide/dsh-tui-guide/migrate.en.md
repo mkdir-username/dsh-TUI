@@ -1,7 +1,5 @@
 # Session migration: import conversations from other coding agents
 
-[Documentation index](README.md) · [简体中文](migrate.md)
-
 Bring Claude Code, Codex, OMP, zcode, and Grok Build conversation histories
 into the DSH session store. After importing, `/resume` browses and restores
 them by their original working directory — switching agents no longer costs

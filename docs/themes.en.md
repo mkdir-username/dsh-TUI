@@ -1,7 +1,5 @@
 # Themes
 
-[Documentation index](README.md) · [简体中文](themes.md)
-
 ## Built-in themes
 
 dsh-TUI ships two palette families (six themes) plus an `auto` pseudo-theme:
@@ -126,7 +124,7 @@ Available color keys by purpose:
 - Subagent messages (cont.): `subagentStatusCompleted`, `subagentStatusFailed`
 
 When the file declares `name`, its filename remains a loading alias. See the
-`Theme` type in [`src/theme.ts`](../src/theme.ts) for every color key.
+`Theme` type in `src/theme.ts` for every color key.
 
 A few keys carry behavior worth knowing:
 
@@ -176,7 +174,7 @@ export function apply(ctx: Context): void {
 - On an older profile without `tuiThemes`, the plugin degrades silently and
   static themes remain unaffected.
 
-See the [Plugin Admission and Development Guide](../tui-profile/docs/plugin-admission-and-development.md)
+See `tui-profile/docs/plugin-admission-and-development.md`
 for the full key list, legacy-key mapping, and registration contract.
 
 ## Color formats
@@ -224,5 +222,5 @@ When developing the theme subsystem, run:
 node --import tsx/esm scripts/verify-themes.mjs
 ```
 
-See [Architecture and limitations](architecture.en.md) for terminal capability
+See `docs/architecture.en.md` for terminal capability
 and renderer details.

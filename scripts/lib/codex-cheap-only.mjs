@@ -1,6 +1,6 @@
 /**
  * Cost rule for every real Codex run (live tests, probes, fixture
- * recordings; docs/codex-backend-design.md D16, §10.6): the relay's
+ * recordings; docs/codex-backend.en.md D16, §10.6): the relay's
  * `gpt-5.6-terra` (fallback `gpt-6-sol`) at reasoning effort `low`, nothing
  * else, and never the user's own `~/.codex`.
  *

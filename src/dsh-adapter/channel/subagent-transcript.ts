@@ -1,5 +1,5 @@
 /**
- * DSH child transcript source (docs/dsh-child-transcript.md): the DSH
+ * DSH child transcript source: the DSH
  * implementation of the backend-neutral `SubagentControl.history` contract,
  * next to Claude's on-disk child lane. Reads one direct child's own durable
  * session log through the public persistence range API only

@@ -1,5 +1,5 @@
 /**
- * Which kernel the package's entry boots (docs/standalone-host-design.md).
+ * Which kernel the package's entry boots; the host contract is in ADAPTER.md.
  * The launcher repeats the cheap half inline; the entry decides again here
  * with the profile patch's Config row, which only it can afford to read.
  */

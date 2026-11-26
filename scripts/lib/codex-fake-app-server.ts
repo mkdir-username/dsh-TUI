@@ -1,6 +1,6 @@
 /**
  * An in-process fake `codex app-server` for the Codex backend regressions
- * (docs/codex-backend-design.md §10.1). It implements the backend's
+ * (docs/codex-backend.en.md §10.1). It implements the backend's
  * `Transport` (src/backends/codex/rpc/transport.ts) and plugs into the hub
  * through its transport factory: no process, no network.
  *

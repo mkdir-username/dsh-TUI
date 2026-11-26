@@ -1,4 +1,4 @@
-# PR 白名单门禁——docs/contributing.md「如何贡献」的 CI 落地。
+# PR 白名单门禁——docs/contributing.en.md「如何贡献」的 CI 落地。
 # 逻辑在 .github/scripts/pr-intake/，本文件只编排。
 #
 # pull_request_target 才能关别人仓库推过来的 PR。必须 checkout 默认分支，

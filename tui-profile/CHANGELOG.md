@@ -41,7 +41,7 @@
   面板仍是实验面：首帧无语法高亮、面板不可选择/复制、块级公式跟随用户的
   `mathRendering`；`ui.Markdown` 沿用聊天口径（先剥 prompt-analysis 标签块），
   `ui.CodeBlock` 不剥这层（原始代码逐行保留）。限制与记忆化口径写在
-  `docs/plugins.md` 的侧栏 Panel 段。
+  `docs/plugins.en.md` 的侧栏 Panel 段。
 
 ## 2026-10-19（接缝十一：底栏插件字段）
 
@@ -134,7 +134,7 @@
 - [feed/README.md](feed/README.md) 的「provenance（一票否决的缝）」与准入指南对齐：只否决
   不放行、不一致即降级、缺席不等于失败、将来只接否决不引入"官方认证"，并去掉对仓外 roadmap
   条目的引用。
-- [用户文档](https://github.com/ccch1mneyyy/dsh-TUI/blob/main/docs/plugins.md)（中英两版）的
+- [用户文档](https://github.com/ccch1mneyyy/dsh-TUI/blob/main/docs/plugins.en.md)（中英两版）的
   provenance 已知缺口改为指向准入指南的新节。
 
 本轮只改文档：协议正文、`registry/`、contract profile、fixture 与 `profileHash` 均未变，没有
@@ -180,7 +180,7 @@
      2026-10-10 合入起算；**第一版冻结在本条目**）。
   2. **破坏性变更发新坐标**（`apiVersion + kind`），不得偷改老坐标的语义。
   3. **先弃用再移除**：在一个**已发布的次版本**里先给弃用告警，之后才移除，且
-     **移除条件必须可判定**（模板 = `docs/plugins.md` 的 `minimal` → `minimalUi`，
+     **移除条件必须可判定**（模板 = `docs/plugins.en.md` 的 `minimal` → `minimalUi`，
      执行体 `scripts/verify-minimal-ui-naming.ts`）。
   4. **形状由 digest + conformance + 门禁钉住**：改了 profile 正文却不换坐标 =
      `profileHash` 漂移 = 直接红。
@@ -271,7 +271,7 @@
 ### Changed
 
 - dsh-tui 私有坐标统一为 `tui.dsh/v1alpha1`，Adapter Note 中 D-1 已关闭；
-- 将 dsh-TUI `docs/plugins.md` / `plugins.en.md` 合并到本仓库 `docs/`，并在 README 文档地图中挂链。
+- 将 dsh-TUI `docs/plugins.en.md` / `plugins.en.md` 合并到本仓库 `docs/`，并在 README 文档地图中挂链。
 
 ## 2026-08-18（UI surface 分层）
 

@@ -1,6 +1,6 @@
 # CodeRabbit 配置。目标：把它当成只报正确性问题的第二双眼睛，而不是风格 lint。
 # Schema: https://storage.googleapis.com/coderabbit_public_assets/schema.v2.json
-# 仓库自己的规则在 AGENTS.md / ADAPTER.md / docs/contributing.md，下面的
+# 仓库自己的规则在 AGENTS.md / ADAPTER.md / docs/contributing.en.md，下面的
 # path_instructions 只是把那些规则里「机器能核对」的部分复述给它。
 
 # 不钉死 language：PR 标题与正文用什么语言，评论就用什么语言（与 PR 入口
@@ -113,4 +113,4 @@ knowledge_base:
     filePatterns:
       - "AGENTS.md"
       - "ADAPTER.md"
-      - "docs/contributing.md"
+      - "docs/contributing.en.md"

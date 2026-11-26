@@ -1,6 +1,6 @@
 /**
  * Codex thread items → Agent Domain events: the one mapping live
- * notifications and history replay share (docs/codex-backend-design.md §7.1).
+ * notifications and history replay share (docs/codex-backend.en.md §7.1).
  * `live.ts` calls {@link itemEvents} on `item/started` / `item/completed`
  * and adds the stream deltas; `replay.ts` calls it with `started` then
  * `completed` for every item of every recorded turn. Any mapping lives here

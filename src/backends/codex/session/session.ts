@@ -1,5 +1,5 @@
 /**
- * One Codex thread as an `AgentSession` (docs/codex-backend-design.md §5.6):
+ * One Codex thread as an `AgentSession` (docs/codex-backend.en.md §5.6):
  * the thread's traffic on the shared hub connection goes through the live
  * translator to the channel; input, cancellation and prompts go back as
  * `turn/*` requests and server-request answers.

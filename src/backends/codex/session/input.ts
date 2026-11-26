@@ -1,6 +1,6 @@
 /**
  * Input placement, the client follow-up queue and cancel receipts of one
- * Codex thread (docs/codex-backend-design.md §5.7, D8, D9).
+ * Codex thread (docs/codex-backend.en.md §5.7, D8, D9).
  *
  * - Idle: every placement starts a turn (`turn/start`).
  * - A turn running (or starting): `steer` joins it (`turn/steer` with the

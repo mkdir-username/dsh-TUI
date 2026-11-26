@@ -6,7 +6,7 @@
  *   （窄终端自动截断）；
  * - 文案只讲"用户能立刻用上"的操作，不讲实现细节；
  * - id 稳定（面板按 id 去重/排序），group 用于 `/tips` 面板分组展示；
- * - 与 docs/user-guide.md 同源：文档是详版，这里是精版，覆盖全部功能面。
+ * - 与 docs/user-guide.en.md 同源：文档是详版，这里是精版，覆盖全部功能面。
  */
 
 export type TipGroup = 'keys' | 'commands' | 'workflow' | 'display' | 'pitfalls'

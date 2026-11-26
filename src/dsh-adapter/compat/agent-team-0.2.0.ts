@@ -2,7 +2,7 @@
  * Agent Teams 0.2.0 durable shapes, read as their 0.2.1 equivalents.
  *
  * The readers that meet these shapes call in here first, so the rest of the
- * adapter knows only the 0.2.1 forms (docs/agent-teams-design.md「兼容（0.2.0）」):
+ * adapter knows only the 0.2.1 forms (docs/user-guide.en.md「兼容（0.2.0）」):
  * the translator and the subagent projection for mailbox deliveries, the
  * translator and agent-view for a teammate's first prompt. Session previews
  * (sessions/digest.ts) and the recap read no teammate session today: the

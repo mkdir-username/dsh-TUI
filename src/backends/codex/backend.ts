@@ -1,5 +1,5 @@
 /**
- * The Codex backend (docs/codex-backend-design.md §5.5): detection, opening
+ * The Codex backend (docs/codex-backend.en.md §5.5): detection, opening
  * a thread (create or resume) on the process-wide app-server hub, and the
  * launcher's per-backend session markers.
  *

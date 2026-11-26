@@ -1,5 +1,5 @@
 /**
- * Recorded Codex turns → Agent Domain events (docs/codex-backend-design.md
+ * Recorded Codex turns → Agent Domain events (docs/codex-backend.en.md
  * §7.6): every item of every turn through the shared mapping (`items.ts`),
  * `started` then `completed`, oldest turn first. The context is handed on
  * to the live translator afterwards, so live numbering continues where the

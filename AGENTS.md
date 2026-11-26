@@ -1,17 +1,17 @@
 # AGENTS.md
 
-dsh-TUI is the terminal UI application for DeepSeek Harness (`@deepseek-harness-tui/dsh-tui`), with zero core changes and consuming only DSH's public exports. DSH is the primary integration target and first-party backend; this package is evolving from a "DSH plugin" into a "terminal application with its own entry point and composition root", at which point DSH, like claude / codex, will be loaded in-process as a backend on demand. DeepSeek Harness still owns the agent, session, model, tool, persistence, and policy domains; this package only consumes them. Before making changes, read [docs/contributing.md](docs/contributing.md) (the authoritative source for this repository's shared development contract) and [ADAPTER.md](ADAPTER.md) (upstream boundaries and contracts); see [docs/architecture.md](docs/architecture.md) for the overall structure, and [docs/standalone-host-design.md](docs/standalone-host-design.md) for the standalone host design and non-goals.
+dsh-TUI is the terminal UI application for DeepSeek Harness (`@deepseek-harness-tui/dsh-tui`), with zero core changes and consuming only DSH's public exports. DSH is the primary integration target and first-party backend; this package is evolving from a "DSH plugin" into a "terminal application with its own entry point and composition root", at which point DSH, like claude / codex, will be loaded in-process as a backend on demand. DeepSeek Harness still owns the agent, session, model, tool, persistence, and policy domains; this package only consumes them. Before making changes, read [docs/contributing.en.md](docs/contributing.en.md) (the authoritative source for this repository's shared development contract) and [ADAPTER.md](ADAPTER.md) (upstream boundaries and contracts); see [docs/architecture.en.md](docs/architecture.en.md) for the overall structure, and [ADAPTER.md](ADAPTER.md) for the standalone host design and non-goals.
 
 ## Repository layout
 
 ```
 src/index.ts Public Cordis plugin entry point, configuration schema, lazy handoff to the runtime implementation
 src/dsh-adapter/plugin.ts Runtime implementation: TTY validation, service registration, agent creation/resumption, React tree mounting and cleanup
-src/dsh-adapter/host-entry.ts Package entry point: does not compose a full DSH profile for non-DSH engines (instead composes a lightweight profile: this package's rows + third-party plugins declared by the profile); mounts the runtime on a bare Cordis root; routing decisions live in src/hostEntryRoute.ts (docs/standalone-host-design.md)
+src/dsh-adapter/host-entry.ts Package entry point: does not compose a full DSH profile for non-DSH engines (instead composes a lightweight profile: this package's rows + third-party plugins declared by the profile); mounts the runtime on a bare Cordis root; routing decisions live in src/hostEntryRoute.ts (standalone host contract in ADAPTER.md)
 src/dsh-adapter/channel.ts Channel entry point: backend-neutral core (channel/core/) + extensions mounted only for DSH sessions (channel/extensions.ts)
 src/agent/ Backend-neutral session domain: AgentEvent, AgentSession, typed capabilities (no I/O or vendor dependencies)
 src/channel/ Shared projector (AgentEvent → view state) and neutral stores for approvals, questionnaires, etc.
-src/backends/claude/ Experimental Claude Agent SDK backend; see docs/agent-backend-design.md for the multi-backend structure
+src/backends/claude/ Experimental Claude Agent SDK backend; see ADAPTER.md for the multi-backend structure
 src/backends/codex/ Native Codex app-server backend: protocol, hub, translator, and capabilities; does not bundle the Codex npm dependency
 src/dsh-adapter/oauth/ Built-in subscription OAuth: provider routing, /auth, credential storage, and questionnaire bridging
 src/screens/ Chat.tsx interaction coordinator and status bar presentation
@@ -33,11 +33,11 @@ tui-profile/ In-repository TUI profile: plugin admission + private protocol defi
 cordis.patch.yml Package-level overlay for profile installation; row order, row IDs, and insert/override semantics are critical
 cordis.yml Complete bare composition example for direct Cordis/DSH startup
 scripts/ Headless regressions, reproduction environments, probes, and diagnostics; read each script's header before running it
-docs/ Complete documentation outside the root README; Chinese files have no suffix, English files use the .en.md suffix
+docs/ Complete documentation outside the root README; every page is English and carries the .en.md suffix
 lib/ Artifacts generated from src/ — excluded from version control, distributed with npm, never edited manually
 ```
 
-See [docs/contributing.md](docs/contributing.md) for the complete repository map and runtime flow.
+See [docs/contributing.en.md](docs/contributing.en.md) for the complete repository map and runtime flow.
 
 ## Reference requests: resolve the phrase before searching
 
@@ -64,7 +64,7 @@ pnpm smoke # General headless screen-assembly smoke check
 
 The repository **has no root-level `test` or `lint` scripts** — do not claim to have run them. The static gate is the TypeScript build; behavioral verification relies on focused regression scripts and reproduction environments. Most scripts invoked with plain `node` import `lib/types/`, so run `pnpm build` first; scripts that import TypeScript source declare `node --import tsx/esm <script>` in their headers. Do not infer the input layer from the file extension (`verify-themes.mjs` actually imports `src/` through tsx). `scripts/` also contains forensic/interactive tools (heap analysis, PTY probes, replay capture, performance probes); these are not bounded tests, so do not run them all as a suite.
 
-- Choose verification based on the affected area: changes to shared rendering, `Chat`, prompt/questionnaire layouts, tool cards, theme primitives, or the `ink/` core must run the CI regressions; narrow changes should run the corresponding focused scripts. See the mapping in [docs/contributing.md](docs/contributing.md). For terminal-visible changes, supplement headless assertions with manual exercises of the affected flows in both inline and fullscreen modes at narrow terminal widths when the environment is available.
+- Choose verification based on the affected area: changes to shared rendering, `Chat`, prompt/questionnaire layouts, tool cards, theme primitives, or the `ink/` core must run the CI regressions; narrow changes should run the corresponding focused scripts. See the mapping in [docs/contributing.en.md](docs/contributing.en.md). For terminal-visible changes, supplement headless assertions with manual exercises of the affected flows in both inline and fullscreen modes at narrow terminal widths when the environment is available.
 - Documentation-only, workflow-only, and YAML-only changes do not require a rebuild (unless TypeScript inputs also changed).
 
 ## Upstream boundaries and contracts
@@ -90,7 +90,7 @@ Incoming upstream work never outranks ours. When a release from `ccch1mneyyy/dsh
 - **TypeScript**: Pure ESM; use `.js` suffixes for relative imports and prefer `import type` for type-only dependencies. Do not introduce `any` because the Ink-family renderer has relaxed rules; narrow `unknown` instead. Follow the existing two-space indentation, single quotes, and no-semicolon style; do not bulk-format renderer files.
 - **Terminal width is display-cell width**, not JS string length; account for ANSI escapes, combining characters, emoji, and East Asian wide characters, and use the repository's width/slicing/wrapping helpers.
 - **One source for dimensions**: Outside `ink/`, always obtain dimensions through `useTerminalSize()` (margins and split layouts narrow them at each level); do not read `stdout.columns/rows` directly or add your own resize listeners. If physical terminal dimensions are truly required, add the use to `ALLOWED` in `verify:terminal-size-source` and document the reason.
-- **Documentation synchronization**: Keep behavior, configuration, shortcuts, and limitations synchronized in English in `README.md` and the English documentation set (`docs/*.en.md`). No second language is required or maintained; see [docs/contributing.md](docs/contributing.md) for the cross-file synchronization checklist covering plugin configuration, slash commands, themes, the renderer, and skill discovery.
+- **Documentation synchronization**: Keep behavior, configuration, shortcuts, and limitations synchronized in English in `README.md` and the English documentation set (`docs/*.en.md`). No second language is required or maintained; see [docs/contributing.en.md](docs/contributing.en.md) for the cross-file synchronization checklist covering plugin configuration, slash commands, themes, the renderer, and skill discovery.
 - **Secrets**: Interactive startup reads `DEEPSEEK_API_KEY`; diagnostics may report only whether it is set and must never reveal its full value.
 - **PRs**: Always use `.agents/skills/pr` when creating or updating a PR (including rewriting its description).
 - **Git safety**: Stage only explicit paths; do not use `git add .`/`git add -A` or run destructive cleanup commands. This is a personal fork: the agent must make atomic commits of its own changes and push them without waiting for the user to ask or handing commit/push back to the user — after verification passes, commit using `type(scope): description` (English past tense, no AI attribution), immediately followed by `git push mine main` (`origin` is read-only; report rejected pushes and never force-push). Tags, releases, and `npm publish` still require an explicit request; releases are driven by `v*` tags and must exactly match the `package.json` version.

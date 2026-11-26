@@ -1,5 +1,5 @@
 /**
- * The approval panel's option variants (docs/agent-backend-design.md §4.7),
+ * The approval panel's option variants (ADAPTER.md §4.7),
  * rendered headless in both languages:
  *
  *  - no options (every DSH ask): exactly "1. allow once / 2. reject", the

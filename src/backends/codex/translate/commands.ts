@@ -1,5 +1,5 @@
 /**
- * Command display (docs/codex-backend-design.md §8.1): the shell wrapper
+ * Command display (docs/codex-backend.en.md §8.1): the shell wrapper
  * Codex runs a command in is not what the user should read, and a command
  * whose every parsed action only reads, searches or lists files renders as
  * that, not as a terminal (D12).

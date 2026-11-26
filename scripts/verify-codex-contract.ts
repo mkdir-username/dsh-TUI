@@ -1,5 +1,5 @@
 /**
- * Codex backend contract gate (docs/codex-backend-design.md D3, §10.3), part
+ * Codex backend contract gate (docs/codex-backend.en.md D3, §10.3), part
  * of `verify:build`:
  *
  *  1. `src/backends/codex/protocol/generated/` is the generator's output:

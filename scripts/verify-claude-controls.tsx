@@ -1,5 +1,5 @@
 /**
- * Claude session controls (docs/agent-backend-design.md §4.9–4.10, §5.3–5.4)
+ * Claude session controls (ADAPTER.md §4.9–4.10, §5.3–5.4)
  * over a FAKE SDK — the capability delegates, what the channel makes of them,
  * and what the screen shows:
  *

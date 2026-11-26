@@ -2,7 +2,7 @@
 /**
  * Codex wire fixtures (`scripts/fixtures/codex/wire/*.jsonl`) are recorded
  * app-server traffic. Before one is committed it is scrubbed, and every
- * committed one is checked (docs/codex-backend-design.md §10.2):
+ * committed one is checked (docs/codex-backend.en.md §10.2):
  *
  *   node scripts/lib/codex-fixture-sanitize.mjs --check [dir]      # CI: fail on any finding
  *   node scripts/lib/codex-fixture-sanitize.mjs --write <in> <out> # scrub one recording

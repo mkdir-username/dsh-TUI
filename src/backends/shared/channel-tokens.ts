@@ -1,6 +1,6 @@
 /**
  * The credential seam of a backend's channel profiles (shared by every
- * backend, docs/codex-backend-design.md D15): channel
+ * backend, docs/codex-backend.en.md D15): channel
  * tokens live in the DSH credential store — the same `~/.dsh/.credentials.yaml`
  * (0600) the /provider wizard writes through the dsh credentials service
  * (providerWizard.ts's deriveKeyRef convention) — and channels.json holds

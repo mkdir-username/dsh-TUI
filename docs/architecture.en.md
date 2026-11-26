@@ -1,8 +1,8 @@
 # Architecture and Limitations
 
-[Documentation index](README.md) · [简体中文](architecture.md)
+[Documentation index](README.en.md)
 
-This document describes the **current** implementation: dsh-TUI runs as a plugin mounted in a DSH profile (the path below reflects that). For the move to an app that owns its entry and composition root, with DSH loaded in process as the first-party backend, see [Standalone host design](standalone-host-design.md).
+This document describes the **current** implementation: dsh-TUI runs as a plugin mounted in a DSH profile (the path below reflects that). For the move to an app that owns its entry and composition root, with DSH loaded in process as the first-party backend, see [the standalone host contract](../ADAPTER.md).
 
 ## Runtime path
 
@@ -31,7 +31,7 @@ Cordis profile
 | `src/dsh-adapter/channel/core/` | The backend-neutral core every `AgentSession` goes through (table below) |
 | `src/dsh-adapter/channel/extensions.ts` | DSH extensions: wiring only, DSH specialist internals unchanged |
 | `src/agent/`, `src/channel/` | The backend-neutral session domain (`AgentEvent`, `AgentSession`, capabilities), the shared projector and neutral stores |
-| `src/dsh-adapter/backend/`, `src/backends/claude/`, `src/backends/codex/` | DSH, Claude and Codex translators/sessions/capabilities; Codex drives the user’s app-server without bundling an SDK; see [Agent backends](agent-backend-design.md) (Chinese) |
+| `src/dsh-adapter/backend/`, `src/backends/claude/`, `src/backends/codex/` | DSH, Claude and Codex translators/sessions/capabilities; Codex drives the user’s app-server without bundling an SDK; see [Claude backend](claude-backend.en.md) and [Codex backend](codex-backend.en.md) |
 | `src/workspaces.ts` | Local-path fallback and generic workspace-provider registry; it must contain no provider protocol, copy, or dependency |
 | `src/screens/Chat.tsx` | Modal precedence, global keys, scroll/search/selection state, and slash dispatch |
 | `src/components/` | User views and design-system primitives; no Agent or session source of truth |
@@ -54,7 +54,7 @@ credentials, and model routing to `ctx.deepseekAccount`. The TUI-only
 does not insert these rows and has a different topology.
 
 The channel is one backend-neutral core plus the DSH extensions (see
-[Agent backends](agent-backend-design.md)):
+[ADAPTER.md](../ADAPTER.md)):
 
 | File | Responsibility |
 | --- | --- |
@@ -247,7 +247,7 @@ relevant when maintaining the dsh-tui side:
 approval UI (a local panel answering the `approval/request` waterfall), while
 `/permission` preset switching comes from the dsh-base `permission-presets` row.
 On the Claude backend approvals come from the CLI's `canUseTool` callback and add
-"allow always" and a rejection reason; see [Agent backends](agent-backend-design.md).
+"allow always" and a rejection reason; see [ADAPTER.md](../ADAPTER.md).
 
 Effective capability comes from the DSH services mounted by
 `cordis.patch.yml`:
@@ -297,7 +297,7 @@ visual TUI alone does not describe the effective policy.
 ## Known limitations
 
 - The experimental Claude backend’s limitations are listed in
-  [Agent backends](agent-backend-design.md) (Chinese); Codex operations, non-goals
+  [Codex backend](codex-backend.en.md); Codex operations, non-goals
   and live-verification boundaries are in [Codex backend](codex-backend.en.md).
 - Plugin-source context injected into the system prompt is not shown as a
   separate UI segment; it is included in the system/context meter.

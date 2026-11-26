@@ -1,7 +1,7 @@
 /**
  * verify-migrate-browse — 外部来源浏览层回归（合成 fixture，临时目录，不读本机数据）。
  *
- * 覆盖 docs/foreign-session-tabs-design.md §3、§5、§7：扫描 IO 基础设施
+ * 覆盖 docs/migrate.en.md §3、§5、§7：扫描 IO 基础设施
  * （有界头尾窗口、异步遍历、并发扫描池、指纹复用）、四个源的 scan()/load()
  * （摘要与全量解析一致、sessionKey 等于 discover() 的 sourceId）、browse
  * （存在性探测只走到第一个候选、同一进程内复用未变的摘要、不落盘、行上不

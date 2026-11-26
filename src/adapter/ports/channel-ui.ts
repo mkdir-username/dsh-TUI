@@ -318,7 +318,7 @@ export interface ChannelUi {
    *
    *  REMOVAL: v0.13 — the rename and deprecated aliases first ship in
    *  v0.12.0, leaving one released minor-version deprecation window as
-   *  `docs/plugins.md` promises for a frozen seam. Delete `minimal` (and
+   *  `docs/plugins.en.md` promises for a frozen seam. Delete `minimal` (and
    *  `setMinimal()` below, plus the `'setMinimal': 'mutate'` row in
    *  `adapter/channel/ui-policy.ts`) in v0.13, gated on one concrete audit:
    *  scan the scene-plugin consumption surface — this repo's `src/**`

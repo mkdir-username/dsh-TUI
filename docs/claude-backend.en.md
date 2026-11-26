@@ -1,13 +1,10 @@
 # Claude backend (experimental)
 
-[Documentation index](README.md) · [中文](claude-backend.md)
-
 dsh-TUI can run its session on the Claude Agent backend instead of the DeepSeek
 Harness agent: the same interface, driving the Claude Code CLI through the Claude
 Agent SDK. Your project's `CLAUDE.md`, settings, hooks, MCP servers and plugins
 load the way the CLI loads them. The backend is still experimental; the
-implementation is described in [Agent backends](agent-backend-design.md)
-(Chinese).
+implementation lives in `src/backends/claude/`.
 
 ## Enabling it
 
@@ -43,7 +40,7 @@ You need:
 - A Claude credential; see "Signing in" below.
 - The `claude` command is optional: dsh-TUI probes an **explicitly specified
   executable path** (an environment variable, used as set, with no version check;
-  the variable name is in [Agent backends](agent-backend-design.md) (Chinese)) → a
+  the variable name is in `src/backends/claude/options.ts`) → a
   `claude` on `PATH` → the native installer's directory under your home
   (`%USERPROFILE%\.local\bin\claude.exe` on Windows, `~/.local/bin/claude` on
   POSIX), and a `PATH` hit still wins; every candidate has to launch and report a

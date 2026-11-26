@@ -1,5 +1,5 @@
 /**
- * Codex tool items as tool cards (docs/codex-backend-design.md §7.4, §8):
+ * Codex tool items as tool cards (docs/codex-backend.en.md §7.4, §8):
  * the tool name the transcript records, its arguments, and the card shape
  * each call and result renders as, in the backend-neutral presentation
  * vocabulary. The UI never picks a card by tool name; this module does,

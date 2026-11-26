@@ -2,7 +2,7 @@
  * `/migrate` 交互回归（挂真实 Chat，fake channel + fake stdout/stdin）：
  *   1. **fresh 会话直接入口**：mount 后第一次就输入 `/migrate claude-code`
  *      必须打开确认层——旧实现从 picker 的行缓存里查 agent，缓存为空时
- *      一律报「未知迁移源」，正是 docs/migrate.md 承诺的那个入口；
+ *      一律报「未知迁移源」，正是 docs/migrate.en.md 承诺的那个入口；
  *   2. 未知源仍然报未知（不能因为修 1 而放行任意字符串）；
  *   3. `/migrate --dry-run` 明说要源，不再报「未知迁移源 --dry-run」；
  *   4. `/migrate a b` 报 usage，不静默只跑第一个（与 CLI 退出码 2 同语义）；

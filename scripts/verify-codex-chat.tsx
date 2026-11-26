@@ -1,6 +1,6 @@
 /**
  * The real `Chat` over a real Codex session on the fake app-server
- * (docs/codex-backend-design.md §8.1–§8.4, §10.3 — the C1 surface; live
+ * (docs/codex-backend.en.md §8.1–§8.4, §10.3 — the C1 surface; live
  * command output and patch line numbers are C2): headless renders at 80 and
  * 40 columns, inline and fullscreen.
  *

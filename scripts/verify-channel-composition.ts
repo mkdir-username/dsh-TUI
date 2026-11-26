@@ -2,7 +2,7 @@
  * L4-4e structural proof: the channel composes distinct owners, not a
  * replacement monolith.
  *
- * Phase 4a (docs/agent-backend-design.md §3.5) split the one composition root
+ * Phase 4a (ADAPTER.md §3.5) split the one composition root
  * into the backend-neutral core (`channel/core/compose.ts`) and the DSH
  * extensions (`channel/extensions.ts`), with `channel.ts` as the entry that
  * attaches the latter only to a DSH session. The structural regexes below

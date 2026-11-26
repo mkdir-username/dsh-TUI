@@ -1,6 +1,6 @@
 /**
  * Codex server requests → the shared permission and question surfaces
- * (docs/codex-backend-design.md §5.8, §8.4).
+ * (docs/codex-backend.en.md §5.8, §8.4).
  *
  * - Command approvals offer what the server allows (`availableDecisions`;
  *   when absent, the official client's default: accept, a proposed prefix

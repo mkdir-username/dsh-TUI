@@ -25,7 +25,7 @@ contribution identities. Entries awaiting authorization are not probed or loaded
 The full field semantics are in
 [`notes/0009-backend-contribution.md`](../../../tui-profile/notes/0009-backend-contribution.md)
 and the seam write-up in
-[`docs/plugin-admission-and-development.md`](../../../tui-profile/docs/plugin-admission-and-development.md)
+[`tui-profile/docs/plugin-admission-and-development.md`](../../../tui-profile/docs/plugin-admission-and-development.md)
 (接缝十四). The published type face is exported from this package's entry
 (`BackendSpec`, `validateBackendSpec`, `backendAdmission`, …).
 

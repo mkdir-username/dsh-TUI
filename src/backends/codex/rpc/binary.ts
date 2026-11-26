@@ -1,6 +1,6 @@
 /**
  * The `codex` executable and the environment its app-server runs in
- * (docs/codex-backend-design.md §5.1, §5.4).
+ * (docs/codex-backend.en.md §5.1, §5.4).
  *
  * - Executable: `CODEX_EXECUTABLE` (taken as given, so a typo fails loudly)
  *   → the first `codex` on PATH whose `--version` answers → not installed.

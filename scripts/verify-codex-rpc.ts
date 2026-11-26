@@ -1,5 +1,5 @@
 /**
- * Codex JSON-RPC layer (docs/codex-backend-design.md §5.1–§5.2, §10.3):
+ * Codex JSON-RPC layer (docs/codex-backend.en.md §5.1–§5.2, §10.3):
  *
  *  - client: id pairing (answers out of order), error answers as
  *    `CodexRpcError` with code and data, per-call and per-method timeouts on

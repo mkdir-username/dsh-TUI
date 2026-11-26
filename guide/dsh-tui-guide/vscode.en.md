@@ -1,7 +1,5 @@
 # Using dsh-TUI in VS Code
 
-[Documentation index](README.md) · [中文](vscode.md)
-
 dsh-TUI is a terminal program: it writes ANSI into a PTY and reads keys
 back from the PTY. So any compatible terminal can host it — including the
 **VS Code integrated terminal** (xterm.js). This page covers two ways to
@@ -86,8 +84,6 @@ Afterwards:
   capped and marked with the same policy as @-mentions;
 - Without an IDE or on disconnect everything degrades silently with zero
   impact on the rest of the TUI.
-
-![IDE selection channel: live footer badge and transcript indicator](../screenshots/ide-selection-badge.png)
 
 **Protocol & versions**:
 
@@ -296,7 +292,7 @@ WezTerm / iTerm2 / tmux).
 
 ## Acceptance baseline
 
-Per [Contributing](contributing.en.md), VS Code is a supported terminal
+Per `docs/contributing.en.md`, VS Code is a supported terminal
 platform. Any rendering change should be walked through inside the VS Code
 integrated terminal in both inline and fullscreen modes at narrow widths —
 startup, resize, scroll, input, cancel, and clean exit.

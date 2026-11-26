@@ -146,7 +146,7 @@ interface ProjectionDependencies {
    *  been accepted yet (an accepted child inbox belongs to the continuation
    *  manager from then on). */
   ownerSignal?: AbortSignal
-  /** The DSH child transcript source (docs/dsh-child-transcript.md),
+  /** The DSH child transcript source,
    *  injected only when the host composition serves session persistence.
    *  Its presence is the `SubagentControl.history` capability: the shared
    *  transcript tab renders exactly when it exists, with no backend-specific

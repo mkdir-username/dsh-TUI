@@ -1,5 +1,5 @@
 /**
- * The shared permission store and its channel bridge (docs/agent-backend-design.md
+ * The shared permission store and its channel bridge (ADAPTER.md
  * §4.7, §8.4), without a backend:
  *
  *  - FIFO: parallel prompts park, one is on the panel, the next surfaces when

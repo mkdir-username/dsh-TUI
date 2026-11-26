@@ -1,7 +1,7 @@
 /**
  * compat(dsh 0.2.0, log): Agent Teams 0.2.0 durable shapes read as their
  * 0.2.1 equivalents (src/dsh-adapter/compat/agent-team-0.2.0.ts,
- * docs/agent-teams-design.md「兼容（0.2.0）」). Each case states one thing:
+ * docs/user-guide.en.md「兼容（0.2.0）」). Each case states one thing:
  * the 0.2.0 input produces exactly what the matching 0.2.1 input produces.
  * The 0.2.0 shapes are the ones recorded from the real 0.2.0-rc.2 team
  * service. Delete this script together with the compat module.

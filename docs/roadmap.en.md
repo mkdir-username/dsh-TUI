@@ -1,6 +1,6 @@
 # dsh-TUI Roadmap
 
-[Documentation index](README.md) · [简体中文](roadmap.md)
+[Documentation index](README.en.md)
 
 > This file defines the long-term direction. Live task status belongs in the
 > GitHub Roadmap tracker.

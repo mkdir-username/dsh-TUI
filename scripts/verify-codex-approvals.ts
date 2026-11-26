@@ -1,5 +1,5 @@
 /**
- * Codex approvals and questions (docs/codex-backend-design.md §5.8, §8.4,
+ * Codex approvals and questions (docs/codex-backend.en.md §5.8, §8.4,
  * D10, C0 V5/V7) on the fake app-server: command approvals offering what the
  * server allows (`availableDecisions`, else the official default set), every
  * decision mapping, reject with and without a reason (decline / cancel +

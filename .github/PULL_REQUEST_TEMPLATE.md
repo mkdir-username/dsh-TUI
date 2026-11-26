@@ -21,7 +21,7 @@ Closes #<!-- issue 号；改动代码的 PR 必须关联 issue。纯文档 PR、
 
 ## Verification
 
-<!-- 只写真跑过的命令与结果；按改动面选的聚焦回归见 docs/contributing.md。没做的（例如真实终端 inline/fullscreen/窄屏演练）直接写没做。 -->
+<!-- 只写真跑过的命令与结果；按改动面选的聚焦回归见 docs/contributing.en.md。没做的（例如真实终端 inline/fullscreen/窄屏演练）直接写没做。 -->
 
 ```text
 

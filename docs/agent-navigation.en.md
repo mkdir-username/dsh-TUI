@@ -4,14 +4,14 @@
 
 A phrase like "исходники claude cli" names a reference that may live outside this
 tree. Resolve the reference first, then search. This file routes phrases; it does
-not restate the repository map ([docs/contributing.md](contributing.md)) or the
+not restate the repository map ([docs/contributing.en.md](contributing.en.md)) or the
 pinned upstream table ([docs/references.en.md](references.en.md)).
 
 <boundaries>
 
 | Question in the ask | Read |
 | --- | --- |
-| Where does code live in this repo? | [docs/contributing.md](contributing.md) (repository map) |
+| Where does code live in this repo? | [docs/contributing.en.md](contributing.en.md) (repository map) |
 | What did upstream dsh-TUI do, at which pin, on which lines? | [docs/references.en.md](references.en.md) |
 | How does this repo drive Claude Code? | [docs/claude-backend.en.md](claude-backend.en.md) |
 | What does the user mean by "claude", "reference-map", "исходники"? | this file |
@@ -69,7 +69,7 @@ compare them with this working tree.
 | Layer | Symptom in the ask | Read |
 | --- | --- | --- |
 | Claude Code behaviour | hooks, permissions prompts, MCP servers, slash commands, transcripts, "в оригинале" | the local source snapshot (path in `LOCAL-FORK-NOTES.md`), or run `claude --help` / the CLI itself |
-| This repo's Claude backend | "наш бэкенд", file names from `src/`, "как мы это делаем" | `src/backends/claude/`, [docs/claude-backend.en.md](claude-backend.en.md), [docs/agent-backend-design.md](agent-backend-design.md) |
+| This repo's Claude backend | "наш бэкенд", file names from `src/`, "как мы это делаем" | `src/backends/claude/`, [docs/claude-backend.en.md](claude-backend.en.md), `ADAPTER.md` |
 | Fork versus upstream dsh-TUI | "апстрим", "в оригинале dsh-TUI", "что мы поменяли" | [docs/references.en.md](references.en.md), `.upstream/README.md` |
 
 The upstream pin is dsh-TUI code. Routing a Claude-behaviour question there returns
@@ -96,7 +96,7 @@ range and says it is the pin's, not the working tree's.
 <example>
 Input: "посмотри как устроено в claude: права на инструменты"
 Output: asks or infers the layer. Default: this repo's backend — `src/backends/claude/permissions.ts`
-plus the design section in `docs/agent-backend-design.md`. If the ask is about the
+plus the boundary rules in `ADAPTER.md`. If the ask is about the
 product itself, reads the local source snapshot instead and cites a file from it.
 </example>
 
@@ -137,6 +137,6 @@ Before answering a reference request, check:
 - [ ] Each claim about Claude Code behaviour points at the local snapshot or a command, not at memory.
 - [ ] A claim about the pin names `docs/references.en.md` as its source and does not present pin lines as the working tree's.
 - [ ] `pnpm verify:source-hygiene` passes after editing this file or `AGENTS.md`.
-- [ ] `test -e docs/agent-navigation.en.md` and the index row in `docs/README.md` still resolve.
+- [ ] `test -e docs/agent-navigation.en.md` and its row in `docs/README.en.md` still resolve.
 
 </verification>

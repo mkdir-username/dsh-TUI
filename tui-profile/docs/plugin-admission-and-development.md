@@ -7,7 +7,7 @@
 > 插件市场、评审）的参考标注——不是社区 RFC，也不需要在别处批准后才生效。
 > 公共/社区协议语义以上游 [dsh-std](https://github.com/T-Auto/dsh-std) 为准，
 > 本文只写 dsh-TUI 自己的准入要求与私有协议定义；原先独立的 `spec/` 与
-> `docs/plugins.md` 已并入本文档。文中指向 dsh-TUI 仓库内部文件/文档的链接以
+> `docs/plugins.en.md` 已并入本文档。文中指向 dsh-TUI 仓库内部文件/文档的链接以
 > dsh-TUI 仓库为准。
 
 [TUI Profile 总览](../README.md) · [设计说明](../notes/README.md) · [Adapter Note](../adapters/dsh-tui-v0.15.md)
@@ -35,7 +35,7 @@ dsh-TUI 生态里有三种插件，难度递增：
 | Cordis 运行时插件 | `dsh-working-activity` | 是（TypeScript） |
 
 本文档重点讲运行时插件，因为它是能力最强的形态；静态资产见
-[主题系统](https://github.com/ccch1mneyyy/dsh-TUI/blob/main/docs/themes.md) 与下文"技能接缝"。
+[主题系统](https://github.com/ccch1mneyyy/dsh-TUI/blob/main/docs/themes.en.md) 与下文"技能接缝"。
 
 ## 插件契约
 
@@ -725,7 +725,7 @@ registry?.register({
   `Theme` 语义键的部分覆盖，完整键表见 [`src/theme.ts`](https://github.com/ccch1mneyyy/dsh-TUI/blob/main/src/theme.ts)。
 - 主题文件按**不可信输入**处理：未知键/非法颜色被跳过并警告，损坏文件整体
   丢弃，文件名不能逃出主题目录——你的主题插件也要遵守同样的宽容度。
-- 完整契约见[主题系统](https://github.com/ccch1mneyyy/dsh-TUI/blob/main/docs/themes.md)。
+- 完整契约见[主题系统](https://github.com/ccch1mneyyy/dsh-TUI/blob/main/docs/themes.en.md)。
 
 ## 接缝五：system prompt 段注入
 

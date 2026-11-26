@@ -1,7 +1,5 @@
 # Native Codex backend (experimental)
 
-[Documentation index](README.md) · [中文](codex-backend.md) · [Agent backends](agent-backend-design.md)
-
 dsh-TUI can be a frontend for your local Codex: the same interface, with sessions driven by
 `codex app-server`, not the DSH Agent or a generic OpenAI API adapter. Codex loads its own
 configuration, login, `AGENTS.md`, skills, hooks and MCP servers. Threads are shared with the
@@ -14,8 +12,7 @@ imports history into **DSH**, rather than opening a native Codex thread.
 > lifecycle and advanced features follow the capabilities actually declared by the backend.
 > Protocol/fake-app-server regressions and credential-free offline checks do not prove real
 > ChatGPT login, live model turns or real-TTY behavior; those were not run in this round.
-> The verified scope is listed at the end, with implementation/live evidence in the
-> [progress log](codex-backend-progress.md) (Chinese).
+> The verified scope is listed at the end.
 
 ## Install and start
 

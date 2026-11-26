@@ -85,7 +85,8 @@ manifest 一致,过期即红)。
 
 门禁:`pnpm run verify:boundary`(`scripts/verify-adapter-boundary.ts`,扫描全部源码的
 真实 import,越界即失败;已挂进 `build`)。多后端的分层见
-[docs/agent-backend-design.md](docs/agent-backend-design.md)。
+[docs/claude-backend.en.md](docs/claude-backend.en.md) 与
+[docs/codex-backend.en.md](docs/codex-backend.en.md)。
 
 ## 独立自动化 CLI
 
@@ -94,7 +95,7 @@ manifest 一致,过期即红)。
 `adapters/dsh/`。该 adapter 解析官方 DSH 安装、调用其 JS bin，并用单独的
 Cordis 插件消费公开服务，不复刻领域逻辑或日志格式。厂商包标识符只出现在
 这个 adapter 中；不放宽上表对 `src/` 的规则。`pnpm verify:cli` 包含带负例的
-边界门禁、进程及替换契约；用户行为与迁移步骤见 [CLI 手册](docs/cli.md)。
+边界门禁、进程及替换契约；用户行为与迁移步骤见 [CLI 手册](docs/cli.en.md)。
 
 ## 上游契约
 
@@ -108,7 +109,7 @@ Cordis 插件消费公开服务，不复刻领域逻辑或日志格式。厂商�
 ## 独立入口的宿主契约
 
 本包入口(`src/dsh-adapter/host-entry.ts`)在进程内加载 PATH 上 `dsh` 的安装
-(docs/standalone-host-design.md),契约单一来源是
+(见下文「独立入口的宿主契约」),契约单一来源是
 `src/dsh-adapter/host-contract.ts`:
 
 - **依赖**:`host-dsh.ts` 取类型的 `dsh-app-boot`、`dsh-cmdline`、`dsh-home-paths`、
@@ -180,7 +181,7 @@ web-app patch 按 include 语义合成一遍,直接拦截 loader entry id 复用
   `HOST_REPLICA_VERSION` 与主验证线一起改。
 - `contract.ts` 是唯一真源:主验证线原地替换、不累积;`package.json` 的
   peer/dev 范围、CI 钉住的上游 SHA、校验脚本里的版本常量都只是它的镜像,
-  必须同一次改齐(位置见 [docs/contributing.md](docs/contributing.md) 跨文件清单)。
+  必须同一次改齐(位置见 [docs/contributing.en.md](docs/contributing.en.md) 跨文件清单)。
 - 上游删掉的包跟着删,不留半悬空的依赖;patch-surface 快照按 web-app 版本
   追加、保留历史。
 - 业务 UI 代码原则上零修改;若最新预发布源码 tsc 报错,修复落在 `src/dsh-adapter/`

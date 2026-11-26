@@ -1,5 +1,5 @@
 /**
- * The one entry to the vendored app-server protocol (docs/codex-backend-design.md
+ * The one entry to the vendored app-server protocol (docs/codex-backend.en.md
  * D3): the generated types this backend annotates call sites with, and the
  * method-name tables every dispatcher switches on. The tables are checked
  * against the generated unions twice: by `tsc` (`satisfies`) and by

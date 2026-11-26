@@ -1,7 +1,7 @@
 // Maintainer probe library, not a regression test and not part of CI.
 //
 // A tiny `codex app-server` client for the Codex probes
-// (docs/codex-backend-design.md §10.6, §12.1), moved from the research
+// (docs/codex-backend.en.md §10.6, §12.1), moved from the research
 // workspace. Every run goes through scripts/lib/codex-cheap-only.mjs:
 // a throwaway CODEX_HOME (never ~/.codex), the relay provider through `-c`
 // arguments, the cheap model at effort `low`, and every model-bearing

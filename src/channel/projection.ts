@@ -1,5 +1,5 @@
 /**
- * The shared reducer (docs/agent-backend-design.md): Agent Domain events in,
+ * The shared reducer: Agent Domain events in,
  * `ChannelState` mutations out, for every backend and for durable replay and
  * the live stream alike. Decoding a backend's native events is not done here:
  * a translator (`src/dsh-adapter/backend/translate.ts` for DSH) produces the

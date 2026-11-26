@@ -1,5 +1,5 @@
 # dsh-TUI 契约门禁
-真源为当前目标分支的 package.json、ADAPTER.md、src/dsh-adapter/contract.ts、src/plugin-host.ts、cordis.patch.yml、patch-surface.snapshot.json、tui-profile/protocols/tui-channel.js、CI 及 docs/contributing.md。本文件仅检查顺序，不存日期化常量；契约变更缺兼容策略/迁移/验证默认阻断，新增公共面也须显审。
+真源为当前目标分支的 package.json、ADAPTER.md、src/dsh-adapter/contract.ts、src/plugin-host.ts、cordis.patch.yml、patch-surface.snapshot.json、tui-profile/protocols/tui-channel.js、CI 及 docs/contributing.en.md。本文件仅检查顺序，不存日期化常量；契约变更缺兼容策略/迁移/验证默认阻断，新增公共面也须显审。
 
 ## 先生成结构化快照
 执行顺序及命令以 SKILL.md 阶段 0 为唯一真源。快照比较包清单的 version/packageManager/engines/imports/bin/exports/dependencies/peerDependencies/devDependencies/scripts，adapter contract、plugin-host shim、patch/snapshot、tui-channel、CI/治理文档摘要，shim exports 及可稳定提取的 apiVersion/wireRevision/features；只定位、不替代语义审查，动态写法解析不到须直接读源。

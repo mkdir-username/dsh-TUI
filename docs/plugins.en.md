@@ -1,9 +1,7 @@
 # Plugin Development Guide (authoritative text: the TUI Profile)
 
-[Documentation index](README.md) · [简体中文](plugins.md)
-
 > This document has been merged with the in-repo TUI Profile (`tui-profile/`):
-> [Plugin Admission and Development Guide](../tui-profile/docs/plugin-admission-and-development.md)
+> Plugin Admission and Development Guide: `tui-profile/docs/plugin-admission-and-development.md`
 
 The ecosystem entry points and seam stability reference below are kept here
 for quick reference; the authoritative status and compatibility agreement
@@ -12,7 +10,8 @@ live in the admission & development guide.
 ## Ecosystem entry points
 
 - **Interface & compatibility agreement / Plugin development guide**:
-  [Terminal Interactive Ecosystem Plugin Admission and Development Guide](../tui-profile/docs/plugin-admission-and-development.md)
+  Terminal Interactive Ecosystem Plugin Admission and Development Guide
+  (`tui-profile/docs/plugin-admission-and-development.md`)
   (admission spec, seams, contracts, verification checklist).
 - **Organization**:
   [dsh-tui-ecosystem](https://github.com/dsh-tui-ecosystem)
@@ -28,7 +27,7 @@ live in the admission & development guide.
 
 A maturity grading to help plugin authors gauge investment; the authoritative
 status and compatibility agreement live in the
-[admission & development guide](../tui-profile/docs/plugin-admission-and-development.md).
+admission & development guide (`tui-profile/docs/plugin-admission-and-development.md`).
 **The "stable candidate" tier is part of the frozen public surface as of the first
 published apiVersion (`tui.dsh/v1alpha1`)** — the four commitments are in
 `tui-profile/CHANGELOG.md`'s freeze entry; the other two tiers stay a **maturity
@@ -50,7 +49,7 @@ them by slot group: `build,ci;git;pet` — three groups, three slots, and a
 **listed field follows its group** (overriding the declared slot). Once the user
 pins a list, fields registered later stay hidden until ticked.
 Contract, rule table, and example: seam XI "footer fields" in the
-[admission & development guide](../tui-profile/docs/plugin-admission-and-development.md).
+admission & development guide (`tui-profile/docs/plugin-admission-and-development.md`).
 
 Also an experimental public surface:
 
@@ -58,7 +57,8 @@ Also an experimental public surface:
 - **Rows inside a preset (experimental, seam VII)**: a bundle changes the `config` of a row
   inside a preset dsh-TUI registers (for example, turning off `standard`'s
   `compaction-basic` auto-compaction) with a `@deepseek-harness-tui/dsh-tui/preset-patch` row;
-  see seam VII of the [admission and development guide](../tui-profile/docs/plugin-admission-and-development.md).
+  see seam VII of the admission and development guide
+  (`tui-profile/docs/plugin-admission-and-development.md`).
 - **Side panels (experimental, §18)**: `ctx.tuiPanels.register({ apiVersion:
   1, id, title, icon?, component | compact })` registers a right-sidebar
   panel (the host prefixes `<pluginId>:`; ≤4 panels per plugin, ≤32 globally;
@@ -100,7 +100,7 @@ Also an experimental public surface:
   throws on malformed input or an exhausted budget, and the disposer is bound to
   the activation. Types live at `@deepseek-harness-tui/dsh-tui/extensions` and
   `./api`; the rule table is seam XV of the
-  [admission & development guide](../tui-profile/docs/plugin-admission-and-development.md).
+  admission & development guide (`tui-profile/docs/plugin-admission-and-development.md`).
 - The `@deepseek-harness-tui/dsh-tui/test-utils` subpath and
   `ctx.tuiPluginHost.grants.corrupt` were removed in the adapter layering
   refactor (#705).

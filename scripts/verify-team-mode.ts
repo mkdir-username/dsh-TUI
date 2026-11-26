@@ -1,5 +1,5 @@
 /**
- * Agent Teams at run time (issue #1241, docs/agent-teams-design.md
+ * Agent Teams at run time (issue #1241, docs/user-guide.en.md
  * 「开关机制」): the per-assembly choice of delegation tools, the team store
  * following the service across a plugin-manager change, `/team status` and its
  * service-gated visibility, and the confirmation that disabling the team

@@ -3,7 +3,7 @@
  *
  * A plugin declares itself by shipping a package-root `dsh-plugin.json` — the
  * pinned `@dsh-std/manifest` shape this profile's admission catalog validates
- * (`docs/plugin-admission-and-development.md`). That is the same artifact the
+ * (`tui-profile/docs/plugin-admission-and-development.md`). That is the same artifact the
  * plugin-host admits third-party activations from (`./admission-loader.ts`),
  * so the list and the admission path read one declaration, not two.
  *

@@ -1,6 +1,6 @@
 /**
  * The Codex backend's persisted user choices
- * (`~/.dsh-tui/backends/codex/prefs.json`, docs/codex-backend-design.md
+ * (`~/.dsh-tui/backends/codex/prefs.json`, docs/codex-backend.en.md
  * §5.18, D6): the model / effort / mode picks a later session starts with,
  * the session a bare `--backend codex --resume` opens, and this install's
  * last use of each thread. dsh-tui never writes Codex's own

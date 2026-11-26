@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Re-vendor the Codex app-server protocol types (docs/codex-backend-design.md
+ * Re-vendor the Codex app-server protocol types (docs/codex-backend.en.md
  * D3, §11 C0): run the given `codex` binary's own generator, replace
  * `src/backends/codex/protocol/generated/` with its output verbatim, write
  * the tree's README, and record the version and digest in

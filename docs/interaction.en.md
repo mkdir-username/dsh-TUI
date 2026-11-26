@@ -1,6 +1,5 @@
 # Interaction and Commands
 
-[Documentation index](README.md) · [简体中文](interaction.md)
 `Ctrl+Q` folds running todos; while idle it hides/restores the goal/todo footer. Clicking the idle todo header hides it too. New goal/todo data or another session shows it again. Completed goals leave the footer once idle; their history remains in the Todo side panel.
 
 
@@ -438,7 +437,7 @@ log would interleave its events and corrupt the transcript.
 - Occupancy is re-read from the ledger on the screen's own 2-second tick, so the row becomes enterable again on its own once that process exits.
 - A session this process parked is not "occupied".
 
-See [session-mount-runtime.en.md](session-mount-runtime.en.md).
+See `docs/session-mount-runtime.en.md`.
 
 The rail carries an "Unregistered" group when the workspace service is absent (a bare
 composition) or a session's directory is **not registered**. The group lists and resumes

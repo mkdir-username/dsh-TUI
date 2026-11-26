@@ -1774,7 +1774,7 @@ if (!runningInsideProfile && ownVersion !== undefined && process.env.DSH_TUI_NO_
   // the app-level separator too, and replay this same argv on a safe retry.
   const firstArgs = [...hostArgs, ...(args.length > 0 ? ['--', ...args] : [])]
 
-  // 内核分流（docs/standalone-host-design.md）：默认所有内核都走本包入口，由入口
+  // 内核分流（ADAPTER.md）：默认所有内核都走本包入口，由入口
   // 判定内核（src/hostEntryRoute.ts）。DSH_TUI_HOST_ENTRY=0 让所有内核回到
   // `dsh --profile`；dsh 自己的 hostArgs（--version、--dump-config* 等）始终交给 dsh。
   const hostEntry = join(ownDir, 'lib', 'types', 'dsh-adapter', 'host-entry.js')

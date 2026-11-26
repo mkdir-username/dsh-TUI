@@ -1,6 +1,6 @@
 /**
  * Live app-server notifications of one thread → Agent Domain events
- * (docs/codex-backend-design.md §7.5): the stateful half of the translator.
+ * (docs/codex-backend.en.md §7.5): the stateful half of the translator.
  * Items go through the shared mapping (`items.ts`); this module adds the
  * stream deltas, turn boundaries, usage, status, settings and notices.
  *

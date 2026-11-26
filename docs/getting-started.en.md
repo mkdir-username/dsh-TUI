@@ -1,7 +1,5 @@
 # Getting Started
 
-[Documentation index](README.md) · [简体中文](getting-started.md)
-
 ## Prerequisites
 
 - Node.js `^22.19 || >=24`; CI uses Node 24.
@@ -600,7 +598,7 @@ the row inserted by the dsh-tui patch and remove the duplicate bundle entry.
 
 Run `/doctor`, record the terminal and mode, then consult
 [Interaction and commands](interaction.en.md) and
-[Architecture and limitations](architecture.en.md). `DSH_TUI_RENDER_LOG` can
+`docs/architecture.en.md` (Architecture and limitations). `DSH_TUI_RENDER_LOG` can
 capture raw frames for rendering bugs, but those frames may contain visible
 conversation content and should be handled as sensitive data.
 

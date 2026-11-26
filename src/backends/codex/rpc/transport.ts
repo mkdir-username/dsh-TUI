@@ -1,6 +1,6 @@
 /**
  * The `codex app-server` child process as a line transport
- * (docs/codex-backend-design.md §5.1): spawn, newline framing of stdout,
+ * (docs/codex-backend.en.md §5.1): spawn, newline framing of stdout,
  * a write queue that honours back-pressure, stderr by line, one exit report.
  *
  * - stdout is split on `\n` by hand: a single line may be large (a whole

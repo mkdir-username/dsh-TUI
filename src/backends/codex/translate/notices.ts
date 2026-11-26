@@ -1,5 +1,5 @@
 /**
- * Codex warnings and errors as localized notices (docs/codex-backend-design.md
+ * Codex warnings and errors as localized notices (docs/codex-backend.en.md
  * §7.5, §9.1). Every notice carries a `key`, so a repeat of the same
  * condition replaces its toast instead of stacking a new one.
  *

@@ -1,5 +1,5 @@
 # dsh-TUI 验证映射
-先读当前 package.json 的 scripts、.github/workflows/ci.yml、脚本头部、docs/contributing.md；本表仅选择方法，漂移依仓库真源并记报告。
+先读当前 package.json 的 scripts、.github/workflows/ci.yml、脚本头部、docs/contributing.en.md；本表仅选择方法，漂移依仓库真源并记报告。
 
 ## 禁止虚构
 根级 test/lint 禁令以 SKILL.md “全局不变量与模式”为唯一真源。scripts/ 混有回归/复现/探针/迁移/取证，不全目录当测试跑；跑前读头部辨 import src/ 或 lib/types/、普通 `node` 或 `node --import tsx/esm`；只记实跑命令/退出码/SHA/关键输出，不将应通过写成已通过。

@@ -1,5 +1,5 @@
 /**
- * Codex live ≡ replay gate (docs/codex-backend-design.md §10.4): for every
+ * Codex live ≡ replay gate (docs/codex-backend.en.md §10.4): for every
  * thread of every wire fixture that also recorded the thread's full history,
  * (a) the live notifications and (b) the recorded turns run through the
  * shared item mapping into the shared projector, and the two transcripts

@@ -66,6 +66,6 @@ export function closeMessage({ locale, reason, prAuthor, docsUrl, listUrl }) {
 
 export function missingIssueMessage(locale) {
   return locale === 'zh'
-    ? '代码 PR 必须关联 issue。在描述里写一行 `Closes #<issue 号>`（或用侧边栏 Development 关联）。还没有 issue：bug 用 bug 表单开一个；功能建议先发 Discussions Ideas，等维护者认可后再开跟踪 issue（见 docs/contributing.md）。'
+    ? '代码 PR 必须关联 issue。在描述里写一行 `Closes #<issue 号>`（或用侧边栏 Development 关联）。还没有 issue：bug 用 bug 表单开一个；功能建议先发 Discussions Ideas，等维护者认可后再开跟踪 issue（见 docs/contributing.en.md）。'
     : 'A code PR must link an issue. Add `Closes #<issue>` in the description (or link it in the Development sidebar). No issue yet: file a bug through the bug form; feature ideas go to Discussions Ideas and wait for a maintainer tracking issue (see docs/contributing.en.md).'
 }

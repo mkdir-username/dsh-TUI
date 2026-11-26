@@ -1,7 +1,5 @@
 # Configuration
 
-[Documentation index](README.md) · [简体中文](configuration.md)
-
 ## Profiles and patch layers
 
 After an npm/profile installation, user configuration lives at:
@@ -589,5 +587,5 @@ other pi-ai OAuth routes.
 defaults to `$DSH_HOME/sessions` (normally `~/.dsh/sessions/`); direct
 `dsh --config cordis.yml` defaults to `~/.dsh-tui/sessions/`.
 
-See [Architecture and limitations](architecture.en.md#permissions-and-security-boundary)
+See `docs/architecture.en.md` (the permissions and security boundary section)
 for permission behavior and platform differences.

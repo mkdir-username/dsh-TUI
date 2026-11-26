@@ -137,7 +137,7 @@ export interface StartPermissionMode {
  * The explicit start permission mode (never omitted: the CLI default may be
  * `auto`). `DSH_TUI_CLAUDE_PERMISSION_MODE` is a developer override for live
  * tests and the only way to start in `bypassPermissions`
- * (docs/configuration.md). Next comes `pref`, the user's remembered
+ * (docs/configuration.en.md). Next comes `pref`, the user's remembered
  * `/permission` pick (`~/.dsh-tui/backends/claude/prefs.json`): it skips the
  * settings cascade (no escalation filter, no downgrade notice) — except a
  * remembered `bypassPermissions`, which is never carried into a new session

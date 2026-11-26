@@ -1,6 +1,6 @@
 /**
  * JSON-RPC 2.0 over the app-server's newline-delimited stdio
- * (docs/codex-backend-design.md §5.2). Transport-agnostic: the hub feeds
+ * (docs/codex-backend.en.md §5.2). Transport-agnostic: the hub feeds
  * every received line to `receive` and writes through `write`.
  *
  * - Requests get increasing integer ids and a per-method timeout (a timeout

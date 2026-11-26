@@ -1,7 +1,5 @@
 # Automation CLI
 
-[Documentation index](README.md) · [简体中文](cli.md)
-
 Plain `dst` / `dsh-tui` still opens the TUI. Explicit `run`, `-p`, or `cli` selects an independent automation application in root `cli/`, outside `src/`. It never loads React, Ink, the channel, TUI preferences, or bootstraps the TUI profile. Tracking: #1558 and #1559, under #1246.
 
 ## Getting started

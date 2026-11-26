@@ -1,5 +1,5 @@
 /**
- * DSH child transcript regression (docs/dsh-child-transcript.md): the DSH
+ * DSH child transcript regression: the DSH
  * implementation of `SubagentControl.history`, read through the public
  * sessionPersistence range API and folded by the same shared leaf pipeline
  * Claude uses, so no UI is backend-specific.
@@ -231,7 +231,7 @@ const rc2RosterService = (ids: readonly string[]) => ({
 }
 
 // An Agent Teams teammate's received messages stay out of the lane: the agent-message feed places them on this child's pages
-// (docs/agent-teams-design.md), so a leaf of their own would show them twice.
+// (docs/user-guide.en.md), so a leaf of their own would show them twice.
 {
   const log = new Log()
   log.add('user/message', { id: 'tm-2', role: 'user', source: { kind: 'agent-message', form: 'relay', senderSessionId: PARENT }, content: [text('Team message from lead:'), text('and docs/')] })

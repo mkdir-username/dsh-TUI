@@ -1,5 +1,5 @@
 /**
- * repro-trajectory-mouse — 轨迹场景鼠标链路复现（docs/mouse-adaptation-plan-abcd.md B 组）。
+ * repro-trajectory-mouse — 轨迹场景鼠标链路复现（B 组）。
  *
  * 场景：AlternateScreen 包裹的 TrajectoryScene（产品内联形态），注入 SGR
  * press+release / 滚轮，断言六件事：

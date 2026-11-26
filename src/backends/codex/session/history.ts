@@ -1,5 +1,5 @@
 /**
- * The replay seed of a resumed thread (docs/codex-backend-design.md §5.12):
+ * The replay seed of a resumed thread (docs/codex-backend.en.md §5.12):
  * the newest page of turns, which `thread/resume` returns in full when asked
  * (`initialTurnsPage` with `itemsView: 'full'`, C0 V4), oldest first through
  * the shared replay. A single asynchronously prefetched page makes the

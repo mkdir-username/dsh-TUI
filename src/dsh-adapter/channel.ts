@@ -3,7 +3,7 @@
  * `AgentSession` (`channel/core/compose.ts`), plus the DSH extensions when the
  * bound session is a DSH session (`channel/extensions.ts`). A new backend
  * needs no channel code; its session's typed capabilities decide what the
- * core serves. See docs/agent-backend-design.md.
+ * core serves. See ADAPTER.md for the boundaries.
  */
 import type { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'

@@ -1,5 +1,5 @@
 /**
- * Count-only thinking rows (docs/agent-backend-design.md §4.5 state (b)): a
+ * Count-only thinking rows (ADAPTER.md §4.5 state (b)): a
  * backend that streams an estimated thinking-token count but no thinking text
  * (Claude `thinking_tokens`) must show ONE header line — `Thinking · ~N
  * tokens` with the live spinner while streaming, `Thought · ~N tokens` with

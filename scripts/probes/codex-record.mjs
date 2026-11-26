@@ -2,7 +2,7 @@
 //
 // Records the Codex wire fixtures of scripts/fixtures/codex/wire/ against a
 // real `codex app-server` (the research scenarios s1–s5 of
-// docs/codex-backend-design.md §2, moved here). Every run is pinned by
+// docs/codex-backend.en.md §2, moved here). Every run is pinned by
 // scripts/lib/codex-cheap-only.mjs (throwaway CODEX_HOME, relay provider,
 // cheap model at effort low). Raw recordings land outside the repo
 // (codex-probe-lib.mjs); scrub them before committing:

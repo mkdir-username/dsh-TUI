@@ -3,7 +3,7 @@
 Both marks come from the project's own artwork:
 
 - the welcome page replays the animated pixel whale of the README logo
-  ([\`docs/assets/readme/logo.svg\`](../../../docs/assets/readme/logo.svg) and its English
+  ([`docs/assets/logo.svg`](../../../docs/assets/logo.svg) and its English
   twin \`logo-en.svg\`), so the panel speaks the language the wizard is using;
 - the window title icon is the DeepSeek Harness desktop whale
   (\`deepseek-harness/apps/desktop/resources/icon-windows.svg\`, vendored here as

@@ -1,7 +1,7 @@
 # Contributing
 
 本文件只讲**怎么改 `tui-profile/`**。dsh-TUI 仓库本身的贡献流程见
-[`../docs/contributing.md`](../docs/contributing.md)；两者走同一个 PR 流程。
+[`../docs/contributing.en.md`](../docs/contributing.en.md)；两者走同一个 PR 流程。
 
 ## 1. 口径
 

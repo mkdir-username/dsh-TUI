@@ -555,7 +555,7 @@ function attachToEntry(ctx: Context, config: RuntimeConfig<Config>): void {
 // of it is a breaking change. What is NOT here: the registry, the loader and the
 // picker. Those stay the host's; an installed bundle's declaration reaches them
 // through the boot-time assembly (`backend-assembly.ts`, D-1) on top of the W-2
-// admission chain (see docs/plugins.md).
+// admission chain (see docs/plugins.en.md).
 export {
   BACKEND,
   BACKEND_CAPABILITY_NAMES,

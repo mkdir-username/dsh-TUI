@@ -24,7 +24,7 @@ env:
   DSH_TUI_SPLASH_FONT: bold
 
 jobs:
-  # 变更分流：纯文档 / issue 模板改动不需要编译与回归——docs/contributing.md
+  # 变更分流：纯文档 / issue 模板改动不需要编译与回归——docs/contributing.en.md
   # 已经写了「纯文档、纯 workflow、纯 YAML 改动不需要重建」，这里是它的 CI 落地。
   # 白名单之外的任何路径都算代码，包括 .github/workflows 本身（改 ci.yml 必须跑
   # 全套）。push 与任何非 PR 事件一律按代码处理。
@@ -71,7 +71,7 @@ jobs:
             core.setOutput('code', String(code))
             core.notice(`${paths.length} 个文件改动，code=${code}`)
 
-  # 代码 PR 必须关联 issue——docs/contributing.md「如何贡献」的 CI 落地：
+  # 代码 PR 必须关联 issue——docs/contributing.en.md「如何贡献」的 CI 落地：
   # bug 走 bug 表单开 issue，功能建议经 Discussions 认可后由维护者开跟踪
   # issue，两条路都产出一个 issue。没有关联 issue 的代码 PR 意味着这份实现
   # 没有经过认可，正是被关掉的那批整套实现（OAuth、/cost、通知、插件 API、

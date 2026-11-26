@@ -1,6 +1,6 @@
 /**
  * The Codex permission presets as the backend's modes
- * (docs/codex-backend-design.md §5.9; C0 V8: the official `/permissions`
+ * (docs/codex-backend.en.md §5.9; C0 V8: the official `/permissions`
  * presets `read-only` "Read Only", `auto` "Default", `full-access` "Full
  * Access", plus Plan mode, which C2 adds as a collaboration mode).
  *

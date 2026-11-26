@@ -45,7 +45,7 @@
  *                                  too). Another backend's directory is out
  *                                  too
  *   src/backends/shared/**         backend-neutral helpers (D15 of
- *                                  docs/codex-backend-design.md): no scoped
+ *                                  docs/codex-backend.en.md): no scoped
  *                                  (vendor) package, no concrete backend
  *                                  directory, no src/dsh-adapter/** — and the
  *                                  seam is the floor of the backend stack, so
