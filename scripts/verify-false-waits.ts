@@ -1,6 +1,6 @@
 /**
  * CI gate for the false-waits catalog: every blocking surface dsh can show the
- * user must have a row in `docs/false-waits.md` AND a live code anchor. The
+ * user must have a row in `docs/false-waits.en.md` AND a live code anchor. The
  * anchor is what keeps the catalog honest — a core upgrade moves the string and
  * this gate fails, asking for a re-read instead of letting the document drift
  * away from the code it describes.
@@ -12,7 +12,7 @@ import { homedir } from 'node:os'
 import { resolve } from 'node:path'
 
 const ROOT = resolve(import.meta.dirname, '..')
-const DOC = resolve(ROOT, 'docs/false-waits.md')
+const DOC = resolve(ROOT, 'docs/false-waits.en.md')
 const HOME = homedir()
 const DSH_PACKAGES = resolve(HOME, '.bun/install/global/node_modules/@deepseek-ai')
 
@@ -57,7 +57,7 @@ function check(label: string, ok: boolean, detail = ''): void {
 }
 
 if (!existsSync(DOC)) {
-  check('docs/false-waits.md exists', false, DOC)
+  check('docs/false-waits.en.md exists', false, DOC)
 } else {
   const catalog = readFileSync(DOC, 'utf8')
   for (const surface of SURFACES) {

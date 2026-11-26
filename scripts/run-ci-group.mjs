@@ -1636,7 +1636,7 @@ const GROUPS = {
 // 后消失。
     ["verify-tool-park", ['node', '--import', 'tsx/esm', 'scripts/verify-tool-park.tsx']],
 // The false-waits catalog: every waiting surface must have a row in
-// docs/false-waits.md and a live anchor in the code that performs the wait.
+// docs/false-waits.en.md and a live anchor in the code that performs the wait.
 // A core upgrade moves the anchor — the gate fails and asks for a re-read.
     ["verify-false-waits", ['node', '--import', 'tsx/esm', 'scripts/verify-false-waits.ts']],
 // 重启把当前回合按 aborted/disposed 关掉，回放里那一行是收尾提示：替换进程把

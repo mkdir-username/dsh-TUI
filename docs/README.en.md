@@ -35,7 +35,7 @@ These eleven pages ship inside the package.
 | [agent-navigation.en.md](agent-navigation.en.md) | Routing user phrases to the right source |
 | [references.en.md](references.en.md) | The pinned upstream reference map |
 | [roadmap.en.md](roadmap.en.md) | Direction and open work |
-| [false-waits.md](false-waits.md) | Catalog of blocking waits that must stay parkable |
+| [false-waits.en.md](false-waits.en.md) | Catalog of blocking waits that must stay parkable |
 
 ## Community
 
