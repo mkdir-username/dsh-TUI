@@ -230,10 +230,10 @@ for (const [form, typed] of [['install', '/pa'], ['install', '/path/to/repo'], [
     && rows[0]!.replacement === `/plugin ${form} ${typed}`,
     JSON.stringify(rows.map(row => [row.name, row.commandLine, row.replacement])))
 }
-// 这三条是用户可见承诺：浮窗与双 README 必须写同一份，谁改都要两边改。
-const readmeShapes = ['README.md', 'README_ZH.md'].map(file =>
+// 这三条是用户可见承诺：浮窗与 README 必须写同一份，谁改都要两边改。
+const readmeShapes = ['README.md'].map(file =>
   [file, readFileSync(new URL(`../${file}`, import.meta.url), 'utf8')] as const)
-check('both READMEs list the same three shapes the popup shows',
+check('the README lists the same three shapes the popup shows',
   readmeShapes.every(([, text]) => SPEC_SHAPES.every(spec => text.includes(`/plugin install ${spec}`))),
   readmeShapes.map(([file, text]) =>
     `${file}: ${SPEC_SHAPES.filter(spec => text.includes(`/plugin install ${spec}`)).length}/3`).join(' · '))

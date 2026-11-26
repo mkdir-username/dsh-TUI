@@ -37,7 +37,7 @@ const files = ['src', 'scripts', 'docs'].flatMap(name => collect(resolve(root, n
 // Shipped documents, wherever the tree keeps them: a name absent from this
 // checkout is skipped instead of failing the scan, so removing or renaming one
 // stays a documentation decision rather than a build break.
-files.push(...['README.md', 'README_ZH.md', 'AGENTS.md', 'ADAPTER.md', 'package.json'].map(name => resolve(root, name)).filter(existsSync))
+files.push(...['README.md', 'AGENTS.md', 'ADAPTER.md', 'package.json'].map(name => resolve(root, name)).filter(existsSync))
 // Retired env naming is code-only: launcher and config files are scanned
 // as code, while docs may still mention the old names in migration history.
 // The harness home now follows the upstream default (~/.dsh), so run.ts and

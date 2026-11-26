@@ -46,7 +46,7 @@ else {
   if (report.newerUnvalidated.length) console.log(`Newer RC(s) outside the validated range: ${report.newerUnvalidated.join(', ')}`)
 }
 if (newerValidated.length || aheadOfContract.length) {
-  console.error('Kernel contract drift detected; see README_ZH.md / README.md for the rebuild or contract-bump path.')
+  console.error('Kernel contract drift detected; see README.md for the rebuild or contract-bump path.')
   process.exit(1)
 }
 // No newer RC exists, so a differing primary means it is no longer published and

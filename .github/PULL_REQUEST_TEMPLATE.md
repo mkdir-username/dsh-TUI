@@ -31,7 +31,7 @@ Closes #<!-- issue 号；改动代码的 PR 必须关联 issue。纯文档 PR、
 提交前自查（不必勾选，确认即可）：
 - 只改 src/，没有手改或提交 lib/
 - 官方 @deepseek-ai/* 的 import 仍只在 src/dsh-adapter/ 内
-- 行为、配置、快捷键、限制的改动已在 README.md 与 README_ZH.md 同步
+- 行为、配置、快捷键、限制的改动已在 README.md 与 `docs/*.en.md` 同步
 - 改了 cordis.patch.yml 的话，patch-surface.snapshot.json 已同步
 - 只暂存了显式路径
 -->
