@@ -152,7 +152,7 @@ While a turn is running, the `/` overlay groups commands by their impact on the 
 | `Ctrl+Z` | undo the draft's last word-level edit (caret and images included); draft-only — a submit or a history recall (`Ctrl+R`/`↑`) ends it, and it is unrelated to the `Esc Esc` conversation/message rewind; remappable via `/settings` |
 | `Backspace` / `Delete` | delete previous / next character; **with a selection, delete the whole selection** |
 | `↑` / `↓` | move between lines when multi-line; browse input history when single-line (scoped per project, last 200 entries each, kept across restarts; history from before the upgrade shows in every project) |
-| `Ctrl+V` (⌘V) / `Alt+V` | paste: text / file path (images auto `@`-referenced) / clipboard bitmap (`[Image #N]` attachment); use `Alt+V` when the terminal swallows `Ctrl+V` |
+| `Ctrl+V` (⌘V) / `Alt+V` | paste: text / file path (images auto `@`-referenced) / clipboard bitmap (`[Image #N]` attachment); use `Alt+V` when the terminal swallows `Ctrl+V`; the terminal's own paste (⌘V) over a bitmap stages the image too, unless the terminal swallows the key without forwarding it |
 | `Ctrl+G` | edit the input in the `$VISUAL`/`$EDITOR` external editor (`:cq` keeps the draft; prompts you to configure when unset) |
 | `Ctrl+Shift+E` (⌘⇧E) | open the **full-screen draft editor** (or click `⛶` at the end of the input line): line numbers, current line highlighted, `Enter` newline, `Ctrl+Enter` send, `Esc` collapse (draft kept); off at `/settings → 全屏草稿编辑` |
 | long draft auto-fold | pasting a block **≥6 lines or ≥600 chars** folds into a `▸ N 行・M 字` chip: click the chip or `▾` to toggle; `Enter` always submits the full text |

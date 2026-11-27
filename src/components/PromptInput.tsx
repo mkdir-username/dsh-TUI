@@ -2691,6 +2691,30 @@ export function PromptInput({
     return line.length
   }
 
+  /** Stage one clipboard bitmap export into the draft. The one path shared
+   *  by the paste key and by the terminal's own paste of an image, which
+   *  arrives as an EMPTY bracketed paste: the pasteboard holds no text to
+   *  deliver, so only the image remains. The temp export belongs to the
+   *  caller, which unlinks it once this settles. */
+  const stageClipboardBitmap = async (path: string, lease: DraftImageLease): Promise<void> => {
+    if (imagePathMediaType(path) === undefined) {
+      channel.notify(t('input-image-format-unsupported'), { color: 'warning', timeoutMs: 5000 })
+      return
+    }
+    try {
+      await enqueueImageWork(async () => {
+        const handle = await stageImagePath(path, lease)
+        const token = bindStagedImage(handle, lease)
+        insertClipboardAtCaret(`${token} `)
+        channel.notify(stagedImageNotice(token, handle), { timeoutMs: 2500 })
+      })
+    } catch (error: unknown) {
+      if (!draftImageLeaseIsCurrent(lease)) return
+      const message = error instanceof Error ? error.message : String(error)
+      channel.notify(t('input-image-paste-failed', { err: message }), { color: 'warning', timeoutMs: 5000 })
+    }
+  }
+
   useInput((input, key, event) => {
     if (selectionActive) return
     // The editor round-trip ends by resuming stdin one microtask before the
@@ -2786,6 +2810,34 @@ export function PromptInput({
       return at
     }
 
+    // The terminal's own paste (⌘V, right-click) carries no text when the
+    // pasteboard holds only a bitmap — the marker pair arrives with an empty
+    // payload. Read the clipboard here and stage that image; text and files
+    // are ignored on purpose, because for those the terminal already pasted
+    // the text and this branch would insert it twice.
+    if (event?.isPasted === true && input.length === 0) {
+      if (clipboardBusyRef.current) return
+      const lease = captureDraftImageLease()
+      clipboardBusyRef.current = true
+      void readClipboard()
+        .then(async content => {
+          const temporaryImagePath = content?.kind === 'image' ? content.path : undefined
+          try {
+            if (content?.kind !== 'image') return
+            await stageClipboardBitmap(content.path, lease)
+          } finally {
+            if (temporaryImagePath !== undefined) {
+              await unlink(temporaryImagePath).catch(() => undefined)
+            }
+          }
+        })
+        .catch(() => undefined)
+        .finally(() => {
+          clipboardBusyRef.current = false
+        })
+      return
+    }
+
     // Bracketed paste (terminal paste — Ctrl+Shift+V / right-click): insert
     // at the caret after removing terminal controls and expanding tabs.
     // Newlines remain data — they are NOT Enter — so this branch runs before
@@ -2860,22 +2912,7 @@ export function PromptInput({
               return
             }
             if (content.kind === 'image') {
-              if (imagePathMediaType(content.path) === undefined) {
-                channel.notify(t('input-image-format-unsupported'), { color: 'warning', timeoutMs: 5000 })
-                return
-              }
-              try {
-                await enqueueImageWork(async () => {
-                  const handle = await stageImagePath(content.path, lease)
-                  const token = bindStagedImage(handle, lease)
-                  insertClipboardAtCaret(`${token} `)
-                  channel.notify(stagedImageNotice(token, handle), { timeoutMs: 2500 })
-                })
-              } catch (error: unknown) {
-                if (!draftImageLeaseIsCurrent(lease)) return
-                const message = error instanceof Error ? error.message : String(error)
-                channel.notify(t('input-image-paste-failed', { err: message }), { color: 'warning', timeoutMs: 5000 })
-              }
+              await stageClipboardBitmap(content.path, lease)
               return
             }
             if (content.kind === 'files') {

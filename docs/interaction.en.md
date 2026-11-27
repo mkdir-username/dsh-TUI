@@ -17,6 +17,7 @@ Fullscreen text selection belongs to its starting pane (chat, sidebar or one dif
 | `Alt/Option+Up` | Pull the latest undelivered message back into the editor |
 | `Up/Down` | Select menu items; in ordinary input, browse history or move through multiline text |
 | `Ctrl+V` / `Alt+V` | Insert clipboard text or files; images are sent as durable attachments. Use `Alt+V` when the terminal intercepts `Ctrl+V` |
+| `⌘V` (terminal paste) | The terminal's own paste delivers text itself; when the clipboard holds only a bitmap it arrives as an empty paste and the composer stages the image instead. Terminals that swallow `⌘V` without forwarding the key (Ghostty's default `super+v=paste_from_clipboard`) need it released — `keybind = super+v=unbind` — before the app can see it |
 | `Ctrl+G` | Edit the current input in an external editor (`$VISUAL` → `$EDITOR`); saving and quitting fills it back, `:cq`/non-zero exit keeps the draft; with neither variable set the TUI asks you to configure one (no `vi` fallback) |
 | `Ctrl+Shift+E` | Expand the fullscreen draft editor (or click the `⛶` affordance at the end of the input row): line numbers + current-line highlight + live line/char stats<br>`Enter` inserts a newline, `Ctrl+Enter` or the Send button sends, `Esc` or the Collapse button keeps the draft and returns<br>wheel-scrolls freely; click/drag/double-click selection work as in the inline prompt; remappable via `/settings` |
 | `Esc` | Ladder: close help → close the image preview → close the command menu → close the file menu (only the current `@` token)<br>→ with the held-queue selector open: only leave the selector → **with a selection in the prompt input: only clear it (text untouched)** → collapse the draft editor → unfold a pasted block → remove context chips → interrupt the turn and hold the queued messages (ordinary draft kept; no automatic re-send, see "Message delivery semantics") → clear non-empty idle input → double-tap on empty idle input = rewind<br>in fullscreen, an active mouse selection is cleared first (not copied) |
@@ -214,6 +215,10 @@ mapping, and selection geometry consistent:
 - Both stripping and decoding need evidence: complete records are consumed before ESC-less tails (so a record is never sliced open and its orphan ESC never eats the payload character behind it), and a tail must stand alone as its own token — a record-shaped run welded into the payload's own word is kept byte-for-byte (visible residue beats silent loss). Only the five-separator record grammar matches, so genuine underscores and bracket text that merely resembles a record are untouched.
 - Pasted CRLF collapses: a CR+LF pair produces one newline instead of two; LF-only and lone CR keep their previous behavior.
 - Tabs are expanded to spaces on entry.
+- An **empty** bracketed paste is not a no-op: the terminal had no text to deliver, which is
+  exactly what copying a bitmap looks like (screenshots, "Copy image"). The composer reads the
+  clipboard and stages that image as an attachment; text and files are left alone there, since
+  the terminal already pasted them.
 
 ### Fullscreen draft editor (`Ctrl+Shift+E` / `⛶`)
 

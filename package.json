@@ -182,6 +182,8 @@
     "verify:installer-bundle": "node scripts/verify-installer-bundle.mjs",
     "verify:prompt-debug": "npm run build && node scripts/verify-prompt-debug.mjs",
     "verify:clipboard-image": "node --import tsx/esm scripts/verify-clipboard-image.ts",
+    "verify:empty-paste-image": "node --import tsx/esm scripts/verify-empty-paste-image.tsx",
+    "verify:clipboard-darwin": "node --import tsx/esm scripts/verify-clipboard-darwin.ts",
     "verify:history-search": "node --import tsx/esm scripts/verify-history-search.mjs",
     "verify:initial-prompt": "node scripts/verify-initial-prompt.mjs && node scripts/verify-startup-argv.mjs",
     "verify:plugin-ledger": "node --import tsx/esm scripts/verify-plugin-ledger.ts",
