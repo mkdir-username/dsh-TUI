@@ -124,8 +124,8 @@ importers:
         specifier: workspace:*
         version: link:vendor/mathjax-tex-svg
       '@mkdir-username/dsh-handoff-control':
-        specifier: link:/Users/username/Docs/agent-handoff-control/dsh
-        version: link:../agent-handoff-control/dsh
+        specifier: ^0.1.0
+        version: 0.1.0
       auto-bind:
         specifier: ^4.0.0 || ^5.0.0
         version: 5.0.1
@@ -3252,6 +3252,9 @@ packages:
 
   '@mixmark-io/domino@2.2.0':
     resolution: {integrity: sha512-Y28PR25bHXUg88kCV7nivXrP2Nj2RueZ3/l/jdx6J9f8J4nsEGcgX0Qe6lt7Pa+J79+kPiJU3LguR6O/6zrLOw==}
+
+  '@mkdir-username/dsh-handoff-control@0.1.0':
+    resolution: {integrity: sha512-D3ln0nE3IJF86sqaqviu1LgNJI5C1jWbPK8xNnBYYGDaywbnYoFvVe7k/T5SMn3bW03FkdUVwELuwJFJjnTXBA==}
 
   '@modelcontextprotocol/client@2.2.0':
     resolution: {integrity: sha512-LxCou/CSYQ6dwEnjhLZY0KnEuc8V4UJ3IEQCl/uR2yHobSQIEdJKUlKLRYRF5i5FqRGHy1eK7une3aAWDHLtig==}
@@ -7703,6 +7706,8 @@ snapshots:
     optional: true
 
   '@mixmark-io/domino@2.2.0': {}
+
+  '@mkdir-username/dsh-handoff-control@0.1.0': {}
 
   '@modelcontextprotocol/client@2.2.0':
     dependencies:
