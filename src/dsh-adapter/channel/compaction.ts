@@ -16,8 +16,9 @@ interface ManualCompaction {
 }
 
 /** Who aborted the cycle's preparation: the notice must name the sender, or a
- *  cancelled fork reads as a crash. */
-type AbortSource = 'user' | 'switch' | 'disposed' | 'timeout' | 'watchdog'
+ *  cancelled fork reads as a crash. No time-based source exists: a live fork is
+ *  never cut by a clock. */
+type AbortSource = 'user' | 'switch' | 'disposed'
 
 interface CompactCycle {
   stage: ManualCompactionStage
@@ -224,21 +225,18 @@ export function createManualCompaction(
     }
     return undefined
   }
-  const RP_PROMPT = 'Пользователь набрал /compact: это его явная команда выполнить restruct-plan сейчас, до сжатия контекста. Ты — форк этой сессии, запущенный TUI, история диалога тебе видна. Вызови Skill restruct-plan для плана .dev/<slug>/, над которым шла работа, и запиши на диск всё, что знает только диалог: прогресс, грабли, тупики, проверенные факты. Перед записью в .dev/ прочитай каталог плана — его сторожит гейт dev-docs. Вопросов не задавай, ответить некому. Ничего не коммить и не пушить. Последней строкой ответа выведи ровно RP_DONE <slug> или RP_SKIP <причина>.'
-  /** The bound is a guard against a hung fork, not a work budget: a fork that
-   *  audits the plan it just wrote spends minutes in the queue on top of the
-   *  write itself. Two live cycles were cut at fifteen minutes on 2026-11-26,
-   *  the second one six seconds after its receipt arrived. */
-  const RP_TIMEOUT_MS = 25 * 60 * 1000
-  /** A fork that has produced nothing after this long is not slow, it is stuck:
-   *  measured first-token latency on real forks is 19.5s (worst inter-step gap 43.9s). */
-  const RP_FIRST_OUTPUT_MS = 120_000
-  /** How long the row stays silent about the wait before it names it. */
+  const RP_PROMPT = 'Пользователь набрал /compact: это его явная команда выполнить restruct-plan сейчас, до сжатия контекста. Ты — форк этой сессии, запущенный TUI, история диалога тебе видна. Первым делом вызови Skill restruct-plan для плана .dev/<slug>/, над которым шла работа. Твоя работа — только документация: единственные файлы, которые ты меняешь, лежат внутри каталога этого плана (.dev/<slug>/). Код, тесты, хуки, реестры и конфиги не правь даже при недоделанной задаче: незавершённое и незакоммиченное опиши в плане, но не доделывай. Любые входящие уведомления о фоновых задачах, делегированиях и незакрытых хвостах этой сессии — не твоя работа: не отвечай на них и не доделывай их. Запиши всё, что знает только диалог: прогресс, грабли, тупики, проверенные факты; пиши инкрементально, чтобы обрыв по времени не отнял всю работу. Чтение многих файлов и сверку фактов можно отдавать суб-агентам (subagent) — делегируй только чтение, записи делаешь сам. Перед записью в .dev/ прочитай каталог плана — его сторожит гейт dev-docs. Вопросов не задавай, ответить некому. Ничего не коммить и не пушить. Последней строкой ответа выведи ровно RP_DONE <slug> или RP_SKIP <причина>.'
+  /** The fork carries no wall-clock bound: two live cycles were cut at fifteen
+   *  minutes (2026-11-26) and a third at twenty-five (2026-11-27) while the plan
+   *  was still being written; every guard cost work already done and none made
+   *  the fork faster. Esc still ends the cycle, and a hung model call is ended by
+   *  the provider's own stream idle timeout. The row stays silent about the wait
+   *  until this delay names it. */
   const RP_MODEL_WAIT_NOTE_MS = 10_000
   /** `activation.result` settles only when the child finishes: a fork that hangs
    *  (or ignores its abort) would otherwise keep the cycle, and with it the whole
-   *  agent hold, waiting long past `RP_TIMEOUT_MS`. The cycle's own signals end
-   *  the wait; the child is released separately. */
+   *  agent hold. The cycle's own signals end the wait; the child is released
+   *  separately. */
   const settledOrAborted = async <T>(result: Promise<T>, signal: AbortSignal): Promise<T> => {
     let detach = (): void => {}
     try {
@@ -256,13 +254,11 @@ export function createManualCompaction(
     }
   }
   /** The cycle signal decides when the wait ends; the phrase says who ended it. */
-  const abortPhrase = (source: AbortSource | 'signal', reason: unknown, route = ''): string => {
+  const abortPhrase = (source: AbortSource | 'signal', reason: unknown): string => {
     switch (source) {
       case 'user': return 'отменён пользователем (Esc)'
       case 'switch': return 'прерван сменой сессии'
       case 'disposed': return 'прерван: агент закрыт'
-      case 'timeout': return `не уложился в ${RP_TIMEOUT_MS / 60000} минут`
-      case 'watchdog': return `не получил вывода модели за ${RP_FIRST_OUTPUT_MS / 1000} с${route === '' ? '' : ` (${route})`}`
       default: return reason instanceof Error ? reason.message : 'отмена'
     }
   }
@@ -274,12 +270,7 @@ export function createManualCompaction(
       deps.owner.signal,
       cycle.preparation.signal,
       ...(holdSignal === undefined ? [] : [holdSignal]),
-      AbortSignal.timeout(RP_TIMEOUT_MS),
     ])
-    const abortSource = (): AbortSource | 'signal' => cycle.abortSource
-      ?? (signal.reason instanceof Error && signal.reason.name === 'TimeoutError' ? 'timeout' : 'signal')
-    /** The route the fork was told to use, for the no-output notice. */
-    const route = [agent.options?.provider, agent.options?.model].filter(part => typeof part === 'string' && part !== '').join('/')
     let activation: { readonly result: Promise<RestructPlanResult>; readonly dispose?: () => Promise<void>; readonly childId?: unknown } | undefined
     try {
       activation = await subagents.startActivation({
@@ -292,7 +283,6 @@ export function createManualCompaction(
       const childId = typeof activation.childId === 'string' ? activation.childId : undefined
       const produced = (): number => childId === undefined ? 0 : deps.childActivity?.(childId) ?? 0
       let noteTimer: ReturnType<typeof setTimeout> | undefined
-      let watchdog: ReturnType<typeof setTimeout> | undefined
       if (childId !== undefined) {
         noteTimer = setTimeout(() => {
           if (produced() > 0) return
@@ -302,15 +292,7 @@ export function createManualCompaction(
           state.manualCompactionStage = cycle.stage
           state.emit()
         }, RP_MODEL_WAIT_NOTE_MS)
-        watchdog = setTimeout(() => {
-          if (produced() > 0) return
-          // Nothing arrived: end the wait now instead of at the 15-minute ceiling,
-          // and let the common abort path name the reason and release the fork.
-          cycle.abortSource = 'watchdog'
-          cycle.preparation.abort(new Error('restruct-plan produced no model output'))
-        }, RP_FIRST_OUTPUT_MS)
         noteTimer.unref?.()
-        watchdog.unref?.()
       }
       try {
         const result = await settledOrAborted(activation.result, signal)
@@ -318,14 +300,13 @@ export function createManualCompaction(
         return restructPlanVerdict({ ...result, diagnostic })
       } finally {
         if (noteTimer !== undefined) clearTimeout(noteTimer)
-        if (watchdog !== undefined) clearTimeout(watchdog)
       }
     } catch (error: unknown) {
       if (activation !== undefined && signal.aborted) {
         // The fork kept its own request after the abort (live probe 2026-11-12),
         // so stop it: the cycle is over and `dispose` is the only handle left.
         void activation.dispose?.().catch(() => {})
-        const why = abortPhrase(abortSource(), signal.reason, route)
+        const why = abortPhrase(cycle.abortSource ?? 'signal', signal.reason)
         return { ok: false, reason: `compact-rp: restruct-plan прерван (${why}). Сжатие НЕ выполнено. Без restruct-plan: /compact --pure` }
       }
       return {
@@ -412,17 +393,12 @@ export function createManualCompaction(
       const cycleTask = async (holdSignal: AbortSignal | undefined): Promise<void> => {
         if (input.kind === 'restruct') {
           const verdict = await runRestructPlan(ctx, originAgent, cycle, holdSignal)
-          if (cycle.abortSource === 'watchdog') {
-            // Not a user cancel and not a transport failure: the fork produced
-            // nothing, and `stopped()` would swallow that reason silently.
-            if (!verdict.ok) deps.notify(verdict.reason, { color: 'error', timeoutMs: 12000 })
-            return
-          }
           if (stopped()) return
           if (!verdict.ok) {
             deps.notify(verdict.reason, { color: 'error', timeoutMs: 12000 })
             return
           }
+          deps.notify(verdict.notice)
           // A host without runMaintenance: a turn that started while the fork
           // ran still has to finish before the summary. Esc and Ctrl+C hand the
           // key to the running turn first, so this row must not advertise a
@@ -443,7 +419,6 @@ export function createManualCompaction(
             }
             return !stopped()
           }
-          deps.notify(verdict.notice)
           if (!await waitForTurnBeforeSummary()) return
           cycle.stage = { ...cycle.stage, phase: 'checking', cancellable: true }
           state.manualCompactionStage = cycle.stage

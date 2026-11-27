@@ -80,30 +80,32 @@ check(
 )
 
 // ── 5. the abort phrase names the sender ──────────────────────────────────
-const phraseBody = source.match(/^ {4}const abortPhrase = \(source, reason, route = ''\) => \{[\s\S]*?\n {4}\};/m)?.[0]
+const phraseBody = source.match(/^ {4}const abortPhrase = \(source, reason\) => \{[\s\S]*?\n {4}\};/m)?.[0]
 if (phraseBody === undefined) {
   console.error('FAIL: abortPhrase не найден в lib/types — сначала pnpm compile')
   process.exit(1)
 }
-// The bound itself is a behaviour: a watchdog that fires at the wrong moment is
-// as wrong as a missing one, so the test reads it from the compiled source.
-const firstOutputMs = Number((source.match(/const RP_FIRST_OUTPUT_MS = ([\d_]+)/)?.[1] ?? '').replaceAll('_', ''))
-check('the no-output bound is two minutes', firstOutputMs === 120_000, String(firstOutputMs))
-const timeoutMinutes = Number(source.match(/const RP_TIMEOUT_MS = (\d+) \* 60 \* 1000/)?.[1] ?? '')
-check('the restruct-plan bound outlasts an audited plan', timeoutMinutes === 25, String(timeoutMinutes))
-const abortPhrase = new Function('RP_TIMEOUT_MS', 'RP_FIRST_OUTPUT_MS', `${phraseBody}\nreturn abortPhrase`)(timeoutMinutes * 60 * 1000, firstOutputMs)
+// No clock may cut a live fork: every bound tried so far (15 min, then 25) fired
+// while the plan was still being written, so the test pins the absence.
+check('the fork carries no wall-clock bound', !/RP_TIMEOUT_MS|AbortSignal\.timeout/.test(source), '')
+check('no watchdog aborts a silent fork', !/RP_FIRST_OUTPUT_MS/.test(source), '')
+const abortPhrase = new Function(`${phraseBody}\nreturn abortPhrase`)()
 check('cancel names the user', abortPhrase('user', new Error('user cancelled compaction')) === 'отменён пользователем (Esc)', abortPhrase('user', new Error('x')))
 check('settle names the switch', abortPhrase('switch', new Error('session switch')) === 'прерван сменой сессии', abortPhrase('switch', new Error('x')))
 check('disposal names the closed agent', abortPhrase('disposed', new Error('agent disposed')) === 'прерван: агент закрыт', abortPhrase('disposed', new Error('x')))
-check('timeout names the bound', abortPhrase('timeout', new Error('TimeoutError')) === `не уложился в ${timeoutMinutes} минут`, abortPhrase('timeout', new Error('x')))
 check('an unknown abort keeps its reason', abortPhrase('signal', new Error('boom')) === 'boom')
 check('a reasonless abort stays neutral', abortPhrase('signal', undefined) === 'отмена')
-check(
-  'the watchdog names the wait and the route',
-  abortPhrase('watchdog', undefined, 'opencode-go/deepseek-v4.1-flash') === 'не получил вывода модели за 120 с (opencode-go/deepseek-v4.1-flash)',
-  abortPhrase('watchdog', undefined, 'opencode-go/deepseek-v4.1-flash'),
-)
-check('the watchdog keeps working without a route', abortPhrase('watchdog', undefined) === 'не получил вывода модели за 120 с')
+
+// ── 6. the fork's write surface ───────────────────────────────────────────
+// A fork seeded with the parent's history drifts into finishing that history's
+// unfinished work: on 2026-11-27 a live fork spent ten minutes editing hooks and
+// tests while its own `.dev/` plan was never touched. The prompt owns the surface.
+const prompt = source.match(/const RP_PROMPT = '([^']*)'/)?.[1] ?? ''
+check('the fork is told it only documents', prompt.includes('только документация'), prompt.slice(0, 60))
+check('the fork is told to leave code, tests and hooks alone', prompt.includes('Код, тесты, хуки'), '')
+check('the fork may hand file reading to subagents', prompt.includes('суб-агентам (subagent)'), '')
+check('the fork calls the skill first', prompt.includes('Первым делом вызови Skill restruct-plan'), '')
+check('inherited notifications are not the fork\'s work', prompt.includes('не твоя работа'), '')
 
 console.log(failed === 0 ? 'compact-rp battery OK' : `compact-rp battery FAILED (${failed})`)
 process.exit(failed === 0 ? 0 : 1)
