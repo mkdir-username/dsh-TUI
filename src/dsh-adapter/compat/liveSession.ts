@@ -255,15 +255,30 @@ export interface LiveSessionCreateRequest {
 }
 
 /**
+ * A seed is a copy of the parent's log, and an inherited `agent/inbox/spliced`
+ * event replays the parent's still-unconsumed queue: the child would open with
+ * the parent's pending notice and its own prompt would wait a turn behind it.
+ * Every splice keeps its place — sequence numbers must remain the array index —
+ * but becomes a no-op.
+ */
+function withoutQueuedInput(events: readonly SessionEvent[]): readonly SessionEvent[] {
+  return events.map(event => event.type === 'agent/inbox/spliced'
+    ? { ...event, data: { target: event.data.target, start: 0, inserted: [] } }
+    : event)
+}
+
+/**
  * Dual-runtime seed metadata for `agents.create`. The only
  * CreateAgentOptions assertion lives here: rc.2 meta carries `seedLength`,
- * alpha.4 carries `isSeeded` plus top-level `inheritedEventCount`.
+ * alpha.4 carries `isSeeded` plus top-level `inheritedEventCount`. Every
+ * fork-family seed passes through this factory, and none of them may carry
+ * input the parent has not consumed yet.
  */
 export function liveSessionCreateOptions(request: LiveSessionCreateRequest): CreateAgentOptions {
   const seedMetadata = liveSessionSeedMetadata(request.runtimeSession, request.inheritedCount)
   return {
     sessionId: request.sessionId,
-    seed: request.seed,
+    seed: withoutQueuedInput(request.seed),
     meta: {
       cwd: request.cwd,
       ...(request.parentSession === undefined ? {} : { parentSession: request.parentSession }),

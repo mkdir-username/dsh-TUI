@@ -254,11 +254,16 @@ async function verify(fullscreen: boolean, columns: number, entry: 'slash' | 'es
       assert.ok(await settled(() => forks.length === round + 1 && promptShows(prompt)), 'selected prompt restored')
       assert.ok(await settled(() => shows(retainedTail)), 'rewind shows the bottom of the retained history')
       const child = forks[round]!
-      const canceled = child.ownEvents().flatMap(event => event.type === 'agent/inbox/spliced' && event.data.outcome === 'canceled' ? [event.data.target] : [])
-      assert.deepEqual(canceled, round === 0 ? ['next-step', 'next-turn'] : ['next-turn'], 'restored queues canceled in the child')
+      // The inherited prefix never replays the parent's unconsumed queue, so rewind
+      // has nothing to cancel and leaves no cancellation markers in the child log.
+      const inheritedQueue = child.snapshotEvents(0, child.inheritedEventCount).reduce((pending: UserMessage[], event) => event.type === 'agent/inbox/spliced'
+        ? pending.toSpliced(event.data.start, event.data.removedCount ?? 0, ...event.data.inserted)
+        : pending, [])
+      assert.deepEqual(inheritedQueue, [], 'inherited queue reaches no child')
+      assert.deepEqual(child.snapshotEvents(child.inheritedEventCount).filter(event => event.type === 'agent/inbox/spliced'), [], 'rewind leaves no cancellation churn')
       const restored = Session.fromRestore(child.id, [...child.snapshotEvents()], { ...child.header }, child.inheritedEventCount, 'shared-frozen')
       const resumed = makeAgent(restored)
-      assert.equal(resumed.inbox.nextTurn.length + resumed.inbox.nextStep.length, 0, 'cancellation survives rehydration')
+      assert.equal(resumed.inbox.nextTurn.length + resumed.inbox.nextStep.length, 0, 'the empty queue survives rehydration')
       stdin.write('hihi')
       const edited = prompt + 'hihi'
       assert.ok(await settled(() => promptShows(edited)), 'edited text is visible')
