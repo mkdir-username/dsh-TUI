@@ -480,5 +480,38 @@ const BACKGROUND_CARD = toolRow({
   check('a delegation seam with no hub is not asked', parkAnyDelegation() === null)
 }
 
+// ── the UI facade forwards the kind-narrowed park seams ───────────────────
+// The live channel a screen sees is a facade (`createChannelUi`): it re-exposes
+// ONLY the methods declared in its effects table. A seam added to the control
+// but not to the facade is invisible at runtime while every stub-based test
+// stays green — the 2026-11-27 live check saw a waiting ticket in the hub, a
+// running card, and `channel.jobControl.parkDelegation === undefined`.
+{
+  const [{ createChannelUi, createChannelUiLease }] = await Promise.all([import('../src/adapter/channel/ui.js')])
+  const calls: string[] = []
+  const control = {
+    kill: () => false,
+    parkAny: () => ({ callId: 'call-any', command: 'bash' }),
+    parkWait: () => ({ callId: 'call-wait', jobId: 'job-1' }),
+    parkDelegation: () => { calls.push('delegation'); return { callId: 'call-del', command: 'долгая задача' } },
+    parkWorkflow: () => { calls.push('workflow'); return { callId: 'call-wf', command: 'audit-sweep' } },
+  }
+  const facade = createChannelUi({ version: 1, jobControl: control } as never, 'new', createChannelUiLease(() => true))
+  const view = facade.jobControl as unknown as Record<string, unknown>
+  const delegation = typeof view.parkDelegation === 'function' ? (view.parkDelegation as () => { callId: string } | null)() : null
+  check('the UI facade forwards parkDelegation',
+    delegation !== null && delegation.callId === 'call-del', Object.keys(view).join(','))
+  const workflow = typeof view.parkWorkflow === 'function' ? (view.parkWorkflow as () => { callId: string } | null)() : null
+  check('the UI facade forwards parkWorkflow',
+    workflow !== null && workflow.callId === 'call-wf', JSON.stringify(calls))
+  // A backend whose control has only kill must not grow a park seam through
+  // the facade — the key's fallthrough depends on the absence being real.
+  const bare = createChannelUi({ version: 1, jobControl: { kill: () => false } } as never, 'new', createChannelUiLease(() => true))
+  const bareView = bare.jobControl as unknown as Record<string, unknown>
+  check('a control without the seams stays bare behind the facade',
+    !('parkAny' in bareView) && !('parkDelegation' in bareView) && !('parkWorkflow' in bareView),
+    Object.keys(bareView).join(','))
+}
+
 console.log(failed === 0 ? '\nAll tool-park checks passed.' : `\n${failed} check(s) failed.`)
 process.exit(failed === 0 ? 0 : 1)

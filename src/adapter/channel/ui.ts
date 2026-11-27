@@ -103,6 +103,14 @@ export function createChannelUi(channel: ChannelUi, mode: AdapterMode, lease: Ch
           const effects: Partial<Record<keyof NonNullable<ChannelUi['jobControl']>, HostEffectClass>> = { kill: 'mutate' }
           if (typeof control.parkAny === 'function') effects.parkAny = 'mutate'
           if (typeof control.parkWait === 'function') effects.parkWait = 'mutate'
+          // The kind-narrowed seams (settings `dsh-tui.autoBackground` asks
+          // them): declared on the control, they must reach this facade too —
+          // it re-exposes ONLY the methods listed here, so a dropped entry
+          // leaves the policy blind while every stub-based test stays green
+          // (live 2026-11-27: hub held the ticket, the running card existed,
+          // `channel.jobControl.parkDelegation` was undefined).
+          if (typeof control.parkDelegation === 'function') effects.parkDelegation = 'mutate'
+          if (typeof control.parkWorkflow === 'function') effects.parkWorkflow = 'mutate'
           const projected = methods(control, effects as Readonly<Record<keyof typeof control, HostEffectClass>>)
           const watch = control.watchOutput
           if (watch === undefined) return projected
