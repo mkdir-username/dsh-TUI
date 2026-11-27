@@ -38,8 +38,9 @@ const [{ PassThrough, Writable }, React, { Terminal: XTerm }, ui, { useSidePanel
 ])
 const { render, AlternateScreen, Box, Text, useInput } = ui
 const { setKeymapOverrides } = await import('../src/utils/keymap.js')
-// 侧栏热键默认不绑（Ctrl+B 归后台键）。本套件测的是控制器本身，所以显式
-// 绑一个空闲组合：Alt+O 走真实 stdin 路径，和 Alt+Z 缩放同一层。
+// The side-panel default is ⌘/ (Ctrl+B belongs to the park key). This suite
+// drives real stdin bytes, so it binds a plain single-byte combo instead:
+// Alt+O, the same layer as the Alt+Z zoom.
 setKeymapOverrides({ sidePanel: 'alt+o' })
 const { applySidePanelOpen, applySidePanelRatio, setTemporarySidePanelHidden } = prefs
 const { settled, sleep, viewportLines } = termTest
@@ -154,8 +155,9 @@ async function pressUntil(session: Session, bytes: string, ok: (state: string) =
 }
 
 // --- a. alt+o three-state at 120 columns --------------------------------
-// 侧栏热键默认不绑（Ctrl+B 归后台键），本文件开头把它绑到 Alt+O，所以这里
-// 驱动的是「绑了组合之后」的控制器，不是某个具体默认键。
+// The default combo is ⌘/ (Ctrl+B belongs to the park key) and this file rebinds
+// it to Alt+O at the top, so what runs here is the controller with a combo bound,
+// not one particular default key.
 {
   const s = await openSession(120)
   check('a: initial state is closed, chat focus, chat=120',

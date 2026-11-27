@@ -250,15 +250,15 @@ export const SHORTCUT_ACTIONS: readonly ShortcutActionSpec[] = [
   // Word-level undo for the prompt draft. `exactPrimary` keeps Cmd+Z out of
   // it on macOS; the combo stays remappable through /settings like any other.
   { id: 'undo', defaults: ['ctrl+z'], exactPrimary: true },
-  // 后台键：把等待中的 foreground shell 调用转入后台（Claude CLI 的 Ctrl+B）。
-  // 没有可转的调用时按键不再被吞掉——它落到下面的侧栏开关键上。
+  // Local: the park key owns Ctrl+B outright (Claude CLI's combo) and does
+  // nothing when no call is waiting — it never doubles as another action.
   { id: 'toolPark', defaults: ['ctrl+b'] },
-  // 侧栏三态开关：关闭 → 打开并聚焦右栏 → 焦点回 Chat → 关闭。
-  // Local: shared `ctrl+b` is deliberate. Chat asks toolPark first, so Ctrl+B
-  // parks only while a call is actually waiting; otherwise the same byte
-  // reaches this toggle. The macOS alias makes ⌘B hit it as well, which is the
-  // key the user presses in Ghostty. /panel and the tab click keep working.
-  { id: 'sidePanel', defaults: ['ctrl+b'] },
+  // Smart three-state sidebar toggle: closed → open+focus → chat focus → closed.
+  // Local: ⌘/ on macOS (Ctrl+/ elsewhere) instead of the shared Ctrl+B. The
+  // terminal reports the slash key as '/' under the Russian layout as well, so
+  // the combo needs no layout mirror. /panel and a tab click keep working
+  // without any key.
+  { id: 'sidePanel', defaults: ['ctrl+/'] },
   { id: 'sidePanelZoom', defaults: ['alt+z'] },
 ]
 

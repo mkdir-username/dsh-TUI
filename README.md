@@ -30,8 +30,11 @@ the issue tracker remain upstream's. What this fork adds is listed under
 
 - **Park key.** `Ctrl+B` / `⌘B` moves a waiting foreground call — a running
   command, `job_output(wait: true)`, a delegation, a foreground workflow — to the
-  background, and the turn moves on. With nothing waiting, the same key toggles
-  the side panel.
+  background, and the turn moves on. With nothing waiting the key does nothing:
+  the side panel has its own combo.
+- **Side panel key.** `⌘/` (`Ctrl+/` off macOS) runs the smart three-state
+  toggle — closed → open and focus the panel → focus back to the chat → closed;
+  `/panel` and a tab click open it without any key.
 - **Automatic park.** `autoBackground` (on by default) asks the same seam the
   moment a delegation or workflow starts waiting, so a long child never holds a
   turn for a key press.
@@ -376,8 +379,8 @@ limits in source order.
 
 **Keys.** `Enter` send · `Tab` complete · `Ctrl+Enter` send without stopping the
 turn · `Alt+Up` recall the last message · `Esc` close local layers before
-interrupting · double-`Esc` rewind on empty idle input · `Ctrl+B` / `⌘B` park or
-side panel · `Ctrl+O` details · `Ctrl+R` history · `Ctrl+V` paste ·
+interrupting · double-`Esc` rewind on empty idle input · `Ctrl+B` / `⌘B` park a
+waiting call · `⌘/` side panel · `Ctrl+O` details · `Ctrl+R` history · `Ctrl+V` paste ·
 `Ctrl+Shift+E` fullscreen draft editor · `?` shortcuts · `←` session manager.
 
 **Mouse (fullscreen).** Drag to select and copy, double or triple click a word or
@@ -727,8 +730,9 @@ agent whose maintenance call is inlined. A cancelled cycle names the abort sourc
 ## Panels, jobs and waiting
 
 **Side panel.** `/panel` splits the chat with a panel column once the terminal is
-wide enough; `Ctrl+B` / `⌘B` toggles it (a waiting foreground call takes that key
-first — see "Waiting is never work"). Drag the divider to resize. All eight built-in panels and
+wide enough; `⌘/` (`Ctrl+/` off macOS) runs the three-state toggle — closed →
+open and focus → chat focus → closed. The background key never opens it (see
+"Waiting is never work"). Drag the divider to resize. All eight built-in panels and
 later-registered plugin panels are enabled by default (`sidePanel.panels: '*'`);
 untick a row in `/settings` for an explicit list. The header shows each inactive
 panel's symbol — hover for the name. Narrow terminals and inline mode keep
@@ -748,9 +752,9 @@ looks like work but waits under the hood.
 
 `Ctrl+B` on a running command moves it to the background: the turn stops waiting,
 the command becomes a job, its card keeps going as a job card, and the card names
-the key while it runs. With nothing running the same byte reaches the side-panel
-toggle (`/panel` and a tab click do the same; remap `sidePanel` under `/settings`
-→ `Shortcuts`). The seam comes from the local core patch
+the key while it runs. With nothing running the byte does nothing — the side
+panel has its own combo (`⌘/`; `/panel` and a tab click do the same; remap
+`sidePanel` under `/settings` → `Shortcuts`). The seam comes from the local core patch
 `patch-dsh-tool-park.mjs`, applied with the other core patches outside this
 repository.
 

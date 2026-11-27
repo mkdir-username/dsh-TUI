@@ -5076,11 +5076,12 @@ export function Chat({
     if (helpOpen) return
     // The park key stays live while a decision is pending. The questionnaire,
     // approval panel and managed dialog bind ↑/↓/Space/Tab/Enter/Esc and
-    // never Ctrl+B, so nothing can be stolen from them — and a decision that
-    // waits on the human is exactly when a foreground shell call, a job wait,
-    // a delegated child or a workflow most deserves a background slot. Only
-    // the park lives above the guard: the sidebar toggle below it stays
-    // withheld, because a pending decision owns the keyboard.
+    // never the park combo, so nothing can be stolen from them — and a
+    // decision that waits on the human is exactly when a foreground shell
+    // call, a job wait, a delegated child or a workflow most deserves a
+    // background slot. Only the park lives above the guard: the sidebar
+    // toggle below it stays withheld, because a pending decision owns the
+    // keyboard.
     if (actionMatches('toolPark', input, key)) {
       const parkWait = channel.jobControl?.parkWait
       const released = parkWait === undefined ? null : parkWait.call(channel.jobControl)
@@ -5131,9 +5132,9 @@ export function Chat({
     // belongs to the sidebar — the active panel's own keys first, then the
     // host fallbacks (←/→ switch panels, z, +/-, Esc back to chat).
     //
-    // Ctrl+B already had its chance above the decision-panel guard. Here it
-    // only falls through to the sidebar: when nothing waits, the same byte
-    // opens and closes the panel.
+    // The park key already had its chance above the decision-panel guard and
+    // owns nothing else: with no call waiting the byte dies here. The sidebar
+    // toggle is its own combo (⌘/ by default), matched inside handleKey.
     if (sidePanel.handleKey(input, key, event)) return
     const returnCandidate = isPlainReturnInput(input, key)
     const returnNow = Date.now()

@@ -44,8 +44,10 @@ const [
 ])
 const { default: instances } = await import('../src/ink/instances.js')
 const { setKeymapOverrides } = await import('../src/utils/keymap.js')
-// 侧栏热键默认不绑（Ctrl+B 归后台键）。本段测的是「选择器打开时，绑定的
-// 侧栏组合仍归侧栏」，所以显式绑一个空闲组合 Alt+O 再按真实 stdin 发键。
+// The side-panel default is ⌘/ (Ctrl+B belongs to the park key). What this
+// section checks is that a bound side-panel combo still belongs to the panel
+// while the picker is up, so it binds a free combo (Alt+O) and sends real
+// stdin bytes.
 setKeymapOverrides({ sidePanel: 'alt+o' })
 
 const MODELS = [

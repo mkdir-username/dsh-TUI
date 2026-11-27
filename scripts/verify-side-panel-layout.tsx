@@ -23,7 +23,7 @@ process.env.FORCE_COLOR = '3'
 // switches at runtime via setLang (i18n hot-swaps).
 process.env.DSH_TUI_LANG = 'zh'
 
-const [{ PassThrough, Writable }, React, { Terminal: XTerm }, ui, { SidePanelLayout }, { SidePanelColumn }, { useSidePanel }, dims, prefs, { setLang }, termTest] = await Promise.all([
+const [{ PassThrough, Writable }, React, { Terminal: XTerm }, ui, { SidePanelLayout }, { SidePanelColumn }, { useSidePanel }, dims, prefs, { setLang, t }, { comboDisplay, primaryComboString }, termTest] = await Promise.all([
   import('node:stream'),
   import('react'),
   import('@xterm/headless'),
@@ -34,6 +34,7 @@ const [{ PassThrough, Writable }, React, { Terminal: XTerm }, ui, { SidePanelLay
   import('../src/components/sidePanel/dimensions.js'),
   import('../src/tuiDisplayPrefs.js'),
   import('../src/i18n.js'),
+  import('../src/utils/keymap.js'),
   import('./lib/term-test.mjs'),
 ])
 const { render, ThemeProvider, Box, Text, AlternateScreen, useTerminalSize } = ui
@@ -41,6 +42,10 @@ const { resolveSplit, resolveZoom, resolveSidePanelGeometry } = dims
 const { applySidePanelOpen, applySidePanelRatio, applySidePanelPanels } = prefs
 const { settled, sleep } = termTest
 setLang('zh')
+
+// The unfocused hint names the side-panel combo from the keymap (spelled with
+// the macOS alias), so the expectation follows a remap instead of a literal.
+const PANEL_HINT = t('panel-hint-unfocused', { key: comboDisplay(primaryComboString('sidePanel')) })
 
 const ROWS = 18
 
@@ -202,21 +207,21 @@ function assertSplitFrame(name: string, frame: Frame, geo: { chat: number; panel
 // --- 1. 120 columns, focus=chat -----------------------------------------
 {
   const frame = await mountSplit(120, false)
-  assertSplitFrame('120/focus=chat', frame, resolveSplit(120, 0.68), 'Ctrl+B 聚焦侧栏', 'Esc 聊天')
+  assertSplitFrame('120/focus=chat', frame, resolveSplit(120, 0.68), PANEL_HINT, 'Esc 聊天')
   await frame.app.unmount()
 }
 
 // --- 2. 120 columns, focus=panel (hint swaps) ----------------------------
 {
   const frame = await mountSplit(120, true)
-  assertSplitFrame('120/focus=panel', frame, resolveSplit(120, 0.68), 'Esc 聊天', 'Ctrl+B 聚焦侧栏')
+  assertSplitFrame('120/focus=panel', frame, resolveSplit(120, 0.68), 'Esc 聊天', PANEL_HINT)
   await frame.app.unmount()
 }
 
 // --- 3. zoom at 120: chat=64 keeps every invariant -----------------------
 {
   const frame = await mountSplit(120, true, true)
-  assertSplitFrame('zoom(120)/chat=64', frame, resolveZoom(120), 'Esc 聊天', 'Ctrl+B 聚焦侧栏')
+  assertSplitFrame('zoom(120)/chat=64', frame, resolveZoom(120), 'Esc 聊天', PANEL_HINT)
   check('zoom(120)/chat=64: divider sits at column 64', cells(frame.lines()[5])[64] === '│', JSON.stringify(frame.lines()[5]))
   await frame.app.unmount()
 }
@@ -227,14 +232,14 @@ function assertSplitFrame(name: string, frame: Frame, geo: { chat: number; panel
   if (geo === null) throw new Error('93 columns must split')
   const frame = await mountSplit(93, true)
   const lines = frame.lines()
-  assertSplitFrame('93/focus=panel', frame, geo, 'Esc 聊天', 'Ctrl+B 聚焦侧栏')
+  assertSplitFrame('93/focus=panel', frame, geo, 'Esc 聊天', PANEL_HINT)
   check('93: carousel arrows and title occupy row 0 without overflow', lines[0]?.includes('◀') && lines[0]?.includes('▶') && !/\+\d+/.test(lines[0]!), JSON.stringify(lines[0]))
   // Hint is exactly one row: rows-2 is the rule, and no hint text above it.
   check('93: hint is exactly one row (rows-2 is the rule)', !lines[ROWS - 2].includes('Esc') && lines[ROWS - 1].includes('Esc'), JSON.stringify(lines[ROWS - 2]))
   await frame.app.unmount()
   // Unfocused hint at the minimum width: full copy fits.
   const frame2 = await mountSplit(93, false)
-  check('93: unfocused hint copy fits one row', frame2.lines()[ROWS - 1].includes('Ctrl+B 聚焦侧栏'), JSON.stringify(frame2.lines()[ROWS - 1]))
+  check('93: unfocused hint copy fits one row', frame2.lines()[ROWS - 1].includes(PANEL_HINT), JSON.stringify(frame2.lines()[ROWS - 1]))
   await frame2.app.unmount()
 }
 

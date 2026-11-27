@@ -1,7 +1,8 @@
 /**
  * Background key regression: Ctrl+B (⌘B) on a running shell card moves that
- * call to the background; with nothing waiting the same key is the side-panel
- * toggle it used to be.
+ * call to the background; with nothing waiting the key does nothing. The side
+ * panel has its own combo (⌘/ on macOS, Ctrl+/ elsewhere) and never shares the
+ * byte with the park.
  *
  * The park itself happens inside the core bash tool (a local patch publishes a
  * per-call ticket on `globalThis`); this suite pins the TUI half of the
@@ -9,8 +10,8 @@
  *
  *  - the key asks the harness to park, and the toast names the parked
  *    command; a key with nothing waiting is consumed silently — no toast;
- *  - a parked call never touches the side panel, an empty park falls through
- *    to the toggle (wide fullscreen only — a narrow split has no panel);
+ *  - the park key never reaches the side panel: a parked call, an empty park
+ *    and ⌘B all leave it closed, while ⌘/ toggles the split;
  *  - a backend with no park seam says nothing;
  *  - the running card carries the hint, a settled one does not.
  *
@@ -229,28 +230,33 @@ const BACKGROUND_CARD = toolRow({
   check('the running card advertises the key', after.includes(HINT), after.split('\n').find(line => line.includes('Running')) ?? '')
 }
 
-// ── nothing waits: the key falls through to the side-panel toggle ─────────
+// ── nothing waits: the park key is inert, the panel has its own combo ─────
 {
   const { parks, notices } = await press([RUNNING], 'passthrough', null)
   check('a key with nothing waiting still asks the harness', parks.length === 1, JSON.stringify(parks))
   check('nothing waiting raises no toast', notices.length === 0, JSON.stringify(notices))
   check('an empty park keeps the panel closed at narrow width', !prefs.getSidePanelOpen())
-  // 宽屏 fullscreen 下侧栏本来可分栏：空 park 不再吞键，同一个字节交给开关。
+  // At a wide fullscreen width the panel CAN split, so this is where the old
+  // fallthrough showed: an empty park still must not touch it.
   const wide = { cols: 120, rows: 30, fullscreen: true }
   await press([RUNNING], 'passthrough', null, wide)
-  check('an empty park opens the side panel', prefs.getSidePanelOpen())
-  // 三态开关走完一个来回必须留在同一个挂载里：重挂会重置焦点位。
-  await press([RUNNING], 'passthrough', null, wide, true, 2)
-  check('a second tap in the same mount closes it', !prefs.getSidePanelOpen())
-  // Ghostty шлёт ⌘B как CSI-u с битом super (9 = 1 + 8). The ctrl↔Cmd alias
-  // is a macOS rule (isMod): on other platforms the super bit must NOT reach
-  // the Ctrl+B toggle, so the parser test pins both sides of that contract.
+  check('an empty park leaves the side panel closed', !prefs.getSidePanelOpen())
+  // Ghostty sends ⌘B as CSI-u with the super bit (9 = 1 + 8). Park and panel
+  // no longer share a byte, so ⌘B opens the panel on no platform.
   await press([RUNNING], 'passthrough', null, wide, true, 1, '\x1b[98;9u')
+  check('⌘B leaves the side panel closed', !prefs.getSidePanelOpen())
+  // ⌘/ is the same kitty encoding for codepoint 47 ('/') with the super bit;
+  // Ctrl+/ arrives as codepoint 47 with the ctrl bit (5 = 1 + 4), no mac alias.
+  await press([RUNNING], 'passthrough', null, wide, true, 2, '\x1b[47;9u')
+  check('⌘/ opens the panel and a second tap in the same mount closes it', !prefs.getSidePanelOpen())
+  await press([RUNNING], 'passthrough', null, wide, true, 1, '\x1b[47;9u')
   if (process.platform === 'darwin') {
-    check('⌘B through the kitty encoding opens the panel too', prefs.getSidePanelOpen())
+    check('⌘/ through the kitty encoding opens the panel', prefs.getSidePanelOpen())
   } else {
-    check('⌘B is not the panel toggle off macOS', !prefs.getSidePanelOpen())
+    check('⌘/ is not the panel toggle off macOS', !prefs.getSidePanelOpen())
   }
+  await press([RUNNING], 'passthrough', null, wide, true, 1, '\x1b[47;5u')
+  check('Ctrl+/ opens the panel on every platform', prefs.getSidePanelOpen())
   await press([RUNNING], 'passthrough', undefined, wide)
   check('a parked call never touches the panel', !prefs.getSidePanelOpen())
 }
@@ -363,9 +369,10 @@ const BACKGROUND_CARD = toolRow({
   delete (globalThis as Record<PropertyKey, unknown>)[key]
   check('the delegation seam reads nothing without a hub', parkAnyDelegation() === null)
   check('a bash ticket still wins over a delegation ticket', parkAnyToolCall() === null)
-  // Nothing to park: the very same byte must go back to being the panel toggle.
+  // Nothing to park: the very same byte stays inert instead of opening the
+  // panel — the side panel has its own combo and is unrelated to this wait.
   const empty = await press([DELEGATION], control, null, { cols: 120, rows: 30, fullscreen: true })
-  check('an empty delegation park opens the side panel', prefs.getSidePanelOpen())
+  check('an empty delegation park leaves the side panel closed', !prefs.getSidePanelOpen())
   check('an empty delegation park raises no toast', empty.notices.length === 0, JSON.stringify(empty.notices))
 }
 

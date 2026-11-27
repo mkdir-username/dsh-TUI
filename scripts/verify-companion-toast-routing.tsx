@@ -30,7 +30,8 @@ const [{ PassThrough, Writable }, React, { Terminal: XTerm }, { render, Alternat
   import('./lib/term-test.mjs'),
 ])
 const { setKeymapOverrides } = await import('../src/utils/keymap.js')
-// 侧栏热键默认不绑（Ctrl+B 归后台键）：这里显式绑 Alt+O 再按真实 stdin 发键。
+// The side-panel default is ⌘/ (Ctrl+B belongs to the park key); this suite
+// rebinds it to Alt+O so the press is plain stdin bytes.
 setKeymapOverrides({ sidePanel: 'alt+o' })
 const { applySidePanelOpen, applySidePanelPanels, applySidePanelRatio } = prefs
 const { settled } = termTest

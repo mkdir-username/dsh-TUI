@@ -273,8 +273,9 @@ List `↑/↓` + `Enter` to confirm · confirm page `Enter` rewind / `Esc` back 
 
 ### 2.8 Side panel
 
-`/panel` expands a panel column to the right of the chat (the toggle has no default combo —
-`Ctrl+B` is the background key; bind `sidePanel` under `/settings` → `Shortcuts` if you want a key): a capsule tab bar on top, the active panel in the middle, a key-hint row at the bottom, and a
+`/panel` expands a panel column to the right of the chat (the toggle is `⌘/`, `Ctrl+/` off
+macOS; remap `sidePanel` under `/settings` → `Shortcuts` — `Ctrl+B` is the background key and
+never opens it): a capsule tab bar on top, the active panel in the middle, a key-hint row at the bottom, and a
 one-column seam between the two surfaces.
 
 - **Three states**: **split** (chat ≈ 68% plus the panel; `+`/`-` resize by 4 columns), **collapsed**
@@ -284,7 +285,7 @@ one-column seam between the two surfaces.
   default page margin); narrow terminals, inline mode and the expanded draft editor fall back —
   `/jobs` and friends keep their full-screen panels there, while `/panel` and a bound side-panel combo do not split at all.
 - **Focus model**: one keyboard focus at a time; while the panel holds it, its frame and the seam
-  brighten together. A bound side-panel combo is three-state: closed → open and focus the panel;
+  brighten together. The side-panel combo is three-state: closed → open and focus the panel;
   open but chat-focused → focus the panel; panel-focused → close and return to the chat.
 - **Panel keys**: `Esc` steps back to the input (the panel stays open) · `←`/`→` or `[`/`]` switch
   panels · `1`-`9` jump to the Nth · `z` or `Alt+Z` zoom · `+`/`-` resize (`+` widens the panel by 4 columns) · `↑`/`↓`/`PgUp`/`PgDn`

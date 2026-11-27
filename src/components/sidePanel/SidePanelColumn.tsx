@@ -101,12 +101,14 @@ export function SidePanelColumn({ width, controller, channel, activity, attentio
   const focusedHint = t('panel-hint-focused')
     + (panelSegment === '' ? '' : ' · ' + panelSegment)
     + ' · ' + t('panel-hint-zoom-width')
-  // 未聚焦那格只说怎么把焦点拿过来。侧栏键可自定义且默认不绑：绑了报键名，
-  // 没绑就说点击标签（Ctrl+B 归后台键，不再是侧栏开关）。
+  // The unfocused cell only says how to bring the focus over. The side-panel
+  // combo is remappable, so a bound one names itself (spelled with the macOS
+  // ⌘ alias — the key a mac user actually presses) and an unbound one falls
+  // back to "click a tab".
   const unfocusedCombo = primaryComboString('sidePanel')
   const unfocusedHint = unfocusedCombo === ''
     ? t('panel-hint-unfocused-click')
-    : t('panel-hint-unfocused', { key: comboDisplay(unfocusedCombo, true) })
+    : t('panel-hint-unfocused', { key: comboDisplay(unfocusedCombo) })
   // 标签点击与 ←/→ 宿主键走同一条路（openPanel 会顺带把焦点给右栏）。
   const onSelectPanel = React.useCallback(
     (id: string) => { controller.openPanel(id, { focus: true }) },

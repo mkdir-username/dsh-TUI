@@ -734,7 +734,7 @@ export const SHORTCUT_FIELD_META: Record<ShortcutActionId, { label: string; zh?:
     label: 'Side panel shortcut',
     zh: '侧栏快捷键',
     hintEn: d => d === ''
-      ? 'Smart three-state sidebar toggle: closed → open+focus → focus chat → closed. Unbound by default — set a combo here; /panel and a tab click open the panel without one.'
+      ? 'Smart three-state sidebar toggle: closed → open+focus → focus chat → closed. No combo bound — set one here; /panel and a tab click open the panel without one.'
       : `Smart three-state sidebar toggle: closed → open+focus → focus chat → closed. Default: ${d}.`,
     hintZh: d => d === ''
       ? '侧栏智能三态：关闭 → 打开并聚焦 → 焦点回聊天 → 关闭。默认不绑键——在这里设一个组合；/panel 与点击标签无需热键也能打开。'

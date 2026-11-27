@@ -29,8 +29,9 @@ Fullscreen text selection belongs to its starting pane (chat, sidebar or one dif
 | `Ctrl+D` | Same ladder as `Ctrl+C`: interrupt while working (press again to force-exit if the interrupt stalls); press twice while idle to exit |
 | `Ctrl+O` | Toggle transcript/verbose detail, including full reasoning and tool arguments/output; also the escape hatch for the **long-line fold** (a single line over 1000 chars is clipped to 1000 with a `… N chars folded` marker — see the user guide §5). Clicking the folded row (or the tool card face) toggles it too |
 | `Ctrl+P` | Toggle the loaded-context panel shown at startup (while it is on screen) |
-| `Ctrl+B` | The background key: moves a waiting foreground call to the background — a shell command, a delegated child run or a workflow (the turn stops waiting for it — see the next row). With nothing waiting the same key opens or closes the side panel (also `/panel` or a tab click; remappable as `sidePanel` under `/settings` → `Shortcuts`) |
-| `Ctrl+B` (call running) | Moves that call to the background: the turn stops waiting, a command becomes a background job and its card keeps going as a job card (`promoted`), a delegation returns at once with a `backgrounded` handoff and its real handoff arrives as a message when the child settles, a workflow hands its run to jobs and the call returns with the job id; with nothing waiting the same key toggles the side panel. Delegations and foreground workflows do not wait for the key at all: with settings `dsh-tui.autoBackground` on (default) the TUI moves them itself as soon as they start waiting; off restores the manual key |
+| `Ctrl+B` | The background key: moves a waiting foreground call to the background — a shell command, a delegated child run or a workflow (the turn stops waiting for it — see the next row). With nothing waiting the key does nothing — it is not the side-panel toggle |
+| `Ctrl+B` (call running) | Moves that call to the background: the turn stops waiting, a command becomes a background job and its card keeps going as a job card (`promoted`), a delegation returns at once with a `backgrounded` handoff and its real handoff arrives as a message when the child settles, a workflow hands its run to jobs and the call returns with the job id; with nothing waiting the key does nothing. Delegations and foreground workflows do not wait for the key at all: with settings `dsh-tui.autoBackground` on (default) the TUI moves them itself as soon as they start waiting; off restores the manual key |
+| `⌘/` (`Ctrl+/` off macOS) | Smart three-state side panel: closed → open and focus the panel → focus back to the chat → closed (same as `/panel` or a tab click; remappable as `sidePanel` under `/settings` → `Shortcuts`) |
 | `Alt+Z` | Zoom the active side panel (the chat column keeps its minimum width); press again to restore |
 | `Ctrl+T` | Open the trajectory scene (same as `/trace`); `q`/`Esc` returns to the conversation |
 | `Ctrl+R` | Open input-history search; repeat or press `Down` for the next result |
@@ -41,7 +42,7 @@ Fullscreen text selection belongs to its starting pane (chat, sidebar or one dif
 | `Shift+Up` | Enter message selection; arrows move, `Enter` expands one row, `Esc` exits |
 
 **Remapping shortcuts**: paste, history search, external editor, `Ctrl+O/T/P/R/L`,
-the background key and the side panel (`Ctrl+B`, `sidePanel`, `Alt+Z`), subagent dashboard, show-all, and todo fold are remappable in
+the background key (`Ctrl+B`) and the side panel (`⌘/`, `sidePanel`, `Alt+Z`), subagent dashboard, show-all, and todo fold are remappable in
 `/settings` → `dsh-tui` → `Shortcuts`.
 
 - Enter combos like `alt+v`; comma-separate several; leave blank to restore defaults. Saves apply live.

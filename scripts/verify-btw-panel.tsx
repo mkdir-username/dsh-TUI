@@ -59,7 +59,8 @@ const [React, { Terminal: XTerm }, ui, { SidePanelLayout }, { SidePanelColumn },
 ])
 const { render, ThemeProvider, Box, Text, AlternateScreen, useInput, useTerminalSize } = ui
 const { setKeymapOverrides } = await import('../src/utils/keymap.js')
-// 侧栏热键默认不绑（Ctrl+B 归后台键）：本套件要看焦点提示与三态，显式绑 Alt+O。
+// The side-panel default is ⌘/: this suite drives plain stdin bytes and wants a
+// single-byte combo, so it rebinds to Alt+O.
 setKeymapOverrides({ sidePanel: 'alt+o' })
 const { applySidePanelOpen, applySidePanelRatio, applySidePanelPanels, applySidePanelSplitEnabled, getSidePanelOpen } = prefs
 setLang('zh')

@@ -18,7 +18,7 @@ export {}
 process.env.FORCE_COLOR = '3'
 process.env.DSH_TUI_LANG = 'en'
 
-const [{ PassThrough, Writable }, React, { Terminal: XTerm }, ui, { SidePanelLayout }, { SidePanelColumn }, { useSidePanel }, prefs, { TooltipLayer }, termTest] = await Promise.all([
+const [{ PassThrough, Writable }, React, { Terminal: XTerm }, ui, { SidePanelLayout }, { SidePanelColumn }, { useSidePanel }, prefs, { TooltipLayer }, termTest, { comboDisplay, primaryComboString }] = await Promise.all([
   import('node:stream'),
   import('react'),
   import('@xterm/headless'),
@@ -29,6 +29,7 @@ const [{ PassThrough, Writable }, React, { Terminal: XTerm }, ui, { SidePanelLay
   import('../src/tuiDisplayPrefs.js'),
   import('../src/components/Tooltip.js'),
   import('./lib/term-test.mjs'),
+  import('../src/utils/keymap.js'),
 ])
 const { render, AlternateScreen, Box, Text, useInput } = ui
 const { applySidePanelOpen, applySidePanelPanels, applySidePanelRatio } = prefs
@@ -207,9 +208,11 @@ try {
   const body = findText('chat-body')
   check('e focus: chat body located', body !== null, JSON.stringify(body))
   if (body !== null) click(body.col, body.row)
-  // Local: Ctrl+B stays bound to the side panel (toolPark only consumes it
-  // while a call is waiting), so the unfocused cell names the key.
-  check('e focus: hint swaps back to the unfocused copy', await settled(() => has('Ctrl+B focus panel'), { timeoutMs: 4000 }))
+  // Local: the side panel has its own combo (⌘/ by default), and the park key
+  // (toolPark) never opens it, so the unfocused cell names that key — spelled
+  // with the macOS alias exactly as the column derives it from the keymap.
+  const panelKey = comboDisplay(primaryComboString('sidePanel'))
+  check('e focus: hint swaps back to the unfocused copy', await settled(() => has(panelKey + ' focus panel'), { timeoutMs: 4000 }), panelKey)
 } finally {
   await app.unmount()
 }

@@ -17,7 +17,8 @@ const [{ Writable }, React, { Terminal: XTerm }, ui, { SidePanelLayout }, { Side
     import('../src/tuiDisplayPrefs.js'),
   ])
 const { render, ThemeProvider, Box, Text, AlternateScreen } = ui
-// 侧栏热键默认不绑（Ctrl+B 归后台键）：探针显式绑一个组合再直观感按键。
+// The side-panel default is ⌘/ (Ctrl+B belongs to the park key); this probe
+// binds its own combo so the keypress is easy to read off the screen.
 const { setKeymapOverrides } = await import('../src/utils/keymap.js')
 setKeymapOverrides({ sidePanel: 'alt+b' })
 
