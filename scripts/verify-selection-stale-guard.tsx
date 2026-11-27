@@ -4,8 +4,13 @@
  * copy-on-select 从屏幕 cell 缓冲提取文本；当转录在高亮下原地替换行内容
  * （流式输出改写折叠行，视口无滚动 → 无 follow-shift 协调）时，高亮坐标
  * 读到的是替换后的另一段文本——用户贴出的「复制出乱码实为另一行内容」。
- * 守卫对选区覆盖行逐帧做指纹：未协调变化 → stale 锁存 → copySelectionNoClear
- * 拒绝（返回空并清选区），useCopyOnSelect 经 onRefused 提示。
+ * 守卫对选区覆盖行逐帧做指纹：未协调变化 → stale 锁存。
+ *
+ * Stale is ADVISORY at commit time: copySelectionNoClear still ships the bytes
+ * on screen (what the user released over), and useCopyOnSelect's onStale names
+ * the change. The old refusal (return empty and clear the highlight) is gone —
+ * a live card repaints its elapsed line every second, so a selection over a
+ * running tool turned every copy into "copy cancelled".
  *
  * 指纹的「身份」是单元格的**文本内容**（charPool.get(charId)），不是池内数字
  * ID：charId 是代际 CharPool 的下标，Ink.resetPools()（ink.tsx）每 ~5 分钟
@@ -20,13 +25,15 @@
  *   D. 选区外的行替换 → 不 stale；
  *   E. noSelect/spacer cell 不参与指纹（其内容变化不改指纹）；
  *   F. startSelection/clearSelection 重置指纹与 stale；
- *   G. stale 拒绝后 getSelectedText 仍可读（守卫在提交层，不在读取层）；
+ *   G. stale only changes the notice: getSelectedText and the commit-time copy
+ *      still read the selection;
  *   H. 几何变化（拖选 motion/键盘平移/多击）自动重基线，不判 stale；
  *   I. 列区间与 getSelectedText 一致：选区列之外的流式追加不误伤；
  *   J. softWrap 位翻转（复制结果从两行变拼接）在 cell 不变时也锁存；
  *   K. 代际池重建（charPool 换新 + migrateScreenPools，即 Ink.resetPools）
  *      且文本不变 → 不锁存，真实 Ink.copySelectionNoClear() 仍复制出原文；
- *   K2. 同一颗树上真实替换文本 → 仍然拒绝（守卫没被改钝）；
+ *   K2. a real in-place replacement on the same tree still copies the CURRENT
+ *      text (the guard latches, the commit does not refuse);
  *   L. 选区**下一行**的 softWrap 位也是复制结果的输入（extractRowText 用它当
  *      本行 contentEnd）：只翻它 → 复制变了 → 守卫必须 trip；而 contentEnd
  *      变化但没移动裁剪（L3/L4）→ 复制不变、也不误伤；末行越界（L5）安全。
@@ -262,7 +269,7 @@ for (const mode of ['char', 'word', 'line', 'keyboard'] as const) {
   refreshSelectionFingerprint(sel, screen, false)
   check(`H4 ${mode}: explicit geometry rebuilds the baseline`, !sel.stale && sel.coveredText === 'A' && getSelectedText(sel, screen) === 'A')
   putText(screen, 0, 1, 'D')
-  check(`H5 ${mode}: stationary overwrite is still refused`, refreshSelectionFingerprint(sel, screen, false) && sel.stale)
+  check(`H5 ${mode}: stationary overwrite still latches stale (advisory)`, refreshSelectionFingerprint(sel, screen, false) && sel.stale)
 }
 {
   const screen = makeScreen(5, 10)
@@ -393,9 +400,10 @@ for (const mode of ['char', 'word', 'line', 'keyboard'] as const) {
   check('K2. copy after a pool rebuild still succeeds with the exact text',
     copied === TEXT, JSON.stringify(copied))
 
-  // K3. 真实替换文本仍然拒绝（守卫没被改钝），且提交路径清掉误导性高亮。
-  // 用一条**全新**选区：K2 在 stale 分支里会 clearSelection，复用 sel 会让
-  // 这条断言在「K1 已经红了」的树上退化成「没有选区」，而不是独立证据。
+  // K3. A real in-place replacement on the same tree keeps the guard honest:
+  // the verdict latches, but the commit now ships the CURRENT text instead of
+  // refusing. The selection is fresh so this is independent evidence, not a
+  // leftover of K2.
   const sel2 = makeSel()
   startSelection(sel2, 0, 1)
   updateSelection(sel2, cells.length - 1, 1)
@@ -405,9 +413,10 @@ for (const mode of ['char', 'word', 'line', 'keyboard'] as const) {
   check('K3. real in-place replacement after the rebuild still latches stale',
     relapse && sel2.stale)
   rig.selection = sel2
-  const refused = rig.copySelectionNoClear()
-  check('K4. stale copy is refused (empty) and the highlight is cleared',
-    refused === '' && selectionBounds(sel2) === null)
+  const staleCopy = rig.copySelectionNoClear()
+  check('K4. a stale selection still copies the text now under the highlight',
+    staleCopy === '[疑接]美国1 原生IP' && selectionBounds(sel2) !== null,
+    JSON.stringify(staleCopy))
 
   // Commit through real Ink after a stale drag returns to stable content.
   const sel3 = makeSel()

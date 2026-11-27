@@ -184,6 +184,12 @@ export interface Config {
    *  a ~30fps reveal instead of jumping per provider burst — bursty or
    *  one-shot deliveries read as an even flow. On by default. */
   smoothStreaming?: boolean
+  /** Auto-background child runs (settings `dsh-tui.autoBackground`): a
+   *  waiting `delegate`/`delegate_fork` call or a foreground `workflow` run
+   *  moves to the background as soon as it starts waiting, so the turn keeps
+   *  going and the handoff (or the job id) arrives without a key press. On by
+   *  default; off restores the manual `toolPark` key as the only exit. */
+  autoBackground?: boolean
   /** System notifications for successful task completions, waiting
    *  approvals, waiting questions and waiting plan reviews: off, unfocused
    *  (default), or always. */
@@ -379,6 +385,7 @@ export const Config: Schema<Config, RuntimeConfig<Config>> = editableConfig<Conf
   promptSessionLabel: Schema.boolean().default(false),
   expandEditor: Schema.boolean().default(true),
   smoothStreaming: Schema.boolean().default(true),
+  autoBackground: Schema.boolean().default(true),
   taskNotifications: Schema.union(['off', 'unfocused', 'always']),
   notificationMethod: Schema.union(['auto', 'osc9', 'bel', 'windows']),
   // No `.default()` on purpose (same rule as recapOnOpen): an unset key must

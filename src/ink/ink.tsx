@@ -802,7 +802,7 @@ export default class Ink {
     // frame is the coordinated kind — content moved WITH the highlight.
     // An UNcoordinated change means the rows under a stationary highlight
     // were replaced in place (streaming transcript overwrite), and the
-    // selection is marked stale so commit-time copy refuses (see
+    // selection is marked stale so the copy's caller can name it (see
     // refreshSelectionFingerprint below the overlay block).
     let selectionCoordinated = false;
     this.maybeProbeKittyGraphics(frame.images ?? []);
@@ -1029,9 +1029,9 @@ export default class Ink {
       // Commit-consistency guard: hash the rows under the highlight on the
       // frame the copy would actually read. An uncoordinated change since
       // the previous frame latches selection.stale; copySelectionNoClear
-      // then refuses rather than shipping whatever text now occupies the
-      // highlight coordinates. Runs on frame.screen (post-render, pre-swap)
-      // with this frame's coordinated selection coordinates.
+      // still ships the current bytes and the caller names the change, so a
+      // live card's own tick never cancels a copy. Runs on frame.screen
+      // (post-render, pre-swap) with this frame's coordinated coordinates.
       refreshSelectionFingerprint(this.selection, frame.screen, selectionCoordinated);
       // Scan-highlight: inverse on ALL visible matches (less/vim style).
       // Position-highlight (below) overlays CURRENT (yellow) on top.
@@ -2237,19 +2237,12 @@ export default class Ink {
    */
   copySelectionNoClear(): string {
     if (!hasSelection(this.selection)) return '';
-    // Commit-consistency guard: the rows under the highlight changed
-    // without follow coordination during the selection's lifetime, so
-    // these coordinates now hold text the user never highlighted.
-    // Shipping it would copy visibly wrong content (the "mojibake-looking"
-    // paste of another line); refuse, clear the stale highlight, and let
-    // the caller surface it (React callers enter through copySelection /
-    // useCopyOnSelect's onRefused — the direct no-clear entry must not
-    // leave the misleading highlight up either).
-    if (this.selection.stale) {
-      clearSelection(this.selection);
-      this.notifySelectionChange();
-      return '';
-    }
+    // A stale selection is still copied. Stale means the covered rows
+    // changed under a stationary highlight (a live card's ticker, streaming
+    // text): the bytes on screen at release ARE what the user released over,
+    // and vetoing them turned every selection over a running card into
+    // "copy cancelled". The caller reads `selection.stale` to name the
+    // difference (useCopyOnSelect's onStale) instead of swallowing the copy.
     const text = getSelectedText(this.selection, this.frontFrame.screen);
     if (text) {
       // Raw OSC 52, or DCS-passthrough-wrapped OSC 52 inside tmux (tmux

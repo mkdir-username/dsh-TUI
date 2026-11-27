@@ -700,6 +700,8 @@ export function createCoreChannel(
       // a channel still on the default (a placeholder, a session shape the
       // extension did not attach to) parks the same foreground call.
       parkAny: () => parkAnyToolCall() ?? parkAnyDelegation() ?? parkAnyWorkflow(),
+      parkDelegation: () => parkAnyDelegation(),
+      parkWorkflow: () => parkAnyWorkflow(),
       watchOutput: id => activity.watchOutput(id),
     },
     stagedImageGeneration: composer.stagedImageGeneration,

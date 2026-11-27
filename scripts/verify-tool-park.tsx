@@ -66,7 +66,7 @@ function toolRow(overrides: Record<string, unknown>): Record<string, unknown> {
   }
 }
 
-function makeChannel(rows: readonly unknown[], jobControl: unknown): Record<string, unknown> {
+function makeChannel(rows: readonly unknown[], jobControl: unknown, overrides: Record<string, unknown> = {}): Record<string, unknown> {
   return {
     version: 0,
     rows,
@@ -117,6 +117,7 @@ function makeChannel(rows: readonly unknown[], jobControl: unknown): Record<stri
     agentPreset: 'standard',
     workspaceLabel: undefined,
     ...(jobControl === undefined ? {} : { jobControl }),
+    ...overrides,
   }
 }
 
@@ -189,6 +190,29 @@ async function press(rows: readonly unknown[], jobControl: unknown, parked: { ca
   // 固定窗:pacing 卸载/dispose 收尾
   await sleep(40)
   return { before, after, parks, notices: [...notices] }
+}
+
+/** Mount one transcript state WITHOUT a keypress and let the auto-background
+ *  policy act on its own. `until` polls the seam's answer — the policy runs on
+ *  its own timer, so the wait is "until it parked", not a fixed window. The
+ *  negative cases pass no predicate: they wait one observation window and the
+ *  caller asserts the invariant (nothing was asked). */
+async function autoRun(rows: readonly unknown[], jobControl: unknown, overrides: Record<string, unknown>, until?: () => boolean) {
+  notices = []
+  const harness = makeHarness(100, 30)
+  const instance = await mount(harness, makeChannel(rows, jobControl, overrides))
+  const reached = until === undefined
+    // 固定窗:探针 the policy must NOT ask here — silence is the invariant, so
+    // polling a condition that must stay false would mean nothing.
+    ? (await sleep(320), true)
+    : await settled(until)
+  const screen = harness.screen()
+  instance.unmount()
+  instances.delete(process.stdout)
+  harness.term.dispose()
+  // 固定窗:pacing 卸载/dispose 收尾
+  await sleep(40)
+  return { screen, notices: [...notices], reached }
 }
 
 const RUNNING = toolRow({})
@@ -373,6 +397,87 @@ const BACKGROUND_CARD = toolRow({
   check('the toast names the workflow', seeded.notices.some(text => text.includes('audit-sweep')), JSON.stringify(seeded.notices))
   delete (globalThis as Record<PropertyKey, unknown>)[key]
   check('the workflow seam reads nothing without a hub', parkAnyWorkflow() === null)
+}
+
+// ── the background key is policy for child runs, not only a keypress ──────
+// Settings `dsh-tui.autoBackground` (on by default): a waiting delegation or
+// foreground workflow is moved to the background by the TUI itself, so the
+// turn never sits on a child while the human hunts for Ctrl+B. The seam is
+// asked by KIND — a foreground shell wait and a job_output wait keep their own
+// exits — and the policy asks nothing when no child run holds the turn.
+{
+  const DELEGATION = toolRow({
+    name: 'delegate',
+    argsText: '{"description":"долгая задача","prompt":"go"}',
+    callView: { card: 'generic', title: 'долгая задача', kind: 'execute' },
+  })
+  const delegateKey = Symbol.for('dsh.delegate-park')
+  let tickets: Array<{ callId: string; description: string }> = [{ callId: 'call-auto', description: 'долгая задача' }]
+  ;(globalThis as Record<PropertyKey, unknown>)[delegateKey] = {
+    requestAny: () => tickets.shift() ?? null,
+  }
+  const parks: Array<{ callId: string; command: string }> = []
+  let workflowParks = 0
+  const control = {
+    kill: () => false,
+    parkAny: () => null,
+    parkDelegation: () => {
+      const parked = parkAnyDelegation()
+      if (parked !== null) parks.push(parked)
+      return parked
+    },
+    parkWorkflow: () => {
+      const parked = parkAnyWorkflow()
+      if (parked !== null) workflowParks += 1
+      return parked
+    },
+  }
+  const auto = await autoRun([DELEGATION], control, { working: true, autoBackground: true }, () => parks.length > 0)
+  check('the auto-background policy asks the delegation seam without a key',
+    auto.reached && parks.length === 1 && parks[0]?.callId === 'call-auto', JSON.stringify(parks))
+  check('the automatic park names the delegated task once',
+    auto.notices.filter(text => text.includes('долгая задача')).length === 1, JSON.stringify(auto.notices))
+
+  // Off is the manual world: the same running card asks nothing.
+  const parkedBefore = parks.length
+  await autoRun([DELEGATION], control, { working: true, autoBackground: false })
+  check('autoBackground off leaves the wait to the key', parks.length === parkedBefore, JSON.stringify(parks))
+
+  // An idle turn has no wait to move: the policy must not ask at all.
+  await autoRun([DELEGATION], control, { working: false, autoBackground: true })
+  check('an idle turn asks nothing', parks.length === parkedBefore, JSON.stringify(parks))
+
+  // A foreground shell wait is NOT a child run: the policy never ends it.
+  let shellAsks = 0
+  const shellKey = Symbol.for('dsh.tool-park')
+  ;(globalThis as Record<PropertyKey, unknown>)[shellKey] = { requestAny: () => { shellAsks += 1; return { callId: 'call-1', command: 'bats suite.bats' } } }
+  await autoRun([RUNNING], control, { working: true, autoBackground: true })
+  check('a foreground shell wait is left alone by the policy', shellAsks === 0, `${shellAsks} asks`)
+  delete (globalThis as Record<PropertyKey, unknown>)[shellKey]
+
+  // A workflow is the same kind of child run: the policy asks ITS seam.
+  const WORKFLOW = toolRow({
+    name: 'workflow',
+    argsText: '{"script":"return 1","meta":{"name":"audit-sweep","description":"Audit the tree"}}',
+    callView: { card: 'generic', title: 'workflow: audit-sweep', kind: 'execute' },
+  })
+  const workflowKey = Symbol.for('dsh.workflow-park')
+  // A ticket answers once, exactly like the core patch's hub: the repeated
+  // tick of the running card must not park the same run twice.
+  let workflowTicket = true
+  ;(globalThis as Record<PropertyKey, unknown>)[workflowKey] = {
+    requestAny: () => {
+      if (!workflowTicket) return null
+      workflowTicket = false
+      return { callId: 'call-w', label: 'audit-sweep' }
+    },
+  }
+  const autoWorkflow = await autoRun([WORKFLOW], control, { working: true, autoBackground: true }, () => workflowParks > 0)
+  check('the policy moves a foreground workflow too, once',
+    autoWorkflow.reached && workflowParks === 1, `${workflowParks} workflow parks`)
+  delete (globalThis as Record<PropertyKey, unknown>)[workflowKey]
+  delete (globalThis as Record<PropertyKey, unknown>)[delegateKey]
+  check('a delegation seam with no hub is not asked', parkAnyDelegation() === null)
 }
 
 console.log(failed === 0 ? '\nAll tool-park checks passed.' : `\n${failed} check(s) failed.`)

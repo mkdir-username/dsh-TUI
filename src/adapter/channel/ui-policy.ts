@@ -9,7 +9,7 @@ type MethodKeys<T> = { [K in keyof T]: T[K] extends (...args: never[]) => unknow
 export type ChannelPreferences = Pick<ChannelUi,
   | 'setDiffLayout' | 'setThinkingFold' | 'setJobGroupFold' | 'setToolBackground' | 'setScrollGutter'
   | 'setPageMargin' | 'setFoldTerminalCommand' | 'setPromptSessionLabel'
-  | 'setExpandEditor' | 'setSmoothStreaming' | 'setStatusBar' | 'setWhale' | 'setWhaleIdle' | 'setWhaleGirl' | 'setMinimalUi' | 'setMinimal' | 'setSplashFont' | 'setBrand'
+  | 'setExpandEditor' | 'setSmoothStreaming' | 'setAutoBackground' | 'setStatusBar' | 'setWhale' | 'setWhaleIdle' | 'setWhaleGirl' | 'setMinimalUi' | 'setMinimal' | 'setSplashFont' | 'setBrand'
 >
 export const CHANNEL_UI_EFFECTS = Object.freeze({
   'setDiffLayout': 'mutate',
@@ -23,6 +23,7 @@ export const CHANNEL_UI_EFFECTS = Object.freeze({
   'setPromptSessionLabel': 'mutate',
   'setExpandEditor': 'mutate',
   'setSmoothStreaming': 'mutate',
+  'setAutoBackground': 'mutate',
   'setStatusBar': 'mutate',
   'setWhale': 'mutate',
   'setWhaleIdle': 'mutate',
@@ -219,6 +220,7 @@ export const CHANNEL_UI_PROPERTIES = [
   'promptSessionLabel',
   'expandEditor',
   'smoothStreaming',
+  'autoBackground',
   'statusBar',
   'whale',
   'whaleIdle',

@@ -2016,6 +2016,7 @@ export async function apply(ctx: Context, runtimeConfig: RuntimeConfig<Config>, 
     promptSessionLabel: config.promptSessionLabel,
     expandEditor: config.expandEditor,
     smoothStreaming: config.smoothStreaming,
+    autoBackground: config.autoBackground,
     statusBar: config.statusBar,
     // 启动种子：与上面各显示偏好同款（设置服务的 boot apply 会再对一次
     // 值，setWhaleGirl 对同值是 no-op，不会多通知）。
@@ -2198,6 +2199,8 @@ export async function apply(ctx: Context, runtimeConfig: RuntimeConfig<Config>, 
         expandEditor: Schema.boolean(),
         // Same no-default rule: applyDisplay resolves `?? config.smoothStreaming ?? true`.
         smoothStreaming: Schema.boolean(),
+        // Same no-default rule: applyDisplay resolves `?? config.autoBackground ?? true`.
+        autoBackground: Schema.boolean(),
         taskNotifications: Schema.union(['off', 'unfocused', 'always']),
         // Must mirror Config's union (`src/dsh-adapter/index.ts`): a method
         // missing here is rejected by /settings and never reaches the runtime.
@@ -2346,6 +2349,7 @@ export async function apply(ctx: Context, runtimeConfig: RuntimeConfig<Config>, 
       promptSessionLabel?: boolean
       expandEditor?: boolean
       smoothStreaming?: boolean
+      autoBackground?: boolean
       taskNotifications?: TaskNotifications
       notificationMethod?: NotificationMethod
       jumpBack?: boolean
@@ -2453,6 +2457,7 @@ export async function apply(ctx: Context, runtimeConfig: RuntimeConfig<Config>, 
       channel.setPromptSessionLabel(value.promptSessionLabel ?? config.promptSessionLabel ?? false)
       channel.setExpandEditor(value.expandEditor ?? config.expandEditor ?? true)
       channel.setSmoothStreaming(value.smoothStreaming ?? config.smoothStreaming ?? true)
+      channel.setAutoBackground(value.autoBackground ?? config.autoBackground ?? true)
       configureTaskNotifications(value.taskNotifications ?? config.taskNotifications, value.notificationMethod ?? config.notificationMethod)
       void applyJumpBackSetting(jumpBack, value.jumpBack ?? config.jumpBack ?? false, rawChannel.sessionRef.sessionId)
         .then(() => {
@@ -2736,6 +2741,13 @@ export async function apply(ctx: Context, runtimeConfig: RuntimeConfig<Config>, 
           format(value: unknown): string {
             // Unset in settings.yaml: the effective default is on.
             return String(typeof value === 'boolean' ? value : config.smoothStreaming !== false)
+          },
+        },
+        {
+          ...settingField('autoBackground'),
+          format(value: unknown): string {
+            // Unset in settings.yaml: the effective default is on.
+            return String(typeof value === 'boolean' ? value : config.autoBackground !== false)
           },
         },
         {

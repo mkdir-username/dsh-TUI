@@ -21,20 +21,21 @@ import { useSelection } from './use-selection.js'
  * @param onCopied - called with the copied text after each successful copy
  *   (e.g. to show a toast). Stored in a ref, so an inline closure is fine
  *   and never re-subscribes.
- * @param onRefused - called when the selection was marked stale (its rows
- *   were replaced in place while highlighted): the highlight is cleared
- *   and NOTHING is copied — the caller should tell the user why (e.g.
- *   "content changed, copy cancelled") instead of staying silent.
+ * @param onStale - called with the copied text when the selection was marked
+ *   stale: the covered rows changed under a stationary highlight (a live
+ *   card's ticker, streaming text) while the gesture was in flight. The copy
+ *   still happens — the bytes on screen at release are what the user released
+ *   over — and the caller says so instead of pretending nothing was copied.
  */
 export function useCopyOnSelect(
   onCopied?: (text: string) => void,
-  onRefused?: () => void,
+  onStale?: (text: string) => void,
 ): void {
   const { subscribe, getState, copySelectionNoClear } = useSelection()
   const onCopiedRef = useRef(onCopied)
   onCopiedRef.current = onCopied
-  const onRefusedRef = useRef(onRefused)
-  onRefusedRef.current = onRefused
+  const onStaleRef = useRef(onStale)
+  onStaleRef.current = onStale
   useEffect(() => {
     let copiedRevision = -1
     return subscribe(() => {
@@ -46,16 +47,14 @@ export function useCopyOnSelect(
         // Copy once per completion, including a new gesture on the same text.
         if (copiedRevision === state.settledRevision) return
         copiedRevision = state.settledRevision
-        if (state.stale) {
-          // copySelectionNoClear clears the stale highlight; its internal copy
-          // is refused (empty), so the only user-visible effect without
-          // this branch would be a highlight vanishing for no reason.
-          copySelectionNoClear()
-          onRefusedRef.current?.()
-          return
-        }
+        // Read the verdict BEFORE the copy: the notification describes the
+        // gesture that just settled, and the copy keeps the selection intact
+        // so the next motion re-baselines it as usual.
+        const stale = state.stale
         const text = copySelectionNoClear()
-        if (text) onCopiedRef.current?.(text)
+        if (!text) return
+        if (stale) onStaleRef.current?.(text)
+        else onCopiedRef.current?.(text)
       }
     })
   }, [subscribe, getState, copySelectionNoClear])

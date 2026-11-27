@@ -30,7 +30,7 @@ Fullscreen text selection belongs to its starting pane (chat, sidebar or one dif
 | `Ctrl+O` | Toggle transcript/verbose detail, including full reasoning and tool arguments/output; also the escape hatch for the **long-line fold** (a single line over 1000 chars is clipped to 1000 with a `… N chars folded` marker — see the user guide §5). Clicking the folded row (or the tool card face) toggles it too |
 | `Ctrl+P` | Toggle the loaded-context panel shown at startup (while it is on screen) |
 | `Ctrl+B` | The background key: moves a waiting foreground call to the background — a shell command, a delegated child run or a workflow (the turn stops waiting for it — see the next row). With nothing waiting the same key opens or closes the side panel (also `/panel` or a tab click; remappable as `sidePanel` under `/settings` → `Shortcuts`) |
-| `Ctrl+B` (call running) | Moves that call to the background: the turn stops waiting, a command becomes a background job and its card keeps going as a job card (`promoted`), a delegation returns at once with a `backgrounded` handoff and its real handoff arrives as a message when the child settles, a workflow hands its run to jobs and the call returns with the job id; with nothing waiting the same key toggles the side panel |
+| `Ctrl+B` (call running) | Moves that call to the background: the turn stops waiting, a command becomes a background job and its card keeps going as a job card (`promoted`), a delegation returns at once with a `backgrounded` handoff and its real handoff arrives as a message when the child settles, a workflow hands its run to jobs and the call returns with the job id; with nothing waiting the same key toggles the side panel. Delegations and foreground workflows do not wait for the key at all: with settings `dsh-tui.autoBackground` on (default) the TUI moves them itself as soon as they start waiting; off restores the manual key |
 | `Alt+Z` | Zoom the active side panel (the chat column keeps its minimum width); press again to restore |
 | `Ctrl+T` | Open the trajectory scene (same as `/trace`); `q`/`Esc` returns to the conversation |
 | `Ctrl+R` | Open input-history search; repeat or press `Down` for the next result |
@@ -668,7 +668,9 @@ In inline mode, the terminal emulator owns native scrollback and selection.
   notch on the timeline, ±1 in hotspot; scrolls the detail while expanded). Walks the
   focused row in /settings.
 - **Drag** — Select text and copy on release, keeping the selection; a "Copied N characters"
-  notice pops up. A new selection replaces the retained one. With
+  notice pops up. If the rows under the highlight changed while it sat still (a running tool
+  card repaints its elapsed line, streaming text rewrites a row), the copy still ships what is
+  on screen and the notice says the content changed — a live card never cancels a copy. A new selection replaces the retained one. With
   `dsh-tui.scrollGutter: scrollbar`, the right-edge scrollbar is a drag
   target: an unmodified left drag scrubs the transcript to the track position (same mapping
   as a track click — drag to point), while `Shift`/`Alt`/`Ctrl`+drag still selects text (the

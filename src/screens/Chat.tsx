@@ -1741,6 +1741,46 @@ export function Chat({
     () => jobOutputWatchable ? (id: string) => jobControlRef.current?.watchOutput?.(id) ?? (() => undefined) : undefined,
     [jobOutputWatchable],
   )
+  // Auto-background child runs (settings `dsh-tui.autoBackground`, on by
+  // default): the background key's second half becomes policy. Only the last
+  // cards are scanned — the call holding the turn is always among them — and
+  // the seam is asked by KIND, so a shell command's wait is never ended behind
+  // the user's back. A ticket exists only while a delegation/workflow waits,
+  // so an ask either unblocks that call now or means "not attached yet": the
+  // next tick retries, and a child that settled first leaves no ticket.
+  const autoParkNoticedRef = React.useRef(false)
+  const autoBackgroundEnabled = channel.autoBackground === true
+  React.useEffect(() => {
+    if (!autoBackgroundEnabled || !channel.working) return
+    const tick = (): void => {
+      // Read the control and the rows live: a rebind or a re-projection
+      // replaces both while the turn keeps running.
+      const control = channel.jobControl
+      if (control === undefined) return
+      const rows = channel.rows
+      const floor = Math.max(0, rows.length - 40)
+      let park: (() => { readonly callId: string; readonly command: string } | null) | undefined
+      for (let i = rows.length - 1; i >= floor; i -= 1) {
+        const row = rows[i]
+        if (row === undefined || row.kind !== 'tool' || row.tool === undefined) continue
+        if (row.tool.status !== 'running') continue
+        const name = row.tool.name
+        if (name === 'delegate' || name === 'delegate_fork') { park = control.parkDelegation; break }
+        if (name === 'workflow') { park = control.parkWorkflow; break }
+      }
+      if (park === undefined) return
+      const parked = park.call(control)
+      if (parked === null) return
+      // One notice per mounted session: a fan-out of five delegations must
+      // not turn into five toasts. The card itself carries the ack either way.
+      if (autoParkNoticedRef.current) return
+      autoParkNoticedRef.current = true
+      channel.notify(t('tool-park-started', { command: parked.command }), { color: 'success', timeoutMs: 5000 })
+    }
+    tick()
+    const timer = setInterval(tick, 200)
+    return () => clearInterval(timer)
+  }, [channel, autoBackgroundEnabled, channel.working])
   /** Ctrl+A / detail 回退：侧栏分栏且 agents 已启用时打开右栏 Panel（内部
    *  dashboard ↔ detail 二级路由自己管）；窄屏 / inline 保留整屏形态。 */
   const openSubagentDashboard = React.useCallback((): void => {
@@ -2476,10 +2516,11 @@ export function Chat({
 
   useCopyOnSelect(
     text => channel.notify(t('copied-chars', { n: text.length }), { timeoutMs: 1500 }),
-    // Stale-selection refusal: the highlighted rows were replaced in place
-    // (streaming overwrite), so nothing was copied — say why instead of
-    // letting the highlight vanish silently.
-    () => channel.notify(t('copy-refused-stale'), { timeoutMs: 2500 }),
+    // A live card (a running tool's elapsed line, streaming text) rewrites the
+    // covered rows while the highlight sits still: the copy still ships what
+    // is on screen, and the notice names the difference instead of pretending
+    // the selection was cancelled.
+    text => channel.notify(t('copied-chars-changed', { n: text.length }), { timeoutMs: 2500 }),
   )
   const {
     clearSelection: clearMouseSelection,

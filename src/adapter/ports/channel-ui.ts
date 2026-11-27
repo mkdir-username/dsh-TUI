@@ -283,6 +283,13 @@ export interface ChannelUi {
    *  call bodies paint through a ~30fps reveal instead of jumping per
    *  provider burst. */
   readonly smoothStreaming: boolean
+  /** Auto-background child runs (settings `dsh-tui.autoBackground`; on by
+   *  default): a waiting `delegate`/`delegate_fork` call or a foreground
+   *  `workflow` run is moved to the background without waiting for the
+   *  background key — the turn keeps going, the child or batch keeps running,
+   *  and the handoff or job id arrives afterwards. Off leaves the `toolPark`
+   *  key as the only exit. */
+  readonly autoBackground: boolean
   /** Live status-footer visibility and compactness preferences. */
   readonly statusBar: Readonly<StatusBarConfig>
   /** Whether the header's pixel whale art shows (settings `dsh-tui.whale`). */
@@ -898,6 +905,7 @@ export interface ChannelUi {
   setPromptSessionLabel(enabled: boolean): void
   setExpandEditor(enabled: boolean): void
   setSmoothStreaming(enabled: boolean): void
+  setAutoBackground(enabled: boolean): void
   setStatusBar(config: Partial<StatusBarConfig>): void
   setWhale(visible: boolean): void
   setSplashFont(setting: SplashFontSetting): void

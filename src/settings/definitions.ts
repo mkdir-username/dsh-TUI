@@ -17,6 +17,14 @@ import type { ShortcutActionId } from '../utils/keymap.js'
 export type SettingDefinition = Pick<TuiSettingsField, 'label' | 'descriptions' | 'hint' | 'hintDescriptions' | 'kind' | 'group' | 'options'>
 
 export const SETTING_DEFINITIONS = {
+  'autoBackground': {
+    label: 'Auto-background child runs',
+    descriptions: { zh: '子任务自动转后台' },
+    group: 'conversation',
+    hint: 'A waiting delegate/delegate_fork call or a foreground workflow run moves to the background without the background key: the turn keeps going, the child or batch keeps running, and the handoff (or the workflow\'s job id) arrives afterwards. On by default; off leaves the manual toolPark key as the only exit.',
+    hintDescriptions: { zh: '等待中的 delegate/delegate_fork 调用或前台 workflow 运行会直接转入后台，无需按后台键：本回合继续推进，子任务或批处理继续运行，handoff（或 workflow 的 job id）随后到达。默认开启；关闭后只能用后台键手动转。' },
+    kind: 'boolean',
+  },
   'brand': {
     label: 'Brand look',
     descriptions: { zh: '品牌外观' },

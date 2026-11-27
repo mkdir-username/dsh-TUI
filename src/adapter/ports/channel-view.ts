@@ -975,6 +975,16 @@ export interface JobControl {
    */
   parkAny?(): { readonly callId: string; readonly command: string } | null
   /**
+   * The same park, narrowed to one kind of wait: `parkDelegation` moves a
+   * waiting `delegate`/`delegate_fork` call, `parkWorkflow` a foreground
+   * `workflow` run. The auto-background policy (settings
+   * `dsh-tui.autoBackground`) uses these so a shell command's wait is never
+   * ended behind the user's back: only the two waits that hold the turn on a
+   * child/batch are asked. Both return null when nothing of that kind waits.
+   */
+  parkDelegation?(): { readonly callId: string; readonly command: string } | null
+  parkWorkflow?(): { readonly callId: string; readonly command: string } | null
+  /**
    * End the oldest in-flight `job_output` wait: the read returns at once with
    * the job's current state and the job itself keeps running. Returns the
    * released call and its job, or null when no wait is live. Absent for

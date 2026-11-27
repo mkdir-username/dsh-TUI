@@ -14,7 +14,7 @@ function applyMinimalUi(getState: () => Pick<ChannelState, 'minimalUi' | 'emit'>
   state.emit()
 }
 
-export function createPreferences(getState: () => Pick<ChannelState, 'diffLayout' | 'thinkingFold' | 'jobGroupFold' | 'toolBackground' | 'scrollGutter' | 'pageMargin' | 'foldTerminalCommand' | 'turnUsageRow' | 'promptSessionLabel' | 'expandEditor' | 'smoothStreaming' | 'statusBar' | 'whale' | 'whaleIdle' | 'whaleGirl' | 'splashFont' | 'brand' | 'minimalUi' | 'emit'>): Pick<ChannelState, 'setDiffLayout' | 'setThinkingFold' | 'setJobGroupFold' | 'setToolBackground' | 'setScrollGutter' | 'setPageMargin' | 'setFoldTerminalCommand' | 'setTurnUsageRow' | 'setPromptSessionLabel' | 'setExpandEditor' | 'setSmoothStreaming' | 'setStatusBar' | 'setWhale' | 'setWhaleIdle' | 'setWhaleGirl' | 'setSplashFont' | 'setBrand' | 'setMinimalUi' | 'setMinimal'> {
+export function createPreferences(getState: () => Pick<ChannelState, 'diffLayout' | 'thinkingFold' | 'jobGroupFold' | 'toolBackground' | 'scrollGutter' | 'pageMargin' | 'foldTerminalCommand' | 'turnUsageRow' | 'promptSessionLabel' | 'expandEditor' | 'smoothStreaming' | 'autoBackground' | 'statusBar' | 'whale' | 'whaleIdle' | 'whaleGirl' | 'splashFont' | 'brand' | 'minimalUi' | 'emit'>): Pick<ChannelState, 'setDiffLayout' | 'setThinkingFold' | 'setJobGroupFold' | 'setToolBackground' | 'setScrollGutter' | 'setPageMargin' | 'setFoldTerminalCommand' | 'setTurnUsageRow' | 'setPromptSessionLabel' | 'setExpandEditor' | 'setSmoothStreaming' | 'setAutoBackground' | 'setStatusBar' | 'setWhale' | 'setWhaleIdle' | 'setWhaleGirl' | 'setSplashFont' | 'setBrand' | 'setMinimalUi' | 'setMinimal'> {
   return {
 
     setDiffLayout(layout) {
@@ -95,6 +95,13 @@ export function createPreferences(getState: () => Pick<ChannelState, 'diffLayout
       const state = getState()
       if (enabled === state.smoothStreaming) return
       state.smoothStreaming = enabled
+      state.emit()
+    },
+
+    setAutoBackground(enabled) {
+      const state = getState()
+      if (enabled === state.autoBackground) return
+      state.autoBackground = enabled
       state.emit()
     },
 

@@ -108,6 +108,9 @@ export interface ChannelLaunchOptions {
   promptSessionLabel?: boolean
   expandEditor?: boolean
   smoothStreaming?: boolean
+  /** Auto-background child runs (settings `dsh-tui.autoBackground`); absent
+   *  means enabled, matching the schema default. */
+  autoBackground?: boolean
   statusBar?: Partial<StatusBarConfig>
   whale?: boolean
   whaleIdle?: boolean
@@ -207,7 +210,7 @@ export function createInitialChannelView(
   'activityFrames' | 'configuredProvider' | 'configuredModel' |
   'configuredPreset' | 'configuredActivityFrames' | 'configuredLang' | 'diffLayout' |
   'thinkingFold' | 'jobGroupFold' | 'toolBackground' | 'scrollGutter' | 'pageMargin' |
-  'foldTerminalCommand' | 'turnUsageRow' | 'promptSessionLabel' | 'expandEditor' | 'smoothStreaming' |
+  'foldTerminalCommand' | 'turnUsageRow' | 'promptSessionLabel' | 'expandEditor' | 'smoothStreaming' | 'autoBackground' |
   'statusBar' | 'whale' | 'whaleIdle' | 'splashFont' | 'brand' | 'minimalUi' | 'activityEnabled' | 'contextBarEnabled' |
   'statusBar' | 'whale' | 'whaleIdle' | 'whaleGirl' | 'minimalUi' | 'activityEnabled' | 'contextBarEnabled' |
   'agentPreset' | 'goal' | 'todos' | 'loadedContext' | 'pending' | 'commandList' |
@@ -232,7 +235,7 @@ export function createInitialChannelView(
     pageMargin: normalizePageMargin(options.pageMargin), foldTerminalCommand: options.foldTerminalCommand === true,
     turnUsageRow: options.turnUsageRow === true,
     promptSessionLabel: options.promptSessionLabel === true, expandEditor: options.expandEditor !== false,
-    smoothStreaming: options.smoothStreaming !== false, statusBar: normalizeStatusBar(options.statusBar),
+    smoothStreaming: options.smoothStreaming !== false, autoBackground: options.autoBackground !== false, statusBar: normalizeStatusBar(options.statusBar),
     whale: options.whale !== false, whaleIdle: options.whaleIdle !== false, whaleGirl: options.whaleGirl === true, splashFont: normalizeSplashFont(options.splashFont), brand: normalizeBrandSetting(options.brand), minimalUi: options.minimalUi === true, activityEnabled: options.activity !== false,
     contextBarEnabled: options.contextBar !== false, agentPreset: options.agentPreset, goal: undefined,
     todos: [], loadedContext: undefined, pending: [], commandList: [], lastUsage: undefined, turnUsage: undefined, turnOutcome: undefined,

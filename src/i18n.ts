@@ -499,7 +499,7 @@ const dict = {
   'context-panel-expand': { zh: ' 展开', en: ' to expand' },
   'context-panel-collapse': { zh: ' 折叠', en: ' to collapse' },
   'copied-chars': { zh: '已复制 {{n}} 个字符', en: 'Copied {{n}} characters' },
-  'copy-refused-stale': { zh: '选区内容已变化，已取消复制', en: 'Content under the selection changed; copy cancelled' },
+  'copied-chars-changed': { en: 'Copied {{n}} characters — the content changed while you were selecting' },
   'migrate-failed': { zh: '{{n}} 个源导入失败，详见输出', en: '{{n}} source(s) failed — see the output' },
   'migrate-spawn-failed': { zh: '无法启动迁移子进程（找不到本包 bin）', en: 'Could not start the migration child process (package bin not found)' },
   'migrate-child-timeout': { zh: '（子进程超过 {{minutes}} 分钟未结束，已终止）', en: '(the child ran past {{minutes}} minutes and was terminated)' },

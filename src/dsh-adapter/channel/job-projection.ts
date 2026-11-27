@@ -160,6 +160,12 @@ export function createJobProjection(
       // call to the background.
       return parkAnyToolCall() ?? parkAnyDelegation() ?? parkAnyWorkflow()
     },
+    parkDelegation() {
+      return parkAnyDelegation()
+    },
+    parkWorkflow() {
+      return parkAnyWorkflow()
+    },
     parkWait() {
       return parkAnyJobWait()
     },
