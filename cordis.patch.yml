@@ -497,3 +497,15 @@
       config:
         publish: false
         publishIntervalMs: 500
+
+    # Turn-handoff controller: judges the final answer of a turn and, in
+    # `enforce` mode, steers the agent back to unfinished work. Mounted
+    # through this package's own `./handoff-control` re-export for the same
+    # reason as `working-activity` above — a bare package name does not
+    # resolve from the profile directory under pnpm's isolated layout.
+    # Ships off: the judge spends tokens and holds the turn open, so turning
+    # it on (advise → enforce) stays the user's call.
+    - id: handoff-control
+      name: '@deepseek-harness-tui/dsh-tui/handoff-control'
+      config:
+        mode: off
