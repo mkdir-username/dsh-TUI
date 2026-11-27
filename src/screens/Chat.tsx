@@ -5033,6 +5033,30 @@ export function Chat({
     // selection, or working-turn cancellation branch can mutate hidden state.
     // PromptInput then owns Esc, navigation, Tab guards, and ordinary typing.
     if (helpOpen) return
+    // The park key stays live while a decision is pending. The questionnaire,
+    // approval panel and managed dialog bind ↑/↓/Space/Tab/Enter/Esc and
+    // never Ctrl+B, so nothing can be stolen from them — and a decision that
+    // waits on the human is exactly when a foreground shell call, a job wait,
+    // a delegated child or a workflow most deserves a background slot. Only
+    // the park lives above the guard: the sidebar toggle below it stays
+    // withheld, because a pending decision owns the keyboard.
+    if (actionMatches('toolPark', input, key)) {
+      const parkWait = channel.jobControl?.parkWait
+      const released = parkWait === undefined ? null : parkWait.call(channel.jobControl)
+      if (released !== null) {
+        channel.notify(t('job-wait-park-started', { id: released.jobId }), { color: 'success', timeoutMs: 5000 })
+        event.stopImmediatePropagation()
+        return
+      }
+      const parkAny = channel.jobControl?.parkAny
+      const parked = parkAny === undefined ? null : parkAny.call(channel.jobControl)
+      if (parked !== null) {
+        channel.notify(t('tool-park-started', { command: parked.command }), { color: 'success', timeoutMs: 5000 })
+        event.stopImmediatePropagation()
+        return
+      }
+      if (approvalSnapshot !== null || dialogSnapshot !== null || questionSnapshot !== null) return
+    }
     // The questionnaire / approval panel / managed plugin dialog owns the
     // keyboard while one is pending (the panel's own useInput handles
     // ↑/↓/Space/Tab/Enter/Esc; the prompt input is suspended, so nothing
@@ -5060,32 +5084,15 @@ export function Chat({
       event.stopImmediatePropagation()
       return
     }
-    // 侧栏键盘分发（v2.1 优先级）：上面的审批 / 问卷 / 对话框守卫仍然
-    // 最先，其次是后台键 Ctrl+B（⌘B）与侧栏缩小键 Alt+Z（两种焦点都生效），
-    // 然后焦点在右栏时一切按键归侧栏——活动面板的业务键优先，宿主
-    // 回退键（←/→ 切面板、z、+/-、Esc 回聊天）兜底。
+    // Sidebar keyboard dispatch (v2.1 precedence): the approval /
+    // questionnaire / dialog guards stay first, then Alt+Z (both focuses
+    // zoom the panel), and once the focus is in the right column every key
+    // belongs to the sidebar — the active panel's own keys first, then the
+    // host fallbacks (←/→ switch panels, z, +/-, Esc back to chat).
     //
-    // Ctrl+B на ждущем foreground-вызове переводит его в фон (ключ Claude CLI):
-    // ядро перестаёт ждать команду, она живёт задачей, ход идёт дальше. Кого
-    // именно ждут, знает ядро, а не транскрипт, поэтому вызов не назван.
-    // Когда ждать нечего, ключ не глотается: он падает в sidePanel.handleKey
-    // ниже, и ⌘B этим же байтом открывает и закрывает панель.
-    if (actionMatches('toolPark', input, key)) {
-      const parkWait = channel.jobControl?.parkWait
-      const released = parkWait === undefined ? null : parkWait.call(channel.jobControl)
-      if (released !== null) {
-        channel.notify(t('job-wait-park-started', { id: released.jobId }), { color: 'success', timeoutMs: 5000 })
-        event.stopImmediatePropagation()
-        return
-      }
-      const parkAny = channel.jobControl?.parkAny
-      const parked = parkAny === undefined ? null : parkAny.call(channel.jobControl)
-      if (parked !== null) {
-        channel.notify(t('tool-park-started', { command: parked.command }), { color: 'success', timeoutMs: 5000 })
-        event.stopImmediatePropagation()
-        return
-      }
-    }
+    // Ctrl+B already had its chance above the decision-panel guard. Here it
+    // only falls through to the sidebar: when nothing waits, the same byte
+    // opens and closes the panel.
     if (sidePanel.handleKey(input, key, event)) return
     const returnCandidate = isPlainReturnInput(input, key)
     const returnNow = Date.now()
