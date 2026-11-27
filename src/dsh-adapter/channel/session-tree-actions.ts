@@ -169,7 +169,9 @@ export function createTreeRewindAction(
       deps.notify(t('rewind-session-changed'), { color: 'error' })
       return null
     }
-    const replay = closeAfterCreate || mode === 'rewind' ? snapshotLiveSessionEvents(dshHandleOf(candidate).agent.session) : seed
+    // The child log is the seed the factory normalized — replay that, not the raw
+    // cut, so the adopted view never sees a splice the child does not carry.
+    const replay = snapshotLiveSessionEvents(dshHandleOf(candidate).agent.session)
     // `adoptForkedAgent` is the commit, and it THROWS when the adoption
     // transaction revokes the candidate.
     try {

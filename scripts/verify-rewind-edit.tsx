@@ -16,7 +16,7 @@ import { PassThrough, Writable } from 'node:stream'
 import React from 'react'
 import xterm from '@xterm/headless'
 import { Context } from '@deepseek-ai/cordis'
-import { Session, SessionId } from '@deepseek-ai/dsh-session'
+import { Session, SessionId, type SessionEvent } from '@deepseek-ai/dsh-session'
 import { createUserMessage, createAssistantMessage, type UserMessage } from '@deepseek-ai/dsh-llm'
 import type { CreateAgentOptions } from '@deepseek-ai/dsh-agent'
 import { settled, sleep, viewportLines } from './lib/term-test.mjs'
@@ -46,7 +46,7 @@ function appendReply(session: Session, turn: number, message: UserMessage, text 
   session.append('turn/end', { turn, reason: { kind: 'completed' } })
 }
 
-async function verify(fullscreen: boolean, columns: number, entry: 'slash' | 'escape' | 'tree' | 'model' | 'same-text'): Promise<void> {
+async function verify(fullscreen: boolean, columns: number, entry: 'slash' | 'escape' | 'tree' | 'model' | 'same-text' | 'tree-fork'): Promise<void> {
   const terminal = new xterm.Terminal({ cols: columns, rows: 30, allowProposedApi: true })
   const stdout = Object.assign(new Writable({
     write(chunk, _encoding, callback) { terminal.write(String(chunk), callback) },
@@ -219,6 +219,30 @@ async function verify(fullscreen: boolean, columns: number, entry: 'slash' | 'es
       console.log(`PASS rewind same text twice (${fullscreen ? 'fullscreen' : 'inline'}, ${columns} columns)`)
       return
     }
+    if (entry === 'tree-fork') {
+      /**
+       * Tree fork shares the seed factory with /fork but builds its cut itself.
+       * A message queued during a turn stays in the log with no claim; a fork
+       * placed after it must not replay that queue into the child.
+       */
+      source.append('agent/inbox/spliced', {
+        target: 'next-turn', start: 0,
+        inserted: [createUserMessage({ source: { kind: 'tool-jobs', form: 'notice', summary: 'task:1' }, content: [{ type: 'text', text: 'queued notice' }] })],
+      })
+      const turn = source.snapshotEvents().filter(event => event.type === 'turn/start').length + 1
+      appendReply(source, turn, createUserMessage({ source: { kind: 'user' }, content: [{ type: 'text', text: 'later prompt' }] }))
+      const boundary = source.snapshotEvents().findLast(event => event.type === 'user/message')!.seq
+      assert.equal(await channel.rewindToNode(String(source.id), boundary, 'fork'), '', 'tree fork keeps the draft empty')
+      assert.ok(await settled(() => forks.length === 1), 'tree fork created the child')
+      const child = forks[0]!
+      const foldQueue = (events: readonly SessionEvent[]) => events.reduce((pending: UserMessage[], event) => event.type === 'agent/inbox/spliced'
+        ? pending.toSpliced(event.data.start, event.data.removedCount ?? 0, ...event.data.inserted)
+        : pending, [])
+      assert.deepEqual(foldQueue(child.snapshotEvents(0, child.inheritedEventCount)), [], 'tree fork inherits no queued input')
+      assert.deepEqual(foldQueue(child.snapshotEvents(child.inheritedEventCount)), [], 'tree fork child starts with an empty queue')
+      console.log(`PASS tree fork keeps the queued input out (${fullscreen ? 'fullscreen' : 'inline'}, ${columns} columns)`)
+      return
+    }
     let current = source
     let prompt = 'hi'
     for (let round = 0; round < 2; round++) {
@@ -294,7 +318,7 @@ try {
   let failures = 0
   for (const fullscreen of [false, true]) {
     for (const columns of [40, 80]) {
-      for (const entry of ['slash', 'escape', 'tree', 'model'] as const) {
+      for (const entry of ['slash', 'escape', 'tree', 'tree-fork', 'model'] as const) {
         try {
           await verify(fullscreen, columns, entry)
         } catch (error) {
