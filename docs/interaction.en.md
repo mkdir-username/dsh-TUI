@@ -874,6 +874,10 @@ The command menu merges local commands with the DSH command registry. Type `/` t
 
 **Other**
 
+- `/hs` — skip the end-of-turn controller check for the current step; `/hs --on`
+  silences every stop ping in this chat until `/hs --off`. DSH sessions only, and
+  the hook half lives outside this repository. A `⏸ hs` chip in the status line
+  shows the state.
 - `/update`, `/vim` — vim editing mode toggle, see "Editing keys".
 - `/terminal-setup`, `/connect`, `/help`, `/exit` — aliases `/quit`, `/q`.
 - `/kernel` — opens the kernel picker (the current kernel is ticked; every row
