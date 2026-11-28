@@ -103,7 +103,17 @@ check('a reasonless abort stays neutral', abortPhrase('signal', undefined) === '
 const prompt = source.match(/const RP_PROMPT = '([^']*)'/)?.[1] ?? ''
 check('the fork is told it only documents', prompt.includes('только документация'), prompt.slice(0, 60))
 check('the fork is told to leave code, tests and hooks alone', prompt.includes('Код, тесты, хуки'), '')
-check('the fork may hand file reading to subagents', prompt.includes('суб-агентам (subagent)'), '')
+// Reading is the only part split out; the plan keeps one writer, or two
+// children race on `.dev/<slug>/`. A single agent reading the whole history
+// choked, so the split is a requirement, not a permission (2026-11-28).
+check('the fork plans sections before reading', prompt.includes('4–6 разделов'), '')
+check(
+  'the fork runs read-only subagents in parallel',
+  prompt.includes('2–4 суб-агента (subagent)') && prompt.includes('без права писать файлы'),
+  '',
+)
+check('the fork takes the first ready child, not all', prompt.includes('первого готового'), '')
+check('the fork writes the plan itself', prompt.includes('делаешь сам и только сам'), '')
 check('the fork calls the skill first', prompt.includes('Первым делом вызови Skill restruct-plan'), '')
 check('inherited notifications are not the fork\'s work', prompt.includes('не твоя работа'), '')
 
