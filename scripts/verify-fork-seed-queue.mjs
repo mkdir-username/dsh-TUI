@@ -64,9 +64,18 @@ const vendorMain = hostRequire.resolve('@deepseek-ai/dsh-subagent-fork-in-proces
 const verifyDir = join(dirname(fileURLToPath(import.meta.url)), '..', 'node_modules', '.dsh-verify-fork-seed')
 mkdirSync(verifyDir, { recursive: true })
 const patchedFile = join(verifyDir, `fork-${process.pid}.mjs`)
-writeFileSync(patchedFile, patchForkSeed(readFileSync(vendorMain, 'utf8')))
+const controlFile = join(verifyDir, `fork-control-${process.pid}.mjs`)
+const vendorSource = readFileSync(vendorMain, 'utf8')
+const patchedSource = patchForkSeed(vendorSource)
+writeFileSync(patchedFile, patchedSource)
+// The control is the same module with only the neutralization removed — not the installed
+// file, whose state depends on whether the patch was applied to this machine yet.
+writeFileSync(controlFile, patchedSource.replace(
+  'return withoutQueuedInput(events.slice(0, lastEnd.seq + 1));',
+  'return events.slice(0, lastEnd.seq + 1);',
+))
 const patchedModule = await import(pathToFileURL(patchedFile).href)
-const controlModule = await import(pathToFileURL(vendorMain).href)
+const controlModule = await import(pathToFileURL(controlFile).href)
 
 const requests = []
 function requestText(options) {
@@ -179,5 +188,6 @@ try {
   await ctx.fiber.dispose().catch(() => {})
   rmSync(root, { recursive: true, force: true })
   rmSync(patchedFile, { force: true })
+  rmSync(controlFile, { force: true })
 }
 process.exit(failed === 0 ? 0 : 1)
