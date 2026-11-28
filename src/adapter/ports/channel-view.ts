@@ -633,8 +633,9 @@ export interface ManualCompactionStage {
   readonly startedAt: number
   /** The status row can stop the whole cycle (Esc / Ctrl+C), not only the summary. */
   readonly cancellable?: boolean
-  /** The fork has not produced a single token yet: the row says what it waits for. */
-  readonly note?: 'model-wait'
+  /** What the row says below the phase: a fork that produced no token yet, or
+   *  the fork's time budget (soft = asked to wrap up, hard = stopping). */
+  readonly note?: 'model-wait' | 'budget-soft' | 'budget-hard'
 }
 
 /**

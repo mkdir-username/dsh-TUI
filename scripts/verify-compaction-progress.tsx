@@ -833,14 +833,14 @@ function screenBottom(chat) {
   }
 }
 
-// ==== A silent fork is named, then bounded ====
+// ==== A silent fork is named, then its budget stops it =====================
 {
   const fork = holdRestructPlan({ child: true })
   const { channel, compaction } = assemble('hang-until-abort', [], fork.service)
   const realSetTimeout = globalThis.setTimeout
   const timers = new Map()
   globalThis.setTimeout = ((callback, ms, ...args) => {
-    if (ms === 10_000 || ms === 120_000) {
+    if (ms === 10_000 || ms === 480_000 || ms === 720_000) {
       timers.set(ms, callback)
       return { unref() {} }
     }
@@ -848,19 +848,26 @@ function screenBottom(chat) {
   })
   try {
     channel.compact()
-    check('watchdog: the fork starts with no output', await settle(() => fork.requests.length === 1))
-    check('watchdog: the row stays silent inside the note window', channel.manualCompactionStage?.note === undefined)
+    check('budget: the fork starts with no output', await settle(() => fork.requests.length === 1))
+    check('budget: the row stays silent inside the note window', channel.manualCompactionStage?.note === undefined)
     timers.get(10_000)?.()
     await new Promise(resolve => setImmediate(resolve))
-    check('watchdog: ten silent seconds are named as a model wait',
+    check('budget: ten silent seconds are named as a model wait',
       channel.manualCompactionStage?.phase === 'restruct-plan' && channel.manualCompactionStage?.note === 'model-wait',
       JSON.stringify(channel.manualCompactionStage))
-    timers.get(120_000)?.()
+    // This host mounts no `sendMessage`: the soft mark cannot steer, so the
+    // hard mark is what the user sees. The stop is named, and the compaction
+    // still runs on the plan written so far instead of cancelling the cycle.
+    timers.get(720_000)?.()
+    // The abort rejection settles on a microtask; let it reach the catch
+    // before the real clock returns to the process.
+    await new Promise(resolve => setImmediate(resolve))
     globalThis.setTimeout = realSetTimeout
-    check('watchdog: two silent minutes stop the cycle and name the reason',
-      await settle(() => channel.manualCompactionStage === undefined &&
-        channel.notifications.some(note => note.text.includes('не получил вывода модели') && note.text.includes('/compact --pure'))) &&
-        compaction.calls.length === 0,
+    check('budget: the hard mark stops the fork and the compaction still runs',
+      await settle(() => compaction.calls.length === 1 && channel.manualCompactionStage?.phase === 'finalizing', { timeoutMs: 4000 }),
+      JSON.stringify(channel.notifications.slice(-2)))
+    check('budget: the warning says the compaction continues',
+      channel.notifications.some(note => note.text.includes('бюджет restruct-plan') && note.text.includes('сжатие продолжается') && note.color === 'warning'),
       JSON.stringify(channel.notifications.slice(-2)))
   } finally {
     globalThis.setTimeout = realSetTimeout

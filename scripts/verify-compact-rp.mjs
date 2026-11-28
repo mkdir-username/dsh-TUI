@@ -85,10 +85,43 @@ if (phraseBody === undefined) {
   console.error('FAIL: abortPhrase не найден в lib/types — сначала pnpm compile')
   process.exit(1)
 }
-// No clock may cut a live fork: every bound tried so far (15 min, then 25) fired
-// while the plan was still being written, so the test pins the absence.
-check('the fork carries no wall-clock bound', !/RP_TIMEOUT_MS|AbortSignal\.timeout/.test(source), '')
-check('no watchdog aborts a silent fork', !/RP_FIRST_OUTPUT_MS/.test(source), '')
+// The fork's clock is a wrap-up, not a kill. Every earlier bound (15 min, then
+// 25) fired while the plan was still being written and cost work already done,
+// so the budget asks the child to finish at the soft mark and only then stops
+// it; a spent budget continues the compaction on the plan written so far.
+const softBudget = /const RP_SOFT_BUDGET_MS = budgetMs\('DSH_TUI_RP_SOFT_BUDGET_MS', (\d+) \* 60_000\)/.exec(source)
+const hardBudget = /const RP_HARD_BUDGET_MS = budgetMs\('DSH_TUI_RP_HARD_BUDGET_MS', (\d+) \* 60_000\)/.exec(source)
+check('the fork has a soft budget', softBudget !== null, softBudget?.[1] ?? '')
+check('the fork has a hard budget', hardBudget !== null, hardBudget?.[1] ?? '')
+check(
+  'the soft mark comes before the stop',
+  Number(softBudget?.[1] ?? 0) > 0 && Number(hardBudget?.[1] ?? 0) > Number(softBudget?.[1] ?? 0),
+  `${softBudget?.[1] ?? '?'}/${hardBudget?.[1] ?? '?'} min`,
+)
+check(
+  'the budget steers before it stops',
+  /requestWrapUp\(childId\)/.test(source) && /budget\.abort\(new Error\('restruct-plan budget spent'\)\)/.test(source),
+  '',
+)
+check(
+  'the stop rides its own controller, never the cycle signal',
+  /const budget = new AbortController\(\)/.test(source) && /budget\.signal\.aborted/.test(source),
+  '',
+)
+check(
+  'a spent budget degrades instead of cancelling',
+  /degraded: true/.test(source) && source.includes('сжатие продолжается'),
+  '',
+)
+check('the caller continues on a degraded verdict', source.includes('verdict.degraded === true'), '')
+const promptText = source.match(/const RP_PROMPT = '([^']*)'/)?.[1] ?? ''
+check(
+  'the prompt names the same budget the code sets',
+  promptText.includes(`примерно через ${Number(softBudget?.[1])} минут`) && promptText.includes(`через ${Number(hardBudget?.[1])} он останавливается`),
+  '',
+)
+check('no silent watchdog aborts a silent fork', !/RP_FIRST_OUTPUT_MS/.test(source) && !/RP_TIMEOUT_MS/.test(source), '')
+check('no single-shot timeout races the budget', !/AbortSignal\.timeout/.test(source), '')
 const abortPhrase = new Function(`${phraseBody}\nreturn abortPhrase`)()
 check('cancel names the user', abortPhrase('user', new Error('user cancelled compaction')) === 'отменён пользователем (Esc)', abortPhrase('user', new Error('x')))
 check('settle names the switch', abortPhrase('switch', new Error('session switch')) === 'прерван сменой сессии', abortPhrase('switch', new Error('x')))
@@ -114,6 +147,10 @@ check(
 )
 check('the fork takes the first ready child, not all', prompt.includes('первого готового'), '')
 check('the fork writes the plan itself', prompt.includes('делаешь сам и только сам'), '')
+// The journal holds what past cycles already verified: re-reading it as facts
+// is what keeps the fork from re-discovering its own history (J0029–J0036).
+check('the fork reads the plan journal first', prompt.includes('Сначала прочитай journal.md'), '')
+check('the fork answers the wrap-up without new reads', prompt.includes('на просьбу отвечай сразу'), '')
 check('the fork calls the skill first', prompt.includes('Первым делом вызови Skill restruct-plan'), '')
 check('inherited notifications are not the fork\'s work', prompt.includes('не твоя работа'), '')
 

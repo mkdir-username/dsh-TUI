@@ -61,9 +61,10 @@ the issue tracker remain upstream's. What this fork adds is listed under
   inside `Agent.runMaintenance`, so job and subagent wake-ups wait in the inbox
   instead of cutting in.
 - **The compaction notice names its cause.** A cancelled `/compact` says who
-  cancelled it (user, switch, disposal, timeout, watchdog) and that no compaction
-  was made; ten seconds of silence says the model's answer is still pending; a
-  watchdog stops the cycle at 120 s and names provider and model.
+  cancelled it (user, switch, disposal) and that no compaction was made; ten
+  seconds of silence says the model's answer is still pending. The fork runs on
+  a budget, not a kill: the soft mark asks it to finish with its marker, the
+  hard mark stops it and the compaction still runs on the plan written so far.
 - **`/hs` (handoff-skip).** The TUI writes `~/.claude/.state/hs-mode/<session>.hs`;
   the DSH Stop hook reads it. `once` carries a two-hour TTL and covers the current
   step, `on` has no expiry and silences all stop pings except the turn-end recall
@@ -705,7 +706,9 @@ idle. A new goal or todo snapshot, or a new session, brings it back, and
 **`/compact` holds the turn.** `restruct-plan` runs first, queued input arrives
 after the compaction, and waking jobs or subagents wait in the inbox until the
 cycle ends. `Esc` / `Ctrl+C` cancel the cycle, and the notice says who cancelled
-it and that no compaction was made.
+it and that no compaction was made. The fork itself has a budget: at eight
+minutes it is asked to wrap up and answer with its marker, at twelve it is
+stopped and the compaction continues on the plan written so far.
 
 <details>
 <summary>What the compaction shows, and what it does not reset</summary>
@@ -723,7 +726,8 @@ field.
 The cycle is a fork feature: job and subagent wake-ups (`followup`) wait in the
 inbox instead of interrupting the compaction, and the engine receives a proxy
 agent whose maintenance call is inlined. A cancelled cycle names the abort source
-(`user`, `switch`, `disposed`, `timeout`, `watchdog`) in its notice.
+(`user`, `switch`, `disposed`) in its notice; a spent fork budget is not one of
+them — the compaction continues on the plan written so far.
 
 </details>
 

@@ -432,6 +432,10 @@ const dict = {
   // 首块输出前是在重放上下文（无可计数），之后才有生成量。
   'compact-phase-restruct-plan': { zh: '正在运行 restruct-plan…', en: 'Running restruct-plan…' },
   'compact-phase-model-wait': { zh: '等待模型响应…', en: 'waiting for the model…' },
+  // The fork's own clock: soft asks it to wrap up, hard stops it while the
+  // compaction continues on the plan written so far.
+  'compact-phase-budget-soft': { en: 'budget: wrapping up…' },
+  'compact-phase-budget-hard': { en: 'budget spent, stopping the fork…' },
   'compact-phase-wait-idle': { zh: '等待当前回合结束…', en: 'Waiting for the current turn…' },
   'compact-phase-checking': { zh: '正在检查压缩条件…', en: 'Checking compaction…' },
   'compact-phase-finalizing': { zh: '正在完成压缩…', en: 'Finishing compaction…' },

@@ -16,8 +16,9 @@ interface ManualCompaction {
 }
 
 /** Who aborted the cycle's preparation: the notice must name the sender, or a
- *  cancelled fork reads as a crash. No time-based source exists: a live fork is
- *  never cut by a clock. */
+ *  cancelled fork reads as a crash. A spent fork budget is not one of these:
+ *  it stops the fork but lets the compaction continue on the plan written so
+ *  far, so it never reaches this list. */
 type AbortSource = 'user' | 'switch' | 'disposed'
 
 interface CompactCycle {
@@ -47,6 +48,9 @@ interface SubagentsService {
     readonly signal: AbortSignal
     readonly delivery: 'caller'
   }): Promise<{ readonly result: Promise<RestructPlanResult>; readonly dispose?: () => Promise<void> }>
+  /** Best-effort steer to a direct continuable child (host 0.2+). Nullish on an
+   *  older host: the budget then keeps only its stop, without the wrap-up. */
+  sendMessage?(sender: Agent, targetId: string, content: ReadonlyArray<{ readonly type: 'text'; readonly text: string }>, options?: { readonly signal?: AbortSignal }): Promise<{ readonly messageId: string }>
 }
 
 /** `Agent.runMaintenance` (DSH 0.2+): a non-turn phase that keeps waking input
@@ -225,13 +229,26 @@ export function createManualCompaction(
     }
     return undefined
   }
-  const RP_PROMPT = 'Пользователь набрал /compact: это его явная команда выполнить restruct-plan сейчас, до сжатия контекста. Ты — форк этой сессии, запущенный TUI, история диалога тебе видна. Первым делом вызови Skill restruct-plan для плана .dev/<slug>/, над которым шла работа. Твоя работа — только документация: единственные файлы, которые ты меняешь, лежат внутри каталога этого плана (.dev/<slug>/). Код, тесты, хуки, реестры и конфиги не правь даже при недоделанной задаче: незавершённое и незакоммиченное опиши в плане, но не доделывай. Любые входящие уведомления о фоновых задачах, делегированиях и незакрытых хвостах этой сессии — не твоя работа: не отвечай на них и не доделывай их. Запиши всё, что знает только диалог: прогресс, грабли, тупики, проверенные факты. Работу разбей до первого чтения: 4–6 разделов плана, по одному предложению о содержимом каждого, и сразу запиши этот скелет. Затем запусти параллельно 2–4 суб-агента (subagent), каждому — один конкретный вопрос на чтение или сверку фактов, с требованием вернуть file:line и без права писать файлы; жди не всех, а первого готового. Пока дети читают, пиши разделы по порядку и вплетай находки сразу. Записи в каталог плана делаешь сам и только сам. Пиши инкрементально, чтобы обрыв не отнял всю работу. Перед записью в .dev/ прочитай каталог плана — его сторожит гейт dev-docs. Вопросов не задавай, ответить некому. Ничего не коммить и не пушить. Последней строкой ответа выведи ровно RP_DONE <slug> или RP_SKIP <причина>.'
-  /** The fork carries no wall-clock bound: two live cycles were cut at fifteen
-   *  minutes (2026-11-26) and a third at twenty-five (2026-11-27) while the plan
-   *  was still being written; every guard cost work already done and none made
-   *  the fork faster. Esc still ends the cycle, and a hung model call is ended by
-   *  the provider's own stream idle timeout. The row stays silent about the wait
-   *  until this delay names it. */
+  /** Test seam only: the behavioural budget regression compresses both windows. */
+  const budgetMs = (name: string, fallback: number): number => {
+    const raw = Number(process.env[name])
+    return Number.isFinite(raw) && raw > 0 ? raw : fallback
+  }
+  /** The fork writes the plan section by section, so its clock is a wrap-up,
+   *  not a kill: at eight minutes the child is asked to finish and end with
+   *  RP_DONE, at twelve it is stopped and the compaction continues on the plan
+   *  written so far. The earlier hard caps (fifteen, fifteen, twenty-five
+   *  minutes over 2026-11-26/27) cost work already done and made nothing
+   *  faster; a spent budget degrades the cycle instead of cancelling it. Esc
+   *  still ends the cycle, and a hung model call is ended by the provider's
+   *  own stream idle timeout. */
+  const RP_SOFT_BUDGET_MS = budgetMs('DSH_TUI_RP_SOFT_BUDGET_MS', 8 * 60_000)
+  const RP_HARD_BUDGET_MS = budgetMs('DSH_TUI_RP_HARD_BUDGET_MS', 12 * 60_000)
+  /** The steer must read as a wrap-up, not as a failure: the child answers it
+   *  with the same marker the verdict already accepts. */
+  const RP_BUDGET_NOTE = 'Бюджет restruct-plan: около четырёх минут до остановки. Не начинай новых чтений; допиши разделы по порядку и закончи ответ строкой RP_DONE <slug>.'
+  const RP_PROMPT = 'Пользователь набрал /compact: это его явная команда выполнить restruct-plan сейчас, до сжатия контекста. Ты — форк этой сессии, запущенный TUI, история диалога тебе видна. Первым делом вызови Skill restruct-plan для плана .dev/<slug>/, над которым шла работа. Твоя работа — только документация: единственные файлы, которые ты меняешь, лежат внутри каталога этого плана (.dev/<slug>/). Код, тесты, хуки, реестры и конфиги не правь даже при недоделанной задаче: незавершённое и незакоммиченное опиши в плане, но не доделывай. Любые входящие уведомления о фоновых задачах, делегированиях и незакрытых хвостах этой сессии — не твоя работа: не отвечай на них и не доделывай их. Запиши всё, что знает только диалог: прогресс, грабли, тупики, проверенные факты. Сначала прочитай journal.md каталога плана: что там уже записано, не перепроверяй. Работу разбей до первого чтения: 4–6 разделов плана, по одному предложению о содержимом каждого, и сразу запиши этот скелет. Затем запусти параллельно 2–4 суб-агента (subagent), каждому — один конкретный вопрос на чтение или сверку фактов, с требованием вернуть file:line и без права писать файлы; жди не всех, а первого готового. Пока дети читают, пиши разделы по порядку и вплетай находки сразу. Записи в каталог плана делаешь сам и только сам. Пиши инкрементально, чтобы обрыв не отнял всю работу. У форка есть бюджет: примерно через 8 минут придёт просьба сворачиваться, через 12 он останавливается — к этому моменту каждый готовый раздел уже на диске; на просьбу отвечай сразу, без новых чтений, и выходи RP_DONE <slug>. Перед записью в .dev/ прочитай каталог плана — его сторожит гейт dev-docs. Вопросов не задавай, ответить некому. Ничего не коммить и не пушить. Последней строкой ответа выведи ровно RP_DONE <slug> или RP_SKIP <причина>.'
+  /** The row stays silent about the wait until this delay names it. */
   const RP_MODEL_WAIT_NOTE_MS = 10_000
   /** `activation.result` settles only when the child finishes: a fork that hangs
    *  (or ignores its abort) would otherwise keep the cycle, and with it the whole
@@ -262,13 +279,16 @@ export function createManualCompaction(
       default: return reason instanceof Error ? reason.message : 'отмена'
     }
   }
-  async function runRestructPlan(ctx: Context, agent: Agent, cycle: CompactCycle, holdSignal?: AbortSignal): Promise<{ ok: true; notice: string } | { ok: false; reason: string }> {
+  async function runRestructPlan(ctx: Context, agent: Agent, cycle: CompactCycle, holdSignal?: AbortSignal): Promise<{ ok: true; notice: string; degraded?: boolean } | { ok: false; reason: string }> {
     const subagents = (ctx.get('subagents') ?? (agent.ctx as Context).get('subagents')) as SubagentsService | undefined
     if (subagents === undefined) return { ok: false, reason: 'compact-rp: сервис subagents не смонтирован. Без restruct-plan: /compact --pure' }
     if (subagents.getProvider('fork') === undefined) return { ok: false, reason: 'compact-rp: провайдер «fork» не смонтирован. Без restruct-plan: /compact --pure' }
+    /** The budget's own controller: its abort stops the fork, not the cycle. */
+    const budget = new AbortController()
     const signal = AbortSignal.any([
       deps.owner.signal,
       cycle.preparation.signal,
+      budget.signal,
       ...(holdSignal === undefined ? [] : [holdSignal]),
     ])
     let activation: { readonly result: Promise<RestructPlanResult>; readonly dispose?: () => Promise<void>; readonly childId?: unknown } | undefined
@@ -282,26 +302,70 @@ export function createManualCompaction(
       })
       const childId = typeof activation.childId === 'string' ? activation.childId : undefined
       const produced = (): number => childId === undefined ? 0 : deps.childActivity?.(childId) ?? 0
+      let settled = false
+      /** The one place that writes the row's note: the model wait never
+       *  overwrites a budget line, while a later budget phase does replace the
+       *  earlier one (soft → hard). */
+      const showNote = (note: 'model-wait' | 'budget-soft' | 'budget-hard'): void => {
+        if (settled) return
+        if (cycles.get(agent) !== cycle || cycle.stage.phase !== 'restruct-plan') return
+        if (note === 'model-wait' && cycle.stage.note !== undefined) return
+        cycle.stage = { ...cycle.stage, note }
+        if (deps.agent() !== agent) return
+        state.manualCompactionStage = cycle.stage
+        state.emit()
+      }
+      /** A steer ends the fork with its written sections intact: the child
+       *  finishes the section in flight at the nearest step boundary instead
+       *  of losing the whole pass to the stop that follows. */
+      const requestWrapUp = (id: string): void => {
+        const send = subagents.sendMessage
+        if (typeof send !== 'function') return
+        void send.call(subagents, agent, id, [{ type: 'text', text: RP_BUDGET_NOTE }])
+          .then(() => { showNote('budget-soft') })
+          .catch(() => {})
+      }
       let noteTimer: ReturnType<typeof setTimeout> | undefined
+      let softTimer: ReturnType<typeof setTimeout> | undefined
+      let hardTimer: ReturnType<typeof setTimeout> | undefined
       if (childId !== undefined) {
         noteTimer = setTimeout(() => {
           if (produced() > 0) return
-          if (cycles.get(agent) !== cycle || cycle.stage.phase !== 'restruct-plan') return
-          cycle.stage = { ...cycle.stage, note: 'model-wait' }
-          if (deps.agent() !== agent) return
-          state.manualCompactionStage = cycle.stage
-          state.emit()
+          showNote('model-wait')
         }, RP_MODEL_WAIT_NOTE_MS)
+        softTimer = setTimeout(() => { requestWrapUp(childId) }, RP_SOFT_BUDGET_MS)
+        hardTimer = setTimeout(() => {
+          showNote('budget-hard')
+          budget.abort(new Error('restruct-plan budget spent'))
+        }, RP_HARD_BUDGET_MS)
         noteTimer.unref?.()
+        softTimer.unref?.()
+        hardTimer.unref?.()
       }
       try {
         const result = await settledOrAborted(activation.result, signal)
+        settled = true
         const diagnostic = result.diagnostic ?? await diagnosticOfChild(ctx, activation)
         return restructPlanVerdict({ ...result, diagnostic })
       } finally {
+        settled = true
         if (noteTimer !== undefined) clearTimeout(noteTimer)
+        if (softTimer !== undefined) clearTimeout(softTimer)
+        if (hardTimer !== undefined) clearTimeout(hardTimer)
       }
     } catch (error: unknown) {
+      // The budget stops the fork after the wrap-up steer; the cycle keeps its
+      // plan as written and the compaction still runs. Checked before the
+      // cancel branch because the budget abort also sets `signal.aborted`.
+      if (activation !== undefined && budget.signal.aborted && !cycle.preparation.signal.aborted && !deps.owner.signal.aborted) {
+        void activation.dispose?.().catch(() => {})
+        const minutes = Math.max(1, Math.round(RP_HARD_BUDGET_MS / 60_000))
+        return {
+          ok: true,
+          degraded: true,
+          notice: `compact-rp: бюджет restruct-plan (${minutes} мин) исчерпан — план сохранён в последнем записанном виде, сжатие продолжается`,
+        }
+      }
       if (activation !== undefined && signal.aborted) {
         // The fork kept its own request after the abort (live probe 2026-11-12),
         // so stop it: the cycle is over and `dispose` is the only handle left.
@@ -398,7 +462,7 @@ export function createManualCompaction(
             deps.notify(verdict.reason, { color: 'error', timeoutMs: 12000 })
             return
           }
-          deps.notify(verdict.notice)
+          deps.notify(verdict.notice, verdict.degraded === true ? { color: 'warning', timeoutMs: 12000 } : undefined)
           // A host without runMaintenance: a turn that started while the fork
           // ran still has to finish before the summary. Esc and Ctrl+C hand the
           // key to the running turn first, so this row must not advertise a
@@ -420,6 +484,9 @@ export function createManualCompaction(
             return !stopped()
           }
           if (!await waitForTurnBeforeSummary()) return
+          // The note survives into the next phase on purpose: it is the only
+          // record of why the fork stopped, and a note that lives one
+          // microtask never reaches a rendered frame.
           cycle.stage = { ...cycle.stage, phase: 'checking', cancellable: true }
           state.manualCompactionStage = cycle.stage
           state.emit()

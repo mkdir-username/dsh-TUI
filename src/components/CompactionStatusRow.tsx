@@ -82,10 +82,18 @@ export function CompactionStatusRow({
       default: return t('compact-working')
     }
   })()
+  const noteOf = (note: string | undefined): string | undefined => {
+    switch (note) {
+      case 'model-wait': return t('compact-phase-model-wait')
+      case 'budget-soft': return t('compact-phase-budget-soft')
+      case 'budget-hard': return t('compact-phase-budget-hard')
+      default: return undefined
+    }
+  }
   const detail = compaction.phase === 'summary'
     ? `↓ ${formatTokens(Math.round(compaction.outputChars / 4))} tokens`
     : compaction.phase === 'prefill' ? t('compact-phase-prefill')
-      : 'note' in compaction && compaction.note === 'model-wait' ? t('compact-phase-model-wait')
+      : 'note' in compaction ? noteOf(compaction.note)
         : undefined
   const hint = 'cancellable' in compaction && compaction.cancellable ? t('compact-esc-cancel') : undefined
 
